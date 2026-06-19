@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  neutrality:
+    # Public-repo hygiene gate. Fails if internal infra hosts, competitor
+    # product names, or content-acquisition vocabulary leak into the tree.
+    # Banned patterns are assembled from fragments at runtime so this file
+    # never itself contains the verbatim strings it forbids, and the gate
+    # excludes its own path from the scan.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Scan for banned patterns
+        run: |
+          set -euo pipefail
+
+          # Exclude generated/vendored content and this workflow itself
+          # (it legitimately discusses the gate).
+          EXCLUDES=(
+            --glob '!node_modules/**'
+            --glob '!dist/**'
+            --glob '!package-lock.json'
+            --glob '!.github/workflows/ci.yml'
+          )
+
+          fail=0
+
+          # --- internal infrastructure host ---
+          # Assembled so the literal host never appears in this file.
+          HOST="$(printf '%s' 'nalet' '\.' 'cloud')"
+          if rg -n -i "${EXCLUDES[@]}" -- "$HOST" .; then
+            echo "::error::internal infrastructure host found (see matches above)"
+            fail=1
+          fi
+
+          # --- competitor product names ---
+          C1='jelly''fin'; C2='pl''ex'; C3='em''by'; C4='ko''di'; C5='nalet''flix'
+          COMPETITORS="$(printf '%s|%s|%s|%s|%s' "$C1" "$C2" "$C3" "$C4" "$C5")"
+          if rg -n -i -w "${EXCLUDES[@]}" -- "$COMPETITORS" .; then
+            echo "::error::competitor product name found (see matches above)"
+            fail=1
+          fi
+
+          # --- content-acquisition vocabulary (whole-word, user-facing) ---
+          # Scoped to user-facing surfaces (markup + UI strings); code
+          # comments that use "tracker" in the issue-tracker sense live in
+          # src/lib + src/hooks and are not user-visible.
+          A1='index''er'; A2='trac''ker'; A3='use''net'; A4='ar''r'; A5='torr''ent'
+          ACQUISITION="$(printf '%s|%s|%s|%s|%s' "$A1" "$A2" "$A3" "$A4" "$A5")"
+          if rg -n -i -w "${EXCLUDES[@]}" \
+               --glob 'index.html' \
+               --glob 'public/**/*.{webmanifest,json,svg}' \
+               --glob 'src/**/*.svg' \
+               -- "$ACQUISITION" .; then
+            echo "::error::content-acquisition vocabulary found in user-facing surface (see matches above)"
+            fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            echo "Neutrality gate failed."
+            exit 1
+          fi
+          echo "Neutrality gate passed."
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image (no push)
+        run: docker build -t chino-web:ci .
