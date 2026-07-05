@@ -1,4 +1,4 @@
-import { authority, clientId } from '../auth/oidc';
+import { getRuntimeConfig } from './runtimeConfig';
 
 /**
  * Client for the chino-api bug-report endpoint (POST /api/v1/feedback).
@@ -46,7 +46,15 @@ export interface BugReport {
  */
 function accessToken(): string | null {
   try {
-    const key = `oidc.user:${authority}:${clientId}`;
+    // Authority / client id are resolved at runtime from /api/config.
+    // Before bootstrap resolves them getRuntimeConfig() is null, but the
+    // feedback path only runs after the app has mounted (which is gated
+    // on the config load). oidc-client-ts persists the user under
+    // `oidc.user:${authority}:${client_id}` (WebStorageStateStore's
+    // default `oidc.` prefix + its `user:${authority}:${client_id}` key).
+    const cfg = getRuntimeConfig();
+    if (!cfg) return null;
+    const key = `oidc.user:${cfg.oidcIssuer}:${cfg.oidcClientId.web}`;
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     return JSON.parse(raw)?.access_token ?? null;
