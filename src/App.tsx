@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { stripBase } from './lib/basepath';
 import { AuthGate } from './auth/AuthGate';
 import { ChinoApp } from './components/chino/ChinoApp';
 import { PlayerPage } from './components/PlayerPage';
@@ -56,12 +57,12 @@ export function App() {
   // the user would click back from /i/X and the player stayed on
   // screen until they hard-reloaded.
   const [route, setRoute] = useState(() => ({
-    path: window.location.pathname,
+    path: stripBase(window.location.pathname),
     search: window.location.search,
   }));
   useEffect(() => {
     const onPop = () => setRoute({
-      path: window.location.pathname,
+      path: stripBase(window.location.pathname),
       search: window.location.search,
     });
     window.addEventListener('popstate', onPop);

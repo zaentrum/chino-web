@@ -5,6 +5,7 @@ import { Avatar } from './Avatar';
 import { FadeImage } from './FadeImage';
 import { LoadingState } from './LoadingState';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
+import { toApp } from '../lib/basepath';
 
 /**
  * Profile page at /me. Shows the signed-in user's name + email (from
@@ -107,7 +108,7 @@ export function ProfilePage() {
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center gap-3 mb-8">
           <button
-            onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign('/'); }}
+            onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}
             className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
             title="Back"
           >
@@ -195,7 +196,7 @@ function HistoryRow({
     ? entry.backdrop_url || entry.poster_url
     : entry.poster_url || entry.backdrop_url;
 
-  const open = () => window.location.assign(`/i/${encodeURIComponent(entry.id)}`);
+  const open = () => window.location.assign(toApp(`/i/${encodeURIComponent(entry.id)}`));
 
   return (
     <div

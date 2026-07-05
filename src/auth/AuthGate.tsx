@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { AlertTriangle } from 'lucide-react';
 import { LoadingState } from '../components/LoadingState';
+import { toApp } from '../lib/basepath';
 import chinoIcon from '../imports/chino_icon.svg';
 
 interface AuthGateProps {
@@ -62,7 +63,7 @@ export function AuthGate({ children }: AuthGateProps) {
               Try again
             </button>
             <button
-              onClick={() => window.location.assign('/')}
+              onClick={() => window.location.assign(toApp('/'))}
               className="px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg"
             >
               Reset

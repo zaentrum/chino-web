@@ -4,6 +4,7 @@ import { FadeImage } from './FadeImage';
 import { useWatchlist } from '../hooks/useUserFlags';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { useMemberships } from '../hooks/useWatchlists';
+import { toApp } from '../lib/basepath';
 import { AddToListPicker } from './AddToListPicker';
 
 interface MediaCardProps {
@@ -95,7 +96,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
     return () => document.removeEventListener('mousedown', handler);
   }, [menuOpen]);
   const openDetail = () => {
-    if (id) window.location.assign(`/i/${encodeURIComponent(id)}`);
+    if (id) window.location.assign(toApp(`/i/${encodeURIComponent(id)}`));
   };
   const openPlayer = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -105,7 +106,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
     // any "Resume from X?" dialog. The flag is consumed by PlayerPage
     // via the URL query.
     const resumeHint = progress !== undefined && progress > 0 ? '?autoresume=1' : '';
-    window.location.assign(`/player/${encodeURIComponent(id)}${resumeHint}`);
+    window.location.assign(toApp(`/player/${encodeURIComponent(id)}${resumeHint}`));
   };
   // Plain tap on the bookmark: drop into the default list when the item
   // is in no list (casual fast-path, fills the icon); open the picker

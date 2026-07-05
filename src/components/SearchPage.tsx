@@ -3,6 +3,7 @@ import { MediaCard } from './MediaCard';
 import { PersonAvatar } from './PersonAvatar';
 import { useItems } from '../hooks/useItems';
 import { usePeople, type PersonSummary } from '../hooks/usePeople';
+import { toApp } from '../lib/basepath';
 
 interface SearchPageProps {
   query: string;
@@ -52,7 +53,7 @@ export function SearchPage({ query }: SearchPageProps) {
   }, [query, total, loading]);
 
   const openPerson = (id: string) => {
-    window.location.assign(`/person/${encodeURIComponent(id)}`);
+    window.location.assign(toApp(`/person/${encodeURIComponent(id)}`));
   };
 
   return (

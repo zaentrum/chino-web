@@ -11,6 +11,7 @@ import { useSettings, isBingeContinuation, recordEpisodePlay } from '../lib/sett
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
+import { toApp } from '../lib/basepath';
 import { BugReportDialog } from './BugReportDialog';
 
 interface Subtitle {
@@ -1656,7 +1657,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           window.clearInterval(t);
           // replace, not assign — keep ONE /player entry in history so
           // the Back button doesn't walk through the binge chain.
-          window.location.replace(`/player/${encodeURIComponent(nextEp.id)}?binge=1`);
+          window.location.replace(toApp(`/player/${encodeURIComponent(nextEp.id)}?binge=1`));
           return 0;
         }
         return n - 1;
@@ -2854,7 +2855,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               // Replace so the player URL drops out of history. Otherwise
               // the browser's Back from the series page lands right back
               // on the episode the user just left.
-              window.location.replace(dest);
+              window.location.replace(toApp(dest));
             }}
             className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
             title="Back"
@@ -2936,7 +2937,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           ) : null}
           <div className="mt-3 flex items-center gap-2">
             <button
-              onClick={() => window.location.replace(`/player/${encodeURIComponent(nextEp.id)}?binge=1`)}
+              onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(nextEp.id)}?binge=1`))}
               className="px-3 py-1.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white text-sm font-medium flex items-center gap-1"
             >
               <Play className="w-4 h-4 fill-white" />
@@ -3441,7 +3442,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
           {episodeNav.prev && (
             <button
-              onClick={() => window.location.replace(`/player/${encodeURIComponent(episodeNav.prev!.id)}`)}
+              onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.prev!.id)}`))}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
               title={`Previous episode: S${String(episodeNav.prev.season).padStart(2, '0')}E${String(episodeNav.prev.episode).padStart(2, '0')} — ${episodeNav.prev.title}`}
             >
@@ -3450,7 +3451,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           )}
           {episodeNav.next && (
             <button
-              onClick={() => window.location.replace(`/player/${encodeURIComponent(episodeNav.next!.id)}?binge=1`)}
+              onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.next!.id)}?binge=1`))}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
               title={`Next episode: S${String(episodeNav.next.season).padStart(2, '0')}E${String(episodeNav.next.episode).padStart(2, '0')} — ${episodeNav.next.title}`}
             >

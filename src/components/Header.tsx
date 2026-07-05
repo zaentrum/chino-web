@@ -4,6 +4,7 @@ import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { FadeImage } from './FadeImage';
 import { Avatar } from './Avatar';
+import { toApp } from '../lib/basepath';
 
 // Per-suggestion shape from /api/v1/items?q=…. Picks the fields we
 // actually render so we don't carry the whole catalogue payload around.
@@ -107,7 +108,7 @@ export function Header() {
 
   const pick = (s: Suggestion) => {
     setOpen(false);
-    window.location.assign(`/i/${encodeURIComponent(s.id)}`);
+    window.location.assign(toApp(`/i/${encodeURIComponent(s.id)}`));
   };
 
   const submit = (e: React.FormEvent) => {
@@ -119,7 +120,7 @@ export function Header() {
     const trimmed = q.trim();
     if (!trimmed) return;
     setOpen(false);
-    window.location.assign(`/search?q=${encodeURIComponent(trimmed)}`);
+    window.location.assign(toApp(`/search?q=${encodeURIComponent(trimmed)}`));
   };
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -203,7 +204,7 @@ export function Header() {
             >
               <button
                 role="menuitem"
-                onClick={() => { setAccountOpen(false); window.location.assign('/me'); }}
+                onClick={() => { setAccountOpen(false); window.location.assign(toApp('/me')); }}
                 className="w-full text-left px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d] flex items-center gap-2"
               >
                 <UserCircle className="w-4 h-4" />

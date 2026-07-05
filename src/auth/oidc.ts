@@ -1,5 +1,6 @@
 import type { AuthProviderProps } from 'react-oidc-context';
 import { WebStorageStateStore } from 'oidc-client-ts';
+import { toApp } from '../lib/basepath';
 
 const env = import.meta.env;
 
@@ -22,6 +23,10 @@ export const oidcConfig: AuthProviderProps = {
   automaticSilentRenew: true,
   userStore: new WebStorageStateStore({ store: window.localStorage }),
   onSigninCallback: () => {
-    window.history.replaceState(null, '', window.location.pathname.replace(/\/auth\/callback$/, '/') || '/');
+    // The redirect_uri stays the SITE-ROOT `/auth/callback` (registered
+    // in Keycloak, and the demo has a dedicated `/auth/callback` route →
+    // chino-web). After handling the callback, send the user to the app
+    // HOME under the configured base (`/` or `/chino/`).
+    window.history.replaceState(null, '', toApp('/'));
   },
 };

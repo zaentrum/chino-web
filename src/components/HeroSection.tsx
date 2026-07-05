@@ -1,6 +1,7 @@
 import { Play, Info } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useHeroPool, type HeroEntry } from '../hooks/useHeroPool';
+import { toApp } from '../lib/basepath';
 import { FadeImage } from './FadeImage';
 
 interface HeroSectionProps {
@@ -71,10 +72,10 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
   const playTargetId = entry?.id ?? itemId;
 
   const goPlayer = () => {
-    if (playTargetId) window.location.assign(`/player/${encodeURIComponent(playTargetId)}`);
+    if (playTargetId) window.location.assign(toApp(`/player/${encodeURIComponent(playTargetId)}`));
   };
   const goDetail = () => {
-    if (playTargetId) window.location.assign(`/i/${encodeURIComponent(playTargetId)}`);
+    if (playTargetId) window.location.assign(toApp(`/i/${encodeURIComponent(playTargetId)}`));
   };
 
   return (

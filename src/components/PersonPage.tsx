@@ -2,6 +2,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { MediaCard } from './MediaCard';
 import { PersonAvatar } from './PersonAvatar';
 import { usePerson } from '../hooks/usePeople';
+import { toApp } from '../lib/basepath';
 
 interface PersonPageProps {
   personId: string;
@@ -86,7 +87,7 @@ function BackButton() {
     <button
       onClick={() => {
         if (window.history.length > 1) window.history.back();
-        else window.location.assign('/');
+        else window.location.assign(toApp('/'));
       }}
       className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors z-10"
       title="Back"

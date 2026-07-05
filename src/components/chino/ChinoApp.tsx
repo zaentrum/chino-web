@@ -9,6 +9,7 @@ import { SettingsPage } from '../sections/SettingsPage';
 import { SearchPage } from '../SearchPage';
 import { ZapSection } from '../sections/ZapSection';
 import { WatchlistSection } from '../sections/WatchlistSection';
+import { toApp, stripBase } from '../../lib/basepath';
 
 interface ChinoAppProps {
   /**
@@ -44,13 +45,13 @@ export function ChinoApp({ initialSearchQuery, initialSection }: ChinoAppProps =
   // the SPA root.
   const changeSection = (s: string) => {
     setActiveSection(s);
-    const path = window.location.pathname;
+    const path = stripBase(window.location.pathname);
     if (s === 'watchlist' && path !== '/watchlist') {
-      window.history.pushState({}, '', '/watchlist');
+      window.history.pushState({}, '', toApp('/watchlist'));
     } else if (s !== 'watchlist' && path === '/watchlist') {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', toApp('/'));
     } else if (s !== 'search' && path === '/search') {
-      window.history.pushState({}, '', '/');
+      window.history.pushState({}, '', toApp('/'));
     }
   };
 

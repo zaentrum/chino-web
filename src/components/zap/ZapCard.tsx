@@ -7,6 +7,7 @@ import { useItem } from '../../hooks/useItem';
 import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
+import { toApp } from '../../lib/basepath';
 import type { KatalogItem } from '../../hooks/useItems';
 
 interface ZapCardProps {
@@ -530,7 +531,7 @@ export function ZapCard({
           <Maximize2 className="w-5 h-5" />
         </button>
         <button
-          onClick={() => window.location.assign(`/i/${encodeURIComponent(item.id)}`)}
+          onClick={() => window.location.assign(toApp(`/i/${encodeURIComponent(item.id)}`))}
           className="w-10 h-10 rounded-full bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
           title="Details"
           aria-label="Details"

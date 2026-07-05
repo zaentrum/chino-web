@@ -10,6 +10,7 @@ import { useSimilarItems } from '../hooks/useSimilarItems';
 import { AddToListPicker } from './AddToListPicker';
 import { EpisodesList } from './EpisodesList';
 import { FadeImage } from './FadeImage';
+import { toApp } from '../lib/basepath';
 import { MediaRow } from './MediaRow';
 
 interface DetailPageProps {
@@ -83,7 +84,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
     // The player auto-resumes by default. Pass ?startover=1 to force a
     // clean start, ?resume=<sec> as a hint for the resume-from path.
     const qp = resume ? `?resume=${resumeSec}` : resumeSec > 30 ? '?startover=1' : '';
-    window.location.assign(`/player/${encodeURIComponent(itemId)}${qp}`);
+    window.location.assign(toApp(`/player/${encodeURIComponent(itemId)}${qp}`));
   };
 
   const runtimeMin = data.duration_ms ? Math.round(data.duration_ms / 60_000) : 0;
@@ -115,7 +116,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
           <div className="absolute inset-0 bg-gradient-to-t from-[#0d1117] via-[#0d1117]/40 to-transparent" />
         </div>
         <button
-          onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign('/'); }}
+          onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}
           className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
           title="Back"
         >

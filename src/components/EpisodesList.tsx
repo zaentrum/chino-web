@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Eye, Play } from 'lucide-react';
 import type { Season } from '../hooks/useSeriesEpisodes';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
+import { toApp } from '../lib/basepath';
 import { FadeImage } from './FadeImage';
 
 interface EpisodesListProps {
@@ -102,7 +103,7 @@ function EpisodeRow({
   }, [ep.id]);
   const watched = watchedOverride ?? !!ep.watched_at;
 
-  const open = () => window.location.assign(`/player/${encodeURIComponent(ep.id)}`);
+  const open = () => window.location.assign(toApp(`/player/${encodeURIComponent(ep.id)}`));
 
   // The outer is a div + role=button so we can host real <button>
   // elements inside (watched toggle). Native <button> nesting is

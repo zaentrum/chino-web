@@ -7,6 +7,7 @@ import { useZapPrefetch } from '../../hooks/useZapPrefetch';
 import { useZapPreferences } from '../../hooks/useZapPreferences';
 import { useZapTelemetry } from '../../hooks/useZapTelemetry';
 import { stampFirstCardSeek } from '../../hooks/useZapMidpoint';
+import { toApp } from '../../lib/basepath';
 import { ZapCard } from '../zap/ZapCard';
 import type { KatalogItem } from '../../hooks/useItems';
 import type { ZapFeatures } from '../zap/ZapCard';
@@ -242,7 +243,7 @@ export function ZapSection() {
     });
     // Hand off to the full PlayerPage at the current playhead — the
     // wall-clock position is midSec + currentTime, encoded as ?resume.
-    window.location.assign(`/player/${encodeURIComponent(info.itemId)}?resume=${Math.floor(info.resumeSec)}`);
+    window.location.assign(toApp(`/player/${encodeURIComponent(info.itemId)}?resume=${Math.floor(info.resumeSec)}`));
   }, [prefs, telemetry]);
 
   const handleSaveToggle = useCallback<NonNullable<Parameters<typeof ZapCard>[0]['onSaveToggle']>>((info) => {
