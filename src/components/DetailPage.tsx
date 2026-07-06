@@ -108,11 +108,12 @@ export function DetailPage({ itemId }: DetailPageProps) {
           to find the actionable controls. */}
       <div className="relative">
         <div className="aspect-[21/9] max-h-[60vh] w-full overflow-hidden">
-          {data.backdrop_url ? (
-            <FadeImage src={data.backdrop_url} alt="" className="w-full h-full object-cover opacity-70" />
-          ) : (
-            <div className="w-full h-full bg-chino-surface" />
-          )}
+          <FadeImage
+            src={data.backdrop_url}
+            alt=""
+            fallbackTitle={data.title}
+            className="w-full h-full object-cover opacity-70"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-chino-bg via-chino-bg/40 to-transparent" />
         </div>
         <button
@@ -127,15 +128,12 @@ export function DetailPage({ itemId }: DetailPageProps) {
       {/* Content overlapping the backdrop. */}
       <div className="max-w-6xl mx-auto px-6 -mt-32 relative z-10 pb-16">
         <div className="flex flex-col md:flex-row gap-8">
-          {data.poster_url ? (
-            <FadeImage
-              src={data.poster_url}
-              alt={data.title}
-              className="w-48 md:w-64 aspect-[2/3] rounded-lg shadow-2xl object-cover shrink-0"
-            />
-          ) : (
-            <div className="w-48 md:w-64 aspect-[2/3] rounded-lg bg-chino-surface shrink-0" />
-          )}
+          <FadeImage
+            src={data.poster_url}
+            alt={data.title}
+            fallbackTitle={data.title}
+            className="w-48 md:w-64 aspect-[2/3] rounded-lg shadow-2xl object-cover shrink-0"
+          />
           <div className="flex-1 pt-4">
             <h1 className="text-3xl md:text-4xl font-bold mb-2">{data.title}</h1>
             {data.tagline ? (

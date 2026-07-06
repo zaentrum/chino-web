@@ -214,25 +214,23 @@ function HistoryRow({
       <div
         className={`relative h-14 ${isEpisode ? 'aspect-video' : 'aspect-[2/3]'} rounded overflow-hidden bg-chino-bg shrink-0`}
       >
-        {thumb ? (
-          <FadeImage
-            src={thumb}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-            // If the backdrop endpoint 404s (artwork stored only as
-            // poster from older enrichment runs), retry with poster_url
-            // so the row still gets an image instead of a broken icon.
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (isEpisode && entry.poster_url && img.src !== entry.poster_url) {
-                img.src = entry.poster_url;
-              }
-            }}
-          />
-        ) : (
-          <div className="w-full h-full bg-chino-surface-2" />
-        )}
+        <FadeImage
+          src={thumb}
+          alt=""
+          fallbackTitle={isEpisode ? seriesTitle || entry.title : entry.title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          // If the backdrop endpoint 404s (artwork stored only as
+          // poster from older enrichment runs), retry with poster_url
+          // so the row still gets an image. When that also fails (or no
+          // poster exists), FadeImage renders the DS artwork placeholder.
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (isEpisode && entry.poster_url && img.src !== entry.poster_url) {
+              img.src = entry.poster_url;
+            }
+          }}
+        />
       </div>
 
       <div className="flex-1 min-w-0">

@@ -495,6 +495,15 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const [autoNextSec, setAutoNextSec] = useState<number | null>(null);
   const [autoNextDismissed, setAutoNextDismissed] = useState(false);
 
+  // Post-credits preview countdown. Same shape as autoNext, but armed
+  // while the playhead is inside a post-credits "next episode" teaser
+  // (a `preview` segment, or a `recap` the analyzer mislabelled after
+  // the credits). When auto-play-next is ON the teaser plays and a
+  // countdown advances to the next episode; the user can cancel to keep
+  // watching. When OFF, only a manual "Next episode" button shows.
+  const [previewNextSec, setPreviewNextSec] = useState<number | null>(null);
+  const [previewNextDismissed, setPreviewNextDismissed] = useState(false);
+
   // Binge-mode auto-skip intro state. Same shape as autoNext: a
   // descending second counter that fires the skip on 0, plus a flag
   // for the user's "Watch intro" cancel.
@@ -1540,12 +1549,41 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   }, [segments, displayedCurrent]);
   const inIntro = activeSegment?.kind === 'intro';
   const inCredits = activeSegment?.kind === 'credits';
-  const inRecap = activeSegment?.kind === 'recap';
 
-  // Fetch next-episode lazily on first credits entry. Don't refetch on
-  // subsequent re-entries (the user could seek backwards over credits).
+  // Earliest credits start — the boundary that separates a genuine
+  // opening "Previously on…" recap (before the credits, near 0:00)
+  // from a post-credits "Next time on…" teaser that the analyzer
+  // mislabels as `recap`. null when the episode has no credits marker.
+  const creditsStartMs = useMemo(() => {
+    let min: number | null = null;
+    for (const s of segments) {
+      if (s.kind === 'credits' && (min == null || s.start_ms < min)) min = s.start_ms;
+    }
+    return min;
+  }, [segments]);
+
+  // Post-credits next-episode preview classification (mirrors the TV
+  // client): a segment is a preview if kind==='preview' (always), OR
+  // kind==='recap' that starts at/after the credits (the mislabelled
+  // "next time on…" teaser). A recap before the credits keeps its
+  // normal skippable behaviour.
+  const isPreviewSegment = (s: { kind: string; start_ms: number } | null | undefined) => {
+    if (!s) return false;
+    if (s.kind === 'preview') return true;
+    return s.kind === 'recap' && creditsStartMs != null && s.start_ms >= creditsStartMs;
+  };
+  const inPreview = isPreviewSegment(activeSegment);
+  // A genuine opening recap keeps the Skip-Recap / auto-skip path; a
+  // post-credits preview is explicitly excluded so it is neither
+  // auto-skipped nor offered a "Skip Recap" pill.
+  const inRecap = activeSegment?.kind === 'recap' && !inPreview;
+
+  // Fetch next-episode lazily on first credits entry (or on entering a
+  // post-credits preview, when credits weren't scrubbed through).
+  // Don't refetch on subsequent re-entries (the user could seek
+  // backwards over credits).
   useEffect(() => {
-    if (!inCredits || nextEpFetched || !parentSeriesId || !token) return;
+    if ((!inCredits && !inPreview) || nextEpFetched || !parentSeriesId || !token) return;
     setNextEpFetched(true);
     fetch(`/api/v1/series/${parentSeriesId}/next-episode?after=${encodeURIComponent(itemId)}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -1555,7 +1593,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         if (j?.next?.id) setNextEp(j.next);
       })
       .catch(() => undefined);
-  }, [inCredits, nextEpFetched, parentSeriesId, itemId, token]);
+  }, [inCredits, inPreview, nextEpFetched, parentSeriesId, itemId, token]);
 
   // Sibling episode fetch — once we know we're inside a series, hit
   // /v1/series/{id}/episodes and flatten to a single ordered list so
@@ -1595,6 +1633,19 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       next: idx < siblingEpisodes.length - 1 ? siblingEpisodes[idx + 1] : null,
     };
   }, [siblingEpisodes, itemId]);
+
+  // Id of the next episode to advance to — the dedicated next-episode
+  // endpoint result when available, else the sibling-list neighbour.
+  // null for movies / last-in-series (previews only matter when a next
+  // episode exists). Reused by both the credits auto-advance and the
+  // post-credits preview card.
+  const nextEpisodeId = nextEp?.id ?? episodeNav.next?.id ?? null;
+  const goToNextEpisode = () => {
+    if (!nextEpisodeId) return;
+    // replace, not assign — keep ONE /player entry in history so the
+    // Back button doesn't walk through the binge chain.
+    window.location.replace(toApp(`/player/${encodeURIComponent(nextEpisodeId)}?binge=1`));
+  };
 
   // Binge pre-warm: as soon as we know which episode is next AND we're
   // inside the credits, ping the next episode's /play/master.m3u8 from
@@ -1665,6 +1716,34 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     }, 1000);
     return () => window.clearInterval(t);
   }, [inCredits, nextEp, autoNextDismissed, autoNextSec, settings.binge.enabled, settings.binge.autoPlayNext, settings.binge.countdownSec]);
+
+  // Post-credits preview auto-advance: while inside a preview teaser AND
+  // there's a next episode AND auto-play-next is on, run a countdown and
+  // advance on 0. Unlike credits, the teaser keeps PLAYING under the
+  // card — it's real content, not credits to skip. Cancel keeps the
+  // teaser playing; auto-play-next OFF shows only a manual button (no
+  // countdown, so this effect no-ops).
+  useEffect(() => {
+    const wantAuto = settings.binge.enabled && settings.binge.autoPlayNext;
+    if (!inPreview || !nextEpisodeId || previewNextDismissed || !wantAuto) {
+      setPreviewNextSec(null);
+      return;
+    }
+    if (previewNextSec == null) setPreviewNextSec(settings.binge.countdownSec);
+    const t = window.setInterval(() => {
+      setPreviewNextSec((n) => {
+        if (n == null) return n;
+        if (n <= 1) {
+          window.clearInterval(t);
+          goToNextEpisode();
+          return 0;
+        }
+        return n - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inPreview, nextEpisodeId, previewNextDismissed, previewNextSec, settings.binge.enabled, settings.binge.autoPlayNext, settings.binge.countdownSec]);
 
   // Pre-skip-at-prepare. Mirrors chino-androidtv's `preSkippedIntro`
   // path: when the player launches with `?binge=1` (the auto-advance
@@ -2960,6 +3039,46 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         >
           Skip Credits
         </button>
+      ) : null}
+
+      {/* Post-credits next-episode preview card. Unlike the recap pill,
+          this does NOT skip — the teaser keeps playing underneath. With
+          auto-play-next ON it counts down and advances (Cancel keeps the
+          teaser); with it OFF it's a plain "Next episode" button. Only
+          shown when a next episode actually exists. */}
+      {inPreview && nextEpisodeId && !previewNextDismissed ? (
+        <div
+          style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
+          className="absolute right-4 md:right-6 z-10 max-w-sm bg-chino-surface-2/95 backdrop-blur border border-chino-border shadow-2xl p-4"
+        >
+          <div className="text-xs uppercase tracking-wider text-chino-muted">Next episode</div>
+          {nextEp?.title ? (
+            <div className="mt-1 text-white font-medium truncate">{nextEp.title}</div>
+          ) : null}
+          {nextEp?.season_number != null && nextEp?.episode_number != null ? (
+            <div className="text-sm text-chino-muted">
+              S{String(nextEp.season_number).padStart(2, '0')}
+              E{String(nextEp.episode_number).padStart(2, '0')}
+            </div>
+          ) : null}
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={goToNextEpisode}
+              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
+            >
+              <SkipForward className="w-4 h-4" />
+              Next episode {previewNextSec != null ? `in ${previewNextSec}s` : ''}
+            </button>
+            {previewNextSec != null ? (
+              <button
+                onClick={() => setPreviewNextDismissed(true)}
+                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : null}
 
       {/* Bottom chrome */}

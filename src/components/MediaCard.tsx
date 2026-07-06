@@ -143,19 +143,17 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
       onClick={openDetail}
     >
       <div className={`aspect-[2/3] relative ${pickerOpen ? 'overflow-visible' : 'overflow-hidden'}`}>
-        {image ? (
-          <FadeImage
-            src={image}
-            alt={title}
-            className="w-full h-full object-cover"
-            loading="lazy"
-            decoding="async"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-chino-border">
-            <Info className="w-8 h-8" />
-          </div>
-        )}
+        {/* fallbackTitle routes a missing / 404 poster to the DS artwork
+            placeholder (title initials, square corners) instead of a
+            broken-image glyph or empty box. */}
+        <FadeImage
+          src={image}
+          alt={title}
+          fallbackTitle={title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          decoding="async"
+        />
 
         {/* Watched badge — top-right corner. Pure visual; the card stays
             clickable through it. Sits above the hover overlay so it

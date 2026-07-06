@@ -166,9 +166,7 @@ export function Header() {
                 className={`flex items-center gap-3 w-full px-3 py-2 text-left transition-colors ${i === active ? 'bg-white/10' : 'hover:bg-white/5'}`}
               >
                 <div className="shrink-0 w-10 h-14 rounded bg-chino-bg overflow-hidden">
-                  {s.poster_url ? (
-                    <FadeImage src={suggestionImg(s)} alt={s.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
-                  ) : null}
+                  <FadeImage src={s.poster_url ? suggestionImg(s) : ''} alt={s.title} fallbackTitle={s.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-chino-text truncate">{s.title}</div>

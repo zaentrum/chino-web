@@ -101,6 +101,7 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
       <FadeImage
         src={heroImage}
         alt={heroTitle}
+        fallbackTitle={heroTitle}
         className="absolute inset-y-0 right-0 w-full md:w-[60%] md:max-w-[1100px] h-full object-cover object-center [mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)]"
       />
 

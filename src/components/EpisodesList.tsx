@@ -123,23 +123,21 @@ function EpisodeRow({
       className="w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 transition-colors group cursor-pointer focus:outline-none focus:bg-chino-surface-2"
     >
       <div className="relative w-40 aspect-video rounded overflow-hidden bg-chino-bg shrink-0">
-        {ep.backdrop_url || ep.poster_url ? (
-          <FadeImage
-            src={ep.backdrop_url || ep.poster_url}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-            // If the backdrop endpoint 404s (artwork stored only as
-            // poster from older enrichment runs), retry with poster_url
-            // so the row still gets an image instead of a broken icon.
-            onError={(e) => {
-              const img = e.currentTarget;
-              if (ep.poster_url && img.src !== ep.poster_url) img.src = ep.poster_url;
-            }}
-          />
-        ) : (
-          <div className="w-full h-full bg-chino-surface-2" />
-        )}
+        <FadeImage
+          src={ep.backdrop_url || ep.poster_url}
+          alt=""
+          fallbackTitle={ep.title}
+          className="w-full h-full object-cover"
+          loading="lazy"
+          // If the backdrop endpoint 404s (artwork stored only as
+          // poster from older enrichment runs), retry with poster_url
+          // so the row still gets an image. When that also fails (or no
+          // poster exists), FadeImage renders the DS artwork placeholder.
+          onError={(e) => {
+            const img = e.currentTarget;
+            if (ep.poster_url && img.src !== ep.poster_url) img.src = ep.poster_url;
+          }}
+        />
 
         {/* Watched toggle. Always rendered so a watched episode keeps a
             visible green check; on unwatched rows it stays hidden until
