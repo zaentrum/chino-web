@@ -44,15 +44,15 @@ export function LoadingState({ message, variant = 'inline', intervalMs = 2200 }:
 
   if (variant === 'full') {
     return (
-      <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3 text-[#8b949e]">
-        <Loader2 className="w-8 h-8 animate-spin text-[#58a6ff]" />
+      <div className="min-h-[40vh] flex flex-col items-center justify-center gap-3 text-chino-muted">
+        <Loader2 className="w-8 h-8 animate-spin text-chino-accent" />
         <p className="text-sm italic">{text}</p>
       </div>
     );
   }
   return (
-    <div className="flex items-center gap-2 text-sm text-[#8b949e]">
-      <Loader2 className="w-4 h-4 animate-spin text-[#58a6ff]" />
+    <div className="flex items-center gap-2 text-sm text-chino-muted">
+      <Loader2 className="w-4 h-4 animate-spin text-chino-accent" />
       <span className="italic">{text}</span>
     </div>
   );

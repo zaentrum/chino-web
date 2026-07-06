@@ -37,17 +37,17 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
   render() {
     if (!this.state.hasError) return this.props.children;
     return (
-      <div className="min-h-dvh bg-[#0d1117] text-[#c9d1d9] flex items-center justify-center p-6">
-        <div className="max-w-md w-full rounded-xl bg-[#161b22] border border-[#30363d] shadow-2xl p-8 text-center">
+      <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-xl bg-chino-surface border border-chino-border shadow-2xl p-8 text-center">
           <h1 className="text-2xl font-semibold mb-2 text-white">Something went wrong</h1>
-          <p className="text-sm text-[#8b949e] mb-6">
+          <p className="text-sm text-chino-muted mb-6">
             Chino hit an unexpected error. A bug report was filed automatically
             {this.state.reportId ? <> — #{this.state.reportId}</> : null}, so
             there's nothing you need to do besides reload.
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-5 py-2 bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white rounded-lg font-medium"
+            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
           >
             Reload
           </button>

@@ -213,7 +213,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
           <button
             type="button"
             onClick={onTitleClick}
-            className="text-2xl font-semibold text-white hover:text-[#58a6ff] transition-colors text-left"
+            className="text-2xl font-semibold text-white hover:text-chino-accent transition-colors text-left"
           >
             {title}
           </button>
@@ -223,7 +223,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
         {onSeeAll ? (
           <button
             onClick={onSeeAll}
-            className="flex items-center gap-1 text-[#58a6ff] hover:text-[#58a6ff]/80 transition-colors"
+            className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
           >
             <span className="text-sm">See All</span>
             <ChevronRight className="w-4 h-4" />
@@ -245,12 +245,12 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
               <>
                 <div
                   aria-hidden
-                  className="absolute left-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-r from-[#0d1117] via-[#0d1117]/80 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                  className="absolute left-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-r from-chino-bg via-chino-bg/80 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
                 />
                 <button
                   aria-label="Scroll left"
                   onClick={() => step(-1)}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 z-50 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors opacity-0 group-hover:opacity-100"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-50 p-2 bg-black/70 hover:bg-black/90 transition-colors opacity-0 group-hover:opacity-100"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -260,12 +260,12 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
               <>
                 <div
                   aria-hidden
-                  className="absolute right-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-l from-[#0d1117] via-[#0d1117]/80 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                  className="absolute right-0 top-0 bottom-0 w-16 z-10 bg-gradient-to-l from-chino-bg via-chino-bg/80 to-transparent rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
                 />
                 <button
                   aria-label="Scroll right"
                   onClick={() => step(1)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 z-50 p-2 rounded-full bg-black/70 hover:bg-black/90 transition-colors opacity-0 group-hover:opacity-100"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-50 p-2 bg-black/70 hover:bg-black/90 transition-colors opacity-0 group-hover:opacity-100"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -314,7 +314,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
             <button
               type="button"
               onClick={onSeeAll}
-              className="shrink-0 w-32 sm:w-40 md:w-44 lg:w-48 xl:w-52 rounded-lg bg-[#161b22] border border-[#30363d] hover:bg-[#21262d] hover:border-[#58a6ff] transition-colors flex flex-col items-center justify-center gap-2 text-[#58a6ff] aspect-[2/3]"
+              className="shrink-0 w-32 sm:w-40 md:w-44 lg:w-48 xl:w-52 rounded-lg bg-chino-surface border border-chino-border hover:bg-chino-surface-2 hover:border-chino-accent transition-colors flex flex-col items-center justify-center gap-2 text-chino-accent aspect-[2/3]"
               aria-label={`See all ${title}`}
             >
               <ChevronRight className="w-8 h-8" />

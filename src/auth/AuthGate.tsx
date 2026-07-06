@@ -45,20 +45,20 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (auth.error) {
     return (
-      <div className="min-h-dvh bg-[#0d1117] text-[#c9d1d9] flex items-center justify-center p-6">
+      <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
             <img src={chinoIcon} alt="Chino" className="w-10 h-10" />
           </div>
           <h1 className="text-2xl font-semibold mb-2 text-white">Couldn't sign you in</h1>
-          <div className="flex items-start gap-2 mx-auto max-w-sm text-left bg-[#161b22] border border-rose-500/30 rounded-lg p-3 mb-5">
-            <AlertTriangle className="w-4 h-4 text-rose-300 mt-0.5 shrink-0" />
-            <p className="text-sm text-[#c9d1d9]">{auth.error.message || 'The identity provider returned an error.'}</p>
+          <div className="flex items-start gap-2 mx-auto max-w-sm text-left bg-chino-surface border border-chino-red/30 rounded-lg p-3 mb-5">
+            <AlertTriangle className="w-4 h-4 text-chino-red mt-0.5 shrink-0" />
+            <p className="text-sm text-chino-text">{auth.error.message || 'The identity provider returned an error.'}</p>
           </div>
           <div className="flex gap-2 justify-center">
             <button
               onClick={() => auth.signinRedirect()}
-              className="px-5 py-2 bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white rounded-lg font-medium"
+              className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
             >
               Try again
             </button>
@@ -69,7 +69,7 @@ export function AuthGate({ children }: AuthGateProps) {
               Reset
             </button>
           </div>
-          <p className="mt-6 text-xs text-[#8b949e]">
+          <p className="mt-6 text-xs text-chino-muted">
             If this keeps happening, check your network connection or try a fresh browser
             tab — sometimes the redirect cookies get stale.
           </p>
@@ -80,8 +80,8 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (auth.isLoading || !auth.isAuthenticated) {
     return (
-      <div className="min-h-dvh bg-[#0d1117] text-[#8b949e] flex flex-col items-center justify-center p-6">
-        <div className="w-16 h-16 mb-4 rounded-2xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+      <div className="min-h-dvh bg-chino-bg text-chino-muted flex flex-col items-center justify-center p-6">
+        <div className="w-16 h-16 mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
           <img src={chinoIcon} alt="Chino" className="w-10 h-10" />
         </div>
         <LoadingState message="Signing you in…" />

@@ -21,9 +21,9 @@ const root: Root = createRoot(document.getElementById('root')!);
 // AuthGate.
 function BootstrapLoading() {
   return (
-    <div className="min-h-dvh bg-[#0d1117] text-[#8b949e] flex flex-col items-center justify-center p-6">
-      <div className="w-16 h-16 mb-4 rounded-2xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
-        <div className="w-6 h-6 rounded-full border-2 border-[#30363d] border-t-[#58a6ff] animate-spin" />
+    <div className="min-h-dvh bg-chino-bg text-chino-muted flex flex-col items-center justify-center p-6">
+      <div className="w-16 h-16 mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-chino-border border-t-chino-accent animate-spin" />
       </div>
       <p className="text-sm italic">Loading…</p>
     </div>
@@ -33,27 +33,27 @@ function BootstrapLoading() {
 // On-brand config-load failure with a Retry that re-runs the bootstrap.
 function BootstrapError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="min-h-dvh bg-[#0d1117] text-[#c9d1d9] flex items-center justify-center p-6">
+    <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full border border-rose-500/40 text-rose-300 flex items-center justify-center text-lg">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
+          <div className="w-8 h-8 border border-chino-red/40 text-chino-red flex items-center justify-center text-lg">
             !
           </div>
         </div>
         <h1 className="text-2xl font-semibold mb-2 text-white">Couldn't load configuration</h1>
-        <div className="mx-auto max-w-sm text-left bg-[#161b22] border border-rose-500/30 rounded-lg p-3 mb-5">
-          <p className="text-sm text-[#c9d1d9]">
+        <div className="mx-auto max-w-sm text-left bg-chino-surface border border-chino-red/30 rounded-lg p-3 mb-5">
+          <p className="text-sm text-chino-text">
             The app couldn't load its configuration from <code>/api/config</code>.
           </p>
-          <p className="mt-2 text-xs text-[#8b949e] break-words">{message}</p>
+          <p className="mt-2 text-xs text-chino-muted break-words">{message}</p>
         </div>
         <button
           onClick={onRetry}
-          className="px-5 py-2 bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white rounded-lg font-medium"
+          className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
         >
           Retry
         </button>
-        <p className="mt-6 text-xs text-[#8b949e]">
+        <p className="mt-6 text-xs text-chino-muted">
           If this keeps happening, check your network connection or that the server is
           reachable.
         </p>

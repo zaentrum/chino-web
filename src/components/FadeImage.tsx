@@ -11,7 +11,7 @@ type FadeImageProps = ImgHTMLAttributes<HTMLImageElement>;
  *
  * Behaviour notes:
  *  - The placeholder is whatever sits behind the <img> in the parent
- *    (typically a dark `bg-[#161b22]` block). FadeImage doesn't draw
+ *    (typically a dark `bg-chino-surface` block). FadeImage doesn't draw
  *    its own — it would either fight the parent or require knowing
  *    the parent's intrinsic size.
  *  - Cached images load synchronously enough that onLoad fires before

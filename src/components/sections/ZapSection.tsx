@@ -365,9 +365,9 @@ function ZapPlaceholder({ item }: { item: KatalogItem }) {
 function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center px-6 text-center">
-      <ZapIcon className="w-12 h-12 text-[#58a6ff] mb-4" />
+      <ZapIcon className="w-12 h-12 text-chino-accent mb-4" />
       <h2 className="text-xl font-semibold">{title}</h2>
-      {subtitle ? <p className="mt-2 text-[#8b949e] max-w-md">{subtitle}</p> : null}
+      {subtitle ? <p className="mt-2 text-chino-muted max-w-md">{subtitle}</p> : null}
     </div>
   );
 }

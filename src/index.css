@@ -5,7 +5,7 @@
 @layer base {
   html, body, #root {
     height: 100%;
-    background-color: #0d1117;
+    background-color: #0B0F19;
     color: #c9d1d9;
     /* color-scheme: dark — tells the browser to render form
        controls, scrollbars, and other UA-styled chrome in dark mode.
@@ -13,12 +13,19 @@
        on the dark page bg. */
     color-scheme: dark;
     /* Firefox + Edge custom scrollbar palette. */
-    scrollbar-color: #30363d #0d1117;
+    scrollbar-color: #1F2633 #0B0F19;
     scrollbar-width: thin;
   }
   body {
+    font-family: 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+  }
+  /* Terminal aesthetic: headings/display render in JetBrains Mono; body + UI
+     text stays Inter. Matches the @nalet/design-system type roles. */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: -0.015em;
   }
 
   /* Webkit (Chrome / Safari) scrollbar — slimmer + dark palette so it
@@ -31,15 +38,15 @@
     height: 10px;
   }
   ::-webkit-scrollbar-track {
-    background: #0d1117;
+    background: #0B0F19;
   }
   ::-webkit-scrollbar-thumb {
-    background: #30363d;
-    border-radius: 5px;
-    border: 2px solid #0d1117;
+    background: #1F2633;
+    border-radius: 0;
+    border: 2px solid #0B0F19;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #484f58;
+    background: #2A3142;
   }
 }
 
@@ -52,7 +59,7 @@
   input[type="range"]::-webkit-slider-thumb {
     width: 24px;
     height: 24px;
-    border-radius: 999px;
+    border-radius: 0;
     background: #58a6ff;
     border: none;
     -webkit-appearance: none;
@@ -62,17 +69,17 @@
   input[type="range"]::-moz-range-thumb {
     width: 24px;
     height: 24px;
-    border-radius: 999px;
+    border-radius: 0;
     background: #58a6ff;
     border: none;
   }
   input[type="range"]::-webkit-slider-runnable-track {
     height: 8px;
-    border-radius: 999px;
+    border-radius: 0;
   }
   input[type="range"]::-moz-range-track {
     height: 8px;
-    border-radius: 999px;
+    border-radius: 0;
   }
 }
 

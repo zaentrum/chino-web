@@ -108,13 +108,13 @@ export function SettingsPage() {
         <div className="flex items-start justify-between gap-4 p-4">
           <span className="flex-1">
             <span className="block text-white font-medium">Report a bug</span>
-            <span className="block text-xs text-[#8b949e] mt-1 leading-relaxed">
+            <span className="block text-xs text-chino-muted mt-1 leading-relaxed">
               Opens a short form. Crashes and playback failures are also reported automatically.
             </span>
           </span>
           <button
             onClick={() => setBugDialogOpen(true)}
-            className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-[#c9d1d9]"
+            className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
           >
             <Bug className="w-4 h-4" />
             Report a bug
@@ -122,10 +122,10 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <div className="mt-8 pt-6 border-t border-[#21262d]">
+      <div className="mt-8 pt-6 border-t border-chino-border-2">
         <button
           onClick={() => setSettings(DEFAULT_SETTINGS)}
-          className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-[#c9d1d9]"
+          className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
         >
           Reset to defaults
         </button>
@@ -148,8 +148,8 @@ function Section({
   return (
     <section className="mb-10">
       <h2 className="text-xl font-semibold text-white mb-1">{title}</h2>
-      {subtitle ? <p className="text-sm text-[#8b949e] mb-5">{subtitle}</p> : null}
-      <div className="rounded-xl bg-[#161b22] border border-[#21262d] divide-y divide-[#21262d]">
+      {subtitle ? <p className="text-sm text-chino-muted mb-5">{subtitle}</p> : null}
+      <div className="rounded-xl bg-chino-surface border border-chino-border-2 divide-y divide-chino-border-2">
         {children}
       </div>
     </section>
@@ -171,10 +171,10 @@ function Toggle({
     <label className="flex items-start justify-between gap-4 p-4 cursor-pointer">
       <span className="flex-1">
         <span className="block text-white font-medium">{label}</span>
-        {help ? <span className="block text-xs text-[#8b949e] mt-1 leading-relaxed">{help}</span> : null}
+        {help ? <span className="block text-xs text-chino-muted mt-1 leading-relaxed">{help}</span> : null}
       </span>
       <span
-        className={`relative shrink-0 w-11 h-6 rounded-full transition-colors ${value ? 'bg-[#58a6ff]' : 'bg-[#30363d]'}`}
+        className={`relative shrink-0 w-11 h-6 transition-colors ${value ? 'bg-chino-accent' : 'bg-chino-border'}`}
       >
         <input
           type="checkbox"
@@ -183,7 +183,7 @@ function Toggle({
           className="sr-only"
         />
         <span
-          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white transition-transform ${
             value ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
@@ -213,7 +213,7 @@ function NumberField({
     <div className="flex items-start justify-between gap-4 p-4">
       <span className="flex-1">
         <span className="block text-white font-medium">{label}</span>
-        {help ? <span className="block text-xs text-[#8b949e] mt-1 leading-relaxed">{help}</span> : null}
+        {help ? <span className="block text-xs text-chino-muted mt-1 leading-relaxed">{help}</span> : null}
       </span>
       <div className="flex items-center gap-2 shrink-0">
         <input
@@ -222,9 +222,9 @@ function NumberField({
           max={max}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="w-32 accent-[#58a6ff]"
+          className="w-32 accent-chino-accent"
         />
-        <span className="text-sm text-[#c9d1d9] w-10 text-right tabular-nums">
+        <span className="text-sm text-chino-text w-10 text-right tabular-nums">
           {value}{suffix}
         </span>
       </div>
@@ -253,10 +253,10 @@ function ChipRow({
             <button
               key={o.value}
               onClick={() => onChange(o.value)}
-              className={`px-3 py-1 rounded-full text-xs border transition-colors ${
+              className={`px-3 py-1 text-xs border transition-colors ${
                 active
-                  ? 'bg-[#58a6ff] border-[#58a6ff] text-white'
-                  : 'bg-[#161b22] border-[#30363d] text-[#c9d1d9] hover:bg-[#21262d]'
+                  ? 'bg-chino-accent border-chino-accent text-white'
+                  : 'bg-chino-surface border-chino-border text-chino-text hover:bg-chino-surface-2'
               }`}
             >
               {o.label}

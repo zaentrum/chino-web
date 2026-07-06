@@ -137,11 +137,11 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 bg-[#0d1117] border-b border-[#30363d] flex items-center justify-between px-4">
+    <header className="h-16 bg-chino-bg border-b border-chino-border flex items-center justify-between px-4">
       <div ref={wrapRef} className="flex-1 max-w-xl relative">
         <form onSubmit={submit}>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8b949e]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-chino-muted" />
             <input
               type="search"
               value={q}
@@ -149,14 +149,14 @@ export function Header() {
               onFocus={() => suggestions.length > 0 && setOpen(true)}
               onKeyDown={onKey}
               placeholder="Search movies, shows…"
-              className="w-full bg-[#161b22] border border-[#30363d] rounded-lg pl-10 pr-4 py-2 text-[#c9d1d9] placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff] focus:ring-1 focus:ring-[#58a6ff]"
+              className="w-full bg-chino-surface border border-chino-border rounded-lg pl-10 pr-4 py-2 text-chino-text placeholder-chino-muted focus:outline-none focus:border-chino-accent focus:ring-1 focus:ring-chino-accent"
               autoComplete="off"
             />
           </div>
         </form>
 
         {open && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b22] border border-[#30363d] rounded-lg shadow-2xl overflow-hidden z-50">
+          <div className="absolute top-full left-0 right-0 mt-1 bg-chino-surface border border-chino-border rounded-lg shadow-2xl overflow-hidden z-50">
             {suggestions.map((s, i) => (
               <button
                 key={s.id}
@@ -165,14 +165,14 @@ export function Header() {
                 onClick={() => pick(s)}
                 className={`flex items-center gap-3 w-full px-3 py-2 text-left transition-colors ${i === active ? 'bg-white/10' : 'hover:bg-white/5'}`}
               >
-                <div className="shrink-0 w-10 h-14 rounded bg-[#0d1117] overflow-hidden">
+                <div className="shrink-0 w-10 h-14 rounded bg-chino-bg overflow-hidden">
                   {s.poster_url ? (
                     <FadeImage src={suggestionImg(s)} alt={s.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                   ) : null}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[#c9d1d9] truncate">{s.title}</div>
-                  <div className="text-xs text-[#8b949e]">
+                  <div className="text-chino-text truncate">{s.title}</div>
+                  <div className="text-xs text-chino-muted">
                     {s.year ? <>{s.year} · </> : null}
                     {s.type === 'series' ? 'Series' : s.type === 'movie' ? 'Movie' : s.type}
                   </div>
@@ -184,13 +184,13 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4 ml-6">
-        <button className="p-2 text-[#c9d1d9] hover:bg-[#161b22] rounded-lg transition-colors" title="Notifications (coming soon)">
+        <button className="p-2 text-chino-text hover:bg-chino-surface rounded-lg transition-colors" title="Notifications (coming soon)">
           <Bell className="w-5 h-5" />
         </button>
         <div ref={accountRef} className="relative">
           <button
             onClick={() => setAccountOpen((v) => !v)}
-            className="rounded-full hover:ring-2 hover:ring-[#58A6FF]/40 transition-shadow"
+            className="hover:ring-2 hover:ring-chino-accent/40 transition-shadow"
             title="Account"
             aria-haspopup="menu"
             aria-expanded={accountOpen}
@@ -200,12 +200,12 @@ export function Header() {
           {accountOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full mt-1 min-w-[180px] bg-[#161b22] border border-[#30363d] rounded-md shadow-2xl py-1 z-50"
+              className="absolute right-0 top-full mt-1 min-w-[180px] bg-chino-surface border border-chino-border rounded-md shadow-2xl py-1 z-50"
             >
               <button
                 role="menuitem"
                 onClick={() => { setAccountOpen(false); window.location.assign(toApp('/me')); }}
-                className="w-full text-left px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d] flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
               >
                 <UserCircle className="w-4 h-4" />
                 Profile
@@ -213,7 +213,7 @@ export function Header() {
               <button
                 role="menuitem"
                 onClick={() => { setAccountOpen(false); void auth.signoutRedirect(); }}
-                className="w-full text-left px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d] flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
                 Sign out

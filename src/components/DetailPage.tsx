@@ -74,7 +74,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
 
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-[#0d1117] text-[#8b949e] flex items-center justify-center">
+      <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
@@ -99,7 +99,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
   const trailer = pickTrailer(data.trailers);
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white">
+    <div className="min-h-screen bg-chino-bg text-white">
       {/* Hero: full-width backdrop with a top-to-bottom gradient that
           fades into the page bg so the content below sits flush.
           aspect-[21/9] gives a cinematic shape on phones; max-h cap
@@ -111,13 +111,13 @@ export function DetailPage({ itemId }: DetailPageProps) {
           {data.backdrop_url ? (
             <FadeImage src={data.backdrop_url} alt="" className="w-full h-full object-cover opacity-70" />
           ) : (
-            <div className="w-full h-full bg-[#161b22]" />
+            <div className="w-full h-full bg-chino-surface" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0d1117] via-[#0d1117]/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-chino-bg via-chino-bg/40 to-transparent" />
         </div>
         <button
           onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}
-          className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+          className="absolute top-4 left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors"
           title="Back"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -134,33 +134,33 @@ export function DetailPage({ itemId }: DetailPageProps) {
               className="w-48 md:w-64 aspect-[2/3] rounded-lg shadow-2xl object-cover shrink-0"
             />
           ) : (
-            <div className="w-48 md:w-64 aspect-[2/3] rounded-lg bg-[#161b22] shrink-0" />
+            <div className="w-48 md:w-64 aspect-[2/3] rounded-lg bg-chino-surface shrink-0" />
           )}
           <div className="flex-1 pt-4">
             <h1 className="text-3xl md:text-4xl font-bold mb-2">{data.title}</h1>
             {data.tagline ? (
-              <p className="italic text-[#8b949e] mb-4">{data.tagline}</p>
+              <p className="italic text-chino-muted mb-4">{data.tagline}</p>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-3 text-sm text-[#c9d1d9] mb-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-chino-text mb-4">
               {data.year ? <span>{data.year}</span> : null}
               {runtimeText ? (
                 <>
-                  <span className="text-[#8b949e]">•</span>
+                  <span className="text-chino-muted">•</span>
                   <span>{runtimeText}</span>
                 </>
               ) : null}
               {data.rating ? (
                 <>
-                  <span className="text-[#8b949e]">•</span>
+                  <span className="text-chino-muted">•</span>
                   <span className="inline-flex items-center gap-1">
-                    <Star className="w-4 h-4 fill-[#58a6ff] text-[#58a6ff]" />
+                    <Star className="w-4 h-4 fill-chino-accent text-chino-accent" />
                     {data.rating.toFixed(1)}
                   </span>
                 </>
               ) : null}
               {data.type ? (
-                <span className="px-2 py-0.5 rounded-full bg-white/10 text-xs uppercase tracking-wide">
+                <span className="px-2 py-0.5 bg-white/10 text-xs uppercase tracking-wide">
                   {data.type}
                 </span>
               ) : null}
@@ -171,7 +171,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                 {data.genres.map((g) => (
                   <span
                     key={g}
-                    className="px-3 py-1 rounded-full bg-[#21262d] text-[#c9d1d9] text-xs border border-[#30363d]"
+                    className="px-3 py-1 bg-chino-surface-2 text-chino-text text-xs border border-chino-border"
                   >
                     {g}
                   </span>
@@ -184,14 +184,14 @@ export function DetailPage({ itemId }: DetailPageProps) {
                 <>
                   <button
                     onClick={() => goPlayer(true)}
-                    className="px-5 py-2.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white font-medium flex items-center gap-2"
+                    className="px-5 py-2.5 bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2"
                   >
                     <Play className="w-5 h-5 fill-white" />
                     Resume {fmtDur(resumeSec)}
                   </button>
                   <button
                     onClick={() => goPlayer(false)}
-                    className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                    className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
                   >
                     Start over
                   </button>
@@ -199,7 +199,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
               ) : !isSeries ? (
                 <button
                   onClick={() => goPlayer(false)}
-                  className="px-5 py-2.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white font-medium flex items-center gap-2"
+                  className="px-5 py-2.5 bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2"
                 >
                   <Play className="w-5 h-5 fill-white" />
                   Play
@@ -210,7 +210,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   href={trailer.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
                   title="Watch trailer on YouTube"
                 >
                   <Youtube className="w-5 h-5" />
@@ -224,7 +224,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   >=1 list. */}
               <div className="relative inline-flex">
                 <button
-                  className={`p-2.5 rounded-l-full transition-colors ${inAnyList ? 'bg-emerald-500 hover:bg-emerald-500/80' : 'bg-white/10 hover:bg-white/20'}`}
+                  className={`p-2.5 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
                   onClick={() => {
                     if (inAnyList) {
                       // Already saved somewhere — open the picker so the
@@ -240,7 +240,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   {inAnyList ? <Check className="w-5 h-5 stroke-[3]" /> : <Plus className="w-5 h-5" />}
                 </button>
                 <button
-                  className={`px-1.5 rounded-r-full border-l border-black/20 transition-colors ${inAnyList ? 'bg-emerald-500 hover:bg-emerald-500/80' : 'bg-white/10 hover:bg-white/20'}`}
+                  className={`px-1.5 border-l border-black/20 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
                   onClick={() => setPickerOpen((v) => !v)}
                   title="Add to list…"
                   aria-haspopup="menu"
@@ -253,7 +253,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                 ) : null}
               </div>
               <button
-                className={`p-2.5 rounded-full transition-colors ${watched ? 'bg-emerald-500 hover:bg-emerald-500/80' : 'bg-white/10 hover:bg-white/20'}`}
+                className={`p-2.5 transition-colors ${watched ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
                 onClick={() => {
                   const next = !watched;
                   setWatchedOverride(next);
@@ -265,7 +265,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                 <Eye className={`w-5 h-5 ${watched ? 'stroke-[2.5]' : ''}`} />
               </button>
               <button
-                className={`p-2.5 rounded-full transition-colors ${liked ? 'bg-rose-500/90 hover:bg-rose-500' : 'bg-white/10 hover:bg-white/20'}`}
+                className={`p-2.5 transition-colors ${liked ? 'bg-chino-red/90 hover:bg-chino-red' : 'bg-white/10 hover:bg-white/20'}`}
                 onClick={() => void likes.toggle(itemId, !liked)}
                 title={liked ? 'Unlike' : 'Like'}
               >
@@ -274,39 +274,39 @@ export function DetailPage({ itemId }: DetailPageProps) {
             </div>
 
             {data.description ? (
-              <p className="text-[#c9d1d9] leading-relaxed max-w-3xl whitespace-pre-line">
+              <p className="text-chino-text leading-relaxed max-w-3xl whitespace-pre-line">
                 {data.description}
               </p>
             ) : (
-              <p className="text-[#8b949e] italic">No description available.</p>
+              <p className="text-chino-muted italic">No description available.</p>
             )}
 
             {/* Meta strip: cast + subtitles */}
             <div className="mt-6 grid sm:grid-cols-2 gap-4 max-w-3xl text-sm">
               {actors.length > 0 ? (
                 <div>
-                  <div className="text-[#8b949e] mb-1">Starring</div>
-                  <div className="text-[#c9d1d9]"><CastNames people={actors} /></div>
+                  <div className="text-chino-muted mb-1">Starring</div>
+                  <div className="text-chino-text"><CastNames people={actors} /></div>
                 </div>
               ) : null}
               {directors.length > 0 ? (
                 <div>
-                  <div className="text-[#8b949e] mb-1">{directors.length > 1 ? 'Directors' : 'Director'}</div>
-                  <div className="text-[#c9d1d9]"><CastNames people={directors} /></div>
+                  <div className="text-chino-muted mb-1">{directors.length > 1 ? 'Directors' : 'Director'}</div>
+                  <div className="text-chino-text"><CastNames people={directors} /></div>
                 </div>
               ) : null}
               {data.subtitles && data.subtitles.length > 0 ? (
                 <div>
-                  <div className="text-[#8b949e] mb-1">Subtitles</div>
-                  <div className="text-[#c9d1d9]">
+                  <div className="text-chino-muted mb-1">Subtitles</div>
+                  <div className="text-chino-text">
                     {Array.from(new Set(data.subtitles.map((s) => s.label || s.lang).filter(Boolean))).join(', ')}
                   </div>
                 </div>
               ) : null}
               {data.segments && data.segments.count > 0 ? (
                 <div>
-                  <div className="text-[#8b949e] mb-1">Analyzed</div>
-                  <div className="text-[#c9d1d9]">
+                  <div className="text-chino-muted mb-1">Analyzed</div>
+                  <div className="text-chino-text">
                     {[data.segments.has_intro && 'Intro', data.segments.has_credits && 'Credits', data.segments.has_recap && 'Recap']
                       .filter(Boolean)
                       .join(' · ') || 'Segments available'}
@@ -361,7 +361,7 @@ function CastNames({ people }: { people: CastEntry[] }) {
           {p.person_id ? (
             <a
               href={`/person/${encodeURIComponent(p.person_id)}`}
-              className="hover:text-[#58a6ff] hover:underline transition-colors"
+              className="hover:text-chino-accent hover:underline transition-colors"
             >
               {p.name}
             </a>

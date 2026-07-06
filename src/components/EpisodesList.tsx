@@ -57,22 +57,22 @@ function SeasonAccordion({
   onToggle: () => void;
 }) {
   return (
-    <div className="rounded-lg bg-[#161b22] border border-[#21262d] overflow-hidden">
+    <div className="rounded-lg bg-chino-surface border border-chino-border-2 overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-[#1c2128] transition-colors"
+        className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-chino-surface-2 transition-colors"
       >
         <span className="text-white font-medium">
-          Season {season.season} <span className="text-[#8b949e] text-sm ml-2">{season.episodes.length} episodes</span>
+          Season {season.season} <span className="text-chino-muted text-sm ml-2">{season.episodes.length} episodes</span>
         </span>
         {open ? (
-          <ChevronDown className="w-5 h-5 text-[#8b949e]" />
+          <ChevronDown className="w-5 h-5 text-chino-muted" />
         ) : (
-          <ChevronRight className="w-5 h-5 text-[#8b949e]" />
+          <ChevronRight className="w-5 h-5 text-chino-muted" />
         )}
       </button>
       {open ? (
-        <div className="divide-y divide-[#21262d]">
+        <div className="divide-y divide-chino-border-2">
           {season.episodes.map((e) => (
             <EpisodeRow key={e.id} ep={e} seasonNum={season.season} />
           ))}
@@ -120,9 +120,9 @@ function EpisodeRow({
           open();
         }
       }}
-      className="w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-[#1c2128] transition-colors group cursor-pointer focus:outline-none focus:bg-[#1c2128]"
+      className="w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 transition-colors group cursor-pointer focus:outline-none focus:bg-chino-surface-2"
     >
-      <div className="relative w-40 aspect-video rounded overflow-hidden bg-[#0d1117] shrink-0">
+      <div className="relative w-40 aspect-video rounded overflow-hidden bg-chino-bg shrink-0">
         {ep.backdrop_url || ep.poster_url ? (
           <FadeImage
             src={ep.backdrop_url || ep.poster_url}
@@ -138,7 +138,7 @@ function EpisodeRow({
             }}
           />
         ) : (
-          <div className="w-full h-full bg-[#21262d]" />
+          <div className="w-full h-full bg-chino-surface-2" />
         )}
 
         {/* Watched toggle. Always rendered so a watched episode keeps a
@@ -154,9 +154,9 @@ function EpisodeRow({
             setWatchedOverride(next);
             void toggleWatched(ep.id, next);
           }}
-          className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity ${
+          className={`absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity ${
             watched
-              ? 'bg-emerald-500/95 hover:bg-emerald-500 opacity-100'
+              ? 'bg-chino-green/95 hover:bg-chino-green opacity-100'
               : 'bg-black/60 hover:bg-black/80 opacity-0 group-hover:opacity-100 focus:opacity-100'
           }`}
           title={watched ? 'Mark as unwatched' : 'Mark as watched'}
@@ -176,16 +176,16 @@ function EpisodeRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-3">
-          <span className="text-[#58a6ff] text-sm font-medium">{epLabel}</span>
-          <span className={`font-medium truncate ${watched ? 'text-[#8b949e]' : 'text-white'}`}>
+          <span className="text-chino-accent text-sm font-medium">{epLabel}</span>
+          <span className={`font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
             {ep.title}
           </span>
           {runtimeMin ? (
-            <span className="text-[#8b949e] text-xs ml-auto shrink-0">{runtimeMin}m</span>
+            <span className="text-chino-muted text-xs ml-auto shrink-0">{runtimeMin}m</span>
           ) : null}
         </div>
         {ep.description ? (
-          <p className="text-[#8b949e] text-sm mt-1 line-clamp-2">{ep.description}</p>
+          <p className="text-chino-muted text-sm mt-1 line-clamp-2">{ep.description}</p>
         ) : null}
       </div>
     </div>

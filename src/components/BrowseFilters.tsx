@@ -62,7 +62,7 @@ export function BrowseFilters({ value, onChange }: BrowseFiltersProps) {
   return (
     <div className="mb-6 space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-[#8b949e] text-sm mr-1 w-16 shrink-0">Genre</span>
+        <span className="text-chino-muted text-sm mr-1 w-16 shrink-0">Genre</span>
         <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <Chip
             active={!value.genre}
@@ -87,7 +87,7 @@ export function BrowseFilters({ value, onChange }: BrowseFiltersProps) {
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[#8b949e] text-sm mr-1 w-16">Decade</span>
+        <span className="text-chino-muted text-sm mr-1 w-16">Decade</span>
         {DECADES.map((d) => {
           const isActive = activeDecade?.label === d.label;
           return (
@@ -108,7 +108,7 @@ export function BrowseFilters({ value, onChange }: BrowseFiltersProps) {
         })}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[#8b949e] text-sm mr-1 w-16">Rating</span>
+        <span className="text-chino-muted text-sm mr-1 w-16">Rating</span>
         {RATINGS.map((r) => {
           const isActive = activeRating?.label === r.label;
           return (
@@ -123,7 +123,7 @@ export function BrowseFilters({ value, onChange }: BrowseFiltersProps) {
             </Chip>
           );
         })}
-        <span className="text-[#8b949e] text-sm ml-4 mr-1 w-16">Sort</span>
+        <span className="text-chino-muted text-sm ml-4 mr-1 w-16">Sort</span>
         {SORTS.map((s) => {
           // Default (undefined sort) and explicit 'title' both render the
           // catalogue's natural alphabetical order (katalog-api falls
@@ -143,7 +143,7 @@ export function BrowseFilters({ value, onChange }: BrowseFiltersProps) {
         {hasAnyFilter(value) ? (
           <button
             onClick={() => onChange({})}
-            className="ml-auto text-sm text-[#8b949e] hover:text-white underline-offset-2 hover:underline"
+            className="ml-auto text-sm text-chino-muted hover:text-white underline-offset-2 hover:underline"
           >
             Clear filters
           </button>
@@ -169,10 +169,10 @@ function Chip({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 px-3 py-1 rounded-full text-xs border transition-colors ${
+      className={`shrink-0 px-3 py-1 text-xs border transition-colors ${
         active
-          ? 'bg-[#58a6ff] border-[#58a6ff] text-white'
-          : 'bg-[#161b22] border-[#30363d] text-[#c9d1d9] hover:bg-[#21262d]'
+          ? 'bg-chino-accent border-chino-accent text-white'
+          : 'bg-chino-surface border-chino-border text-chino-text hover:bg-chino-surface-2'
       }`}
     >
       {children}

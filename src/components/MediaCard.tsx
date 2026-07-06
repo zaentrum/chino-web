@@ -139,7 +139,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
       // overflow lifts to visible while the add-to-list picker is open so
       // the popover isn't clipped by the card's rounded mask; otherwise
       // the poster stays clipped to its rounded corners as before.
-      className={`group/card relative rounded-lg bg-[#161b22] cursor-pointer transition-transform hover:scale-[1.03] ${pickerOpen ? 'overflow-visible z-50' : 'overflow-hidden'}`}
+      className={`group/card relative rounded-lg bg-chino-surface cursor-pointer transition-transform hover:scale-[1.03] ${pickerOpen ? 'overflow-visible z-50' : 'overflow-hidden'}`}
       onClick={openDetail}
     >
       <div className={`aspect-[2/3] relative ${pickerOpen ? 'overflow-visible' : 'overflow-hidden'}`}>
@@ -152,7 +152,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
             decoding="async"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-[#30363d]">
+          <div className="w-full h-full flex items-center justify-center text-chino-border">
             <Info className="w-8 h-8" />
           </div>
         )}
@@ -164,7 +164,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
             the card menu lights the badge immediately on Browse/Search. */}
         {watched && (
           <div
-            className="absolute top-2 right-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-emerald-500 shadow-lg pointer-events-none"
+            className="absolute top-2 right-2 z-40 flex items-center justify-center w-7 h-7 bg-chino-green shadow-lg pointer-events-none"
             title="Watched"
           >
             <Check className="w-4 h-4 text-white stroke-[3]" />
@@ -176,7 +176,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
             never collide. Pure visual; stays clickable through it. */}
         {inAnyList && (
           <div
-            className="absolute top-2 left-2 z-40 flex items-center justify-center w-7 h-7 rounded-full bg-[#58a6ff] shadow-lg pointer-events-none"
+            className="absolute top-2 left-2 z-40 flex items-center justify-center w-7 h-7 bg-chino-accent shadow-lg pointer-events-none"
             title="In your lists"
           >
             <Bookmark className="w-4 h-4 text-white fill-white" />
@@ -190,7 +190,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
         <div className={`absolute inset-0 z-30 bg-gradient-to-t from-black via-black/60 to-transparent flex flex-col justify-end p-4 transition-opacity duration-200 pointer-events-none ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
           <div className="flex gap-2 mb-2 pointer-events-auto items-center">
             <button
-              className="p-2 bg-[#58a6ff] hover:bg-[#58a6ff]/80 rounded-full transition-colors disabled:opacity-50"
+              className="p-2 bg-chino-accent hover:bg-chino-accent/80 transition-colors disabled:opacity-50"
               disabled={!id}
               onClick={openPlayer}
               title="Play"
@@ -202,7 +202,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                 picker). Mirrors the DetailPage control, compact. */}
             <div className="relative inline-flex items-center">
               <button
-                className={`p-2 rounded-l-full transition-colors ${inAnyList ? 'bg-emerald-500 hover:bg-emerald-500/80' : 'bg-white/20 hover:bg-white/30'}`}
+                className={`p-2 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/20 hover:bg-white/30'}`}
                 title={inAnyList ? 'In your lists' : 'Add to watchlist'}
                 onClick={onBookmark}
                 disabled={!id}
@@ -214,7 +214,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                 )}
               </button>
               <button
-                className={`px-1 py-2 rounded-r-full border-l border-black/20 transition-colors ${inAnyList ? 'bg-emerald-500 hover:bg-emerald-500/80' : 'bg-white/20 hover:bg-white/30'}`}
+                className={`px-1 py-2 border-l border-black/20 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/20 hover:bg-white/30'}`}
                 title="Add to list…"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -234,7 +234,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
               ) : null}
             </div>
             <button
-              className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+              className="p-2 bg-white/20 hover:bg-white/30 transition-colors"
               onClick={(e) => { e.stopPropagation(); openDetail(); }}
               title="Details"
             >
@@ -250,7 +250,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                 row below. */}
             <div ref={menuRef} className="relative">
               <button
-                className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors disabled:opacity-50"
+                className="p-2 bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-50"
                 disabled={!id}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -264,11 +264,11 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
               </button>
               {menuOpen && (
                 <div
-                  className="absolute left-0 bottom-full mb-1 min-w-[220px] bg-[#161b22] border border-[#30363d] rounded-md shadow-xl py-1 z-50"
+                  className="absolute left-0 bottom-full mb-1 min-w-[220px] bg-chino-surface border border-chino-border rounded-md shadow-xl py-1 z-50"
                   role="menu"
                 >
                   <button
-                    className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d]"
+                    className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2"
                     onClick={(e) => {
                       e.stopPropagation();
                       setMenuOpen(false);
@@ -285,7 +285,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                   </button>
                   {onRemoveFromContinueWatching && (
                     <button
-                      className="w-full text-left px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d]"
+                      className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2"
                       onClick={(e) => {
                         e.stopPropagation();
                         setMenuOpen(false);
@@ -303,22 +303,22 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
         </div>
 
         {progress !== undefined && progress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#30363d] z-30">
-            <div className="h-full bg-[#58a6ff]" style={{ width: `${progress}%` }} />
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-chino-border z-30">
+            <div className="h-full bg-chino-accent" style={{ width: `${progress}%` }} />
           </div>
         )}
       </div>
 
       <div className="p-3">
-        <h3 className="text-[#c9d1d9] font-medium truncate">{title}</h3>
+        <h3 className="text-chino-text font-medium truncate">{title}</h3>
 
         {episode ? (
           // Episode subtitle mirrors the movie year·rating row so the
           // card stays the same height as its siblings in the Continue
           // Watching strip. SxxExx (no space) matches the standard
           // file-naming convention and is tighter than 'S1 E1'.
-          <div className="flex items-center gap-2 mt-1 text-sm text-[#8b949e] truncate">
-            <span className="text-[#58a6ff] shrink-0">
+          <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted truncate">
+            <span className="text-chino-accent shrink-0">
               S{String(episode.season).padStart(2, '0')}E{String(episode.episode).padStart(2, '0')}
             </span>
             {episode.title ? (
@@ -329,12 +329,12 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
             ) : null}
           </div>
         ) : (
-          <div className="flex items-center gap-2 mt-1 text-sm text-[#8b949e]">
+          <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted">
             {year && <span>{year}</span>}
             {rating && (
               <>
                 <span>•</span>
-                <span className="text-[#58a6ff]">{rating}</span>
+                <span className="text-chino-accent">{rating}</span>
               </>
             )}
           </div>

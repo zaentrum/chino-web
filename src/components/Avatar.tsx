@@ -50,7 +50,7 @@ export function Avatar({ size = 36, className = '' }: AvatarProps) {
         src={picture}
         alt={name || 'Account'}
         style={dim}
-        className={`rounded-full object-cover bg-[#21262d] ${className}`}
+        className={`object-cover bg-chino-surface-2 ${className}`}
         onError={() => setImgFailed(true)}
         referrerPolicy="no-referrer"
       />
@@ -60,7 +60,7 @@ export function Avatar({ size = 36, className = '' }: AvatarProps) {
   return (
     <div
       style={{ ...dim, fontSize }}
-      className={`rounded-full bg-[#21262d] text-[#58A6FF] font-semibold flex items-center justify-center select-none ${className}`}
+      className={`bg-chino-surface-2 text-chino-accent font-semibold flex items-center justify-center select-none ${className}`}
       aria-label={name || 'Account'}
       title={name || 'Account'}
     >

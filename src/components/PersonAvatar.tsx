@@ -31,7 +31,7 @@ export function PersonAvatar({ name, size = 48, className = '' }: PersonAvatarPr
   return (
     <div
       style={{ ...dim, fontSize }}
-      className={`rounded-full bg-[#21262d] text-[#58A6FF] font-semibold flex items-center justify-center select-none shrink-0 ${className}`}
+      className={`bg-chino-surface-2 text-chino-accent font-semibold flex items-center justify-center select-none shrink-0 ${className}`}
       aria-label={name}
       title={name}
     >

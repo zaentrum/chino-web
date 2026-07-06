@@ -77,7 +77,7 @@ export function ChinoApp({ initialSearchQuery, initialSection }: ChinoAppProps =
   };
 
   return (
-    <div className="size-full flex bg-[#0d1117] text-white">
+    <div className="size-full flex bg-chino-bg text-white">
       <ChinoSidebar activeSection={activeSection} onSectionChange={changeSection} />
 
       <div className="flex-1 flex flex-col overflow-hidden">

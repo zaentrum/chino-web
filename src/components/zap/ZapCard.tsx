@@ -459,7 +459,7 @@ export function ZapCard({
           imageless item has a colour wash behind the title instead
           of pure black. Sits under the FadeImage so the image
           covers it whenever it loads successfully. */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#161b22] via-[#0d1117] to-black" />
+      <div className="absolute inset-0 bg-gradient-to-br from-chino-surface via-chino-bg to-black" />
 
       {/* Backdrop / poster: rendered only if we have a candidate URL
           and it hasn't failed. Stays fully visible until the video
@@ -506,7 +506,7 @@ export function ZapCard({
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-3">
         <button
           onClick={() => setMuted(!muted)}
-          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
+          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
           title={muted ? 'Unmute' : 'Mute'}
           aria-label={muted ? 'Unmute' : 'Mute'}
         >
@@ -514,8 +514,8 @@ export function ZapCard({
         </button>
         <button
           onClick={toggleSave}
-          className={`w-10 h-10 rounded-full backdrop-blur flex items-center justify-center text-white ${
-            inWatchlist ? 'bg-emerald-500/80 hover:bg-emerald-500' : 'bg-black/60 hover:bg-black/80'
+          className={`w-10 h-10 backdrop-blur flex items-center justify-center text-white ${
+            inWatchlist ? 'bg-chino-green/80 hover:bg-chino-green' : 'bg-black/60 hover:bg-black/80'
           }`}
           title={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
           aria-label={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
@@ -524,7 +524,7 @@ export function ZapCard({
         </button>
         <button
           onClick={expand}
-          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
+          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
           title="Open full player"
           aria-label="Open full player"
         >
@@ -532,7 +532,7 @@ export function ZapCard({
         </button>
         <button
           onClick={() => window.location.assign(toApp(`/i/${encodeURIComponent(item.id)}`))}
-          className="w-10 h-10 rounded-full bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
+          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
           title="Details"
           aria-label="Details"
         >
@@ -546,45 +546,45 @@ export function ZapCard({
         <h2 className="text-white text-2xl font-semibold mb-1 drop-shadow">
           {item.title}
         </h2>
-        <div className="text-[#c9d1d9] text-sm flex flex-wrap items-center gap-2">
+        <div className="text-chino-text text-sm flex flex-wrap items-center gap-2">
           {/* Episode badge — shown when the catalog detail has season +
               episode numbers populated (only true for type=episode
               items). Uses the same SxxExx convention as MediaCard so
               the user sees a consistent format across surfaces. */}
           {detail.data?.season_number != null && detail.data.episode_number != null ? (
-            <span className="text-[#58a6ff] font-medium tracking-wide">
+            <span className="text-chino-accent font-medium tracking-wide">
               S{String(detail.data.season_number).padStart(2, '0')}E{String(detail.data.episode_number).padStart(2, '0')}
             </span>
           ) : null}
           {item.year ? (
             <>
               {detail.data?.season_number != null && detail.data.episode_number != null ? (
-                <span className="text-[#8b949e]">·</span>
+                <span className="text-chino-muted">·</span>
               ) : null}
               <span>{item.year}</span>
             </>
           ) : null}
           {item.rating ? (
             <>
-              <span className="text-[#8b949e]">·</span>
-              <span className="text-[#58a6ff]">{Number(item.rating).toFixed(1)}</span>
+              <span className="text-chino-muted">·</span>
+              <span className="text-chino-accent">{Number(item.rating).toFixed(1)}</span>
             </>
           ) : null}
           {item.type ? (
             <>
-              <span className="text-[#8b949e]">·</span>
+              <span className="text-chino-muted">·</span>
               <span className="uppercase tracking-wide text-xs">{item.type}</span>
             </>
           ) : null}
           {midpoint.source === 'segments' ? (
             <>
-              <span className="text-[#8b949e]">·</span>
-              <span className="text-xs text-[#8b949e]">mid-scene</span>
+              <span className="text-chino-muted">·</span>
+              <span className="text-xs text-chino-muted">mid-scene</span>
             </>
           ) : null}
         </div>
         {detail.data?.description ? (
-          <p className="mt-3 text-[#c9d1d9] text-sm line-clamp-2 max-w-2xl">
+          <p className="mt-3 text-chino-text text-sm line-clamp-2 max-w-2xl">
             {detail.data.description}
           </p>
         ) : null}
@@ -596,7 +596,7 @@ export function ZapCard({
       {active && unmuteBlocked ? (
         <button
           onClick={() => setMuted(false)}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 rounded-full bg-white/90 text-black text-sm font-medium shadow-lg"
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 bg-white/90 text-black text-sm font-medium shadow-lg"
         >
           Tap to unmute
         </button>

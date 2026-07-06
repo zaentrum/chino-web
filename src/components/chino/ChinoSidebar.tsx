@@ -22,11 +22,11 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
     'w-12 h-12 mx-auto flex items-center justify-center rounded-lg transition-all';
 
   return (
-    <aside className="w-20 bg-[#0d1117] border-r border-[#30363d] flex-col h-full hidden md:flex">
+    <aside className="w-20 bg-chino-bg border-r border-chino-border flex-col h-full hidden md:flex">
       {/* Logo cell mirrors the header's h-16 so the icon and the search
           bar sit on the same baseline; border-b separates it from the
           nav, matching the design reference. */}
-      <div className="h-16 flex items-center justify-center border-b border-[#30363d]">
+      <div className="h-16 flex items-center justify-center border-b border-chino-border">
         <button
           onClick={() => onSectionChange('home')}
           title="Chino — Home"
@@ -47,8 +47,8 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
               title={item.label}
               className={`${cellBase} ${
                 isActive
-                  ? 'bg-[#161b22] text-[#58a6ff]'
-                  : 'text-[#8b949e] hover:bg-[#161b22] hover:text-white'
+                  ? 'bg-chino-surface text-chino-accent'
+                  : 'text-chino-muted hover:bg-chino-surface hover:text-white'
               }`}
             >
               <Icon className="w-6 h-6" />
@@ -63,8 +63,8 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
           title="Settings"
           className={`${cellBase} ${
             activeSection === 'settings'
-              ? 'bg-[#161b22] text-[#58a6ff]'
-              : 'text-[#8b949e] hover:bg-[#161b22] hover:text-white'
+              ? 'bg-chino-surface text-chino-accent'
+              : 'text-chino-muted hover:bg-chino-surface hover:text-white'
           }`}
         >
           <Settings className="w-6 h-6" />

@@ -133,13 +133,13 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
         <button
           type="button"
           onClick={onOpen}
-          className="text-2xl font-semibold text-white hover:text-[#58a6ff] transition-colors text-left"
+          className="text-2xl font-semibold text-white hover:text-chino-accent transition-colors text-left"
         >
           {title}
         </button>
         <button
           onClick={onOpen}
-          className="flex items-center gap-1 text-[#58a6ff] hover:text-[#58a6ff]/80 transition-colors"
+          className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
         >
           <span className="text-sm">See All</span>
           <ChevronRight className="w-4 h-4" />
@@ -148,7 +148,7 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
       {loading || itemsLoading ? (
         <LoadingState />
       ) : (
-        <p className="text-sm text-[#8b949e]">
+        <p className="text-sm text-chino-muted">
           Save titles with the + button on any movie or show.
         </p>
       )}
@@ -225,7 +225,7 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
       <div className="flex items-center gap-3 mb-6">
         <button
           onClick={onBack}
-          className="p-2 rounded-full text-[#8b949e] hover:bg-[#161b22] hover:text-white"
+          className="p-2 text-chino-muted hover:bg-chino-surface hover:text-white"
           title="Back to Watchlist"
           aria-label="Back to Watchlist"
         >
@@ -243,19 +243,19 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
                 if (e.key === 'Escape') setRenaming(false);
               }}
               maxLength={60}
-              className="bg-[#0d1117] border border-[#30363d] rounded px-3 py-1.5 text-lg text-white focus:outline-none focus:border-[#58a6ff]"
+              className="bg-chino-bg border border-chino-border rounded px-3 py-1.5 text-lg text-white focus:outline-none focus:border-chino-accent"
             />
             <button
               onClick={() => void submitRename()}
               disabled={busy}
-              className="p-2 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white disabled:opacity-50"
+              className="p-2 bg-chino-accent hover:bg-chino-accent/80 text-white disabled:opacity-50"
               title="Save name"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             </button>
             <button
               onClick={() => setRenaming(false)}
-              className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+              className="p-2 bg-white/10 hover:bg-white/20 text-white"
               title="Cancel"
             >
               <X className="w-4 h-4" />
@@ -264,10 +264,10 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
         ) : (
           <>
             <h1 className="text-3xl font-bold text-white">{list.name}</h1>
-            <span className="text-lg text-[#8b949e]">{list.itemCount}</span>
+            <span className="text-lg text-chino-muted">{list.itemCount}</span>
             <button
               onClick={() => setRenaming(true)}
-              className="p-1.5 rounded-full text-[#8b949e] hover:bg-[#161b22] hover:text-white"
+              className="p-1.5 text-chino-muted hover:bg-chino-surface hover:text-white"
               title="Rename list"
             >
               <Pencil className="w-4 h-4" />
@@ -275,7 +275,7 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
             {!list.isDefault ? (
               <button
                 onClick={() => void onDelete()}
-                className="p-1.5 rounded-full text-[#8b949e] hover:bg-[#161b22] hover:text-rose-400"
+                className="p-1.5 text-chino-muted hover:bg-chino-surface hover:text-chino-red"
                 title="Delete list"
               >
                 <Trash2 className="w-4 h-4" />
@@ -285,13 +285,13 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
         )}
       </div>
 
-      {formErr ? <p className="text-rose-400 text-sm mb-4">{formErr}</p> : null}
+      {formErr ? <p className="text-chino-red text-sm mb-4">{formErr}</p> : null}
 
       {/* Grid — reuses the Movies/Series grid shape + MediaCard. */}
       {loading || itemsLoading ? (
         <LoadingState variant="full" />
       ) : items.length === 0 ? (
-        <div className="text-[#8b949e] py-12 text-center">
+        <div className="text-chino-muted py-12 text-center">
           <Bookmark className="w-10 h-10 mx-auto mb-3 opacity-40" />
           <p>This list is empty.</p>
           <p className="text-sm mt-1">Add titles from a movie or show page to see them here.</p>
@@ -401,12 +401,12 @@ export function WatchlistSection() {
               }}
               maxLength={60}
               placeholder="List name"
-              className="bg-[#0d1117] border border-[#30363d] rounded-full px-3 py-1.5 text-sm text-white placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]"
+              className="bg-chino-bg border border-chino-border px-3 py-1.5 text-sm text-white placeholder-chino-muted focus:outline-none focus:border-chino-accent"
             />
             <button
               onClick={() => void submitCreate()}
               disabled={busy}
-              className="p-1.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white disabled:opacity-50"
+              className="p-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white disabled:opacity-50"
               title="Create list"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -417,7 +417,7 @@ export function WatchlistSection() {
                 setNewName('');
                 setFormErr(null);
               }}
-              className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white"
+              className="p-1.5 bg-white/10 hover:bg-white/20 text-white"
               title="Cancel"
             >
               <X className="w-4 h-4" />
@@ -429,7 +429,7 @@ export function WatchlistSection() {
               setCreating(true);
               setFormErr(null);
             }}
-            className="px-4 py-1.5 rounded-full text-sm border border-dashed border-[#30363d] text-[#58a6ff] hover:bg-[#161b22] flex items-center gap-1.5"
+            className="px-4 py-1.5 text-sm border border-dashed border-chino-border text-chino-accent hover:bg-chino-surface flex items-center gap-1.5"
           >
             <Plus className="w-4 h-4" />
             New list
@@ -437,7 +437,7 @@ export function WatchlistSection() {
         )}
       </div>
 
-      {formErr ? <p className="text-rose-400 text-sm mb-4">{formErr}</p> : null}
+      {formErr ? <p className="text-chino-red text-sm mb-4">{formErr}</p> : null}
     </div>
   );
 }

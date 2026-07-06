@@ -92,13 +92,13 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
       // stopPropagation so a click inside the picker never falls through
       // to the card body's openDetail handler.
       onClick={(e) => e.stopPropagation()}
-      className={`absolute right-0 ${align === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-64 max-h-80 overflow-y-auto bg-[#161b22] border border-[#30363d] rounded-md shadow-xl py-1`}
+      className={`absolute right-0 ${align === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-64 max-h-80 overflow-y-auto bg-chino-surface border border-chino-border rounded-md shadow-xl py-1`}
     >
-      <div className="px-3 py-2 flex items-center justify-between border-b border-[#30363d]">
-        <span className="text-xs uppercase tracking-wide text-[#8b949e]">Add to list</span>
+      <div className="px-3 py-2 flex items-center justify-between border-b border-chino-border">
+        <span className="text-xs uppercase tracking-wide text-chino-muted">Add to list</span>
         <button
           onClick={onClose}
-          className="text-[#8b949e] hover:text-white"
+          className="text-chino-muted hover:text-white"
           title="Close"
           aria-label="Close"
         >
@@ -107,7 +107,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-4 text-[#8b949e]">
+        <div className="flex items-center justify-center py-4 text-chino-muted">
           <Loader2 className="w-4 h-4 animate-spin" />
         </div>
       ) : (
@@ -117,21 +117,21 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
             return (
               <li key={list.id}>
                 <button
-                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-[#c9d1d9] hover:bg-[#21262d] text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2 text-left"
                   onClick={() => onToggle(list.id, !checked)}
                   role="menuitemcheckbox"
                   aria-checked={checked}
                 >
                   <span
                     className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${
-                      checked ? 'bg-emerald-500 border-emerald-500' : 'border-[#30363d] bg-transparent'
+                      checked ? 'bg-chino-green border-chino-green' : 'border-chino-border bg-transparent'
                     }`}
                   >
                     {checked ? <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> : null}
                   </span>
                   <span className="truncate flex-1">{list.name}</span>
                   {list.isDefault ? (
-                    <span className="text-[10px] uppercase text-[#8b949e] shrink-0">Default</span>
+                    <span className="text-[10px] uppercase text-chino-muted shrink-0">Default</span>
                   ) : null}
                 </button>
               </li>
@@ -140,7 +140,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
         </ul>
       )}
 
-      <div className="border-t border-[#30363d] mt-1">
+      <div className="border-t border-chino-border mt-1">
         {creating ? (
           <div className="px-3 py-2">
             <input
@@ -152,14 +152,14 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
               }}
               maxLength={60}
               placeholder="List name"
-              className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1.5 text-sm text-white placeholder-[#8b949e] focus:outline-none focus:border-[#58a6ff]"
+              className="w-full bg-chino-bg border border-chino-border rounded px-2 py-1.5 text-sm text-white placeholder-chino-muted focus:outline-none focus:border-chino-accent"
             />
-            {err ? <p className="text-rose-400 text-xs mt-1">{err}</p> : null}
+            {err ? <p className="text-chino-red text-xs mt-1">{err}</p> : null}
             <div className="flex gap-2 mt-2">
               <button
                 onClick={() => void submitNew()}
                 disabled={busy}
-                className="px-3 py-1 rounded bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1"
+                className="px-3 py-1 rounded bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1"
               >
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 Create
@@ -178,7 +178,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
           </div>
         ) : (
           <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-[#58a6ff] hover:bg-[#21262d]"
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-chino-accent hover:bg-chino-surface-2"
             onClick={() => {
               setCreating(true);
               setErr(null);

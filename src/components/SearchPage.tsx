@@ -61,13 +61,13 @@ export function SearchPage({ query }: SearchPageProps) {
       <h1 className="text-2xl font-semibold mb-6">{headline}</h1>
 
       {!query ? (
-        <p className="text-[#8b949e]">Type a movie or show title in the search bar to look it up.</p>
+        <p className="text-chino-muted">Type a movie or show title in the search bar to look it up.</p>
       ) : (
         <>
           {/* Cast & crew — people matching the query, above the titles. */}
           {peopleList.length > 0 ? (
             <section className="mb-8">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-[#8b949e] mb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-chino-muted mb-3">
                 Cast &amp; crew
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -75,12 +75,12 @@ export function SearchPage({ query }: SearchPageProps) {
                   <button
                     key={p.id}
                     onClick={() => openPerson(p.id)}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-[#161b22] hover:bg-[#21262d] transition-colors text-left"
+                    className="flex items-center gap-3 p-3 rounded-lg bg-chino-surface hover:bg-chino-surface-2 transition-colors text-left"
                   >
                     <PersonAvatar name={p.name} size={48} />
                     <div className="min-w-0">
-                      <div className="text-[#c9d1d9] font-medium truncate">{p.name}</div>
-                      <div className="text-sm text-[#8b949e]">
+                      <div className="text-chino-text font-medium truncate">{p.name}</div>
+                      <div className="text-sm text-chino-muted">
                         · {p.credits} title{p.credits === 1 ? '' : 's'}
                       </div>
                     </div>

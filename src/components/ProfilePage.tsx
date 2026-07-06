@@ -104,12 +104,12 @@ export function ProfilePage() {
   const visible = (history ?? []).filter((it) => !removedIds.has(it.id));
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white">
+    <div className="min-h-screen bg-chino-bg text-white">
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center gap-3 mb-8">
           <button
             onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}
-            className="p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+            className="p-2 bg-black/50 hover:bg-black/70 transition-colors"
             title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -120,17 +120,17 @@ export function ProfilePage() {
         {/* Identity card. Keycloak gives us name / email / preferred_username;
             we render whatever's available so the page is meaningful even on
             minimal claim sets. */}
-        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-6 mb-10 flex items-center gap-4">
+        <div className="bg-chino-surface border border-chino-border rounded-lg p-6 mb-10 flex items-center gap-4">
           <Avatar size={64} className="shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xl font-medium truncate">{name}</div>
             {email && email !== name ? (
-              <div className="text-sm text-[#8b949e] truncate">{email}</div>
+              <div className="text-sm text-chino-muted truncate">{email}</div>
             ) : null}
           </div>
           <button
             onClick={signOut}
-            className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-2"
             title="Sign out"
           >
             <LogOut className="w-4 h-4" />
@@ -142,12 +142,12 @@ export function ProfilePage() {
         {history === null ? (
           <LoadingState />
         ) : visible.length === 0 ? (
-          <p className="text-[#8b949e]">
+          <p className="text-chino-muted">
             Nothing watched yet. Watched items will appear here once you finish a movie
             or episode (or mark one watched via the eye-button on a detail page).
           </p>
         ) : (
-          <div className="bg-[#161b22] border border-[#21262d] rounded-lg overflow-hidden divide-y divide-[#21262d]">
+          <div className="bg-chino-surface border border-chino-border-2 rounded-lg overflow-hidden divide-y divide-chino-border-2">
             {visible.map((it) => (
               <HistoryRow
                 key={it.id}
@@ -209,10 +209,10 @@ function HistoryRow({
           open();
         }
       }}
-      className="flex items-center gap-3 px-3 py-1 hover:bg-[#1c2128] transition-colors cursor-pointer focus:outline-none focus:bg-[#1c2128]"
+      className="flex items-center gap-3 px-3 py-1 hover:bg-chino-surface-2 transition-colors cursor-pointer focus:outline-none focus:bg-chino-surface-2"
     >
       <div
-        className={`relative h-14 ${isEpisode ? 'aspect-video' : 'aspect-[2/3]'} rounded overflow-hidden bg-[#0d1117] shrink-0`}
+        className={`relative h-14 ${isEpisode ? 'aspect-video' : 'aspect-[2/3]'} rounded overflow-hidden bg-chino-bg shrink-0`}
       >
         {thumb ? (
           <FadeImage
@@ -231,7 +231,7 @@ function HistoryRow({
             }}
           />
         ) : (
-          <div className="w-full h-full bg-[#21262d]" />
+          <div className="w-full h-full bg-chino-surface-2" />
         )}
       </div>
 
@@ -243,23 +243,23 @@ function HistoryRow({
           <div className="text-xs truncate mt-0.5">
             {epLabel ? (
               <>
-                <span className="text-[#58a6ff]">{epLabel}</span>
-                <span className="text-[#8b949e]"> · </span>
+                <span className="text-chino-accent">{epLabel}</span>
+                <span className="text-chino-muted"> · </span>
               </>
             ) : null}
-            <span className="text-[#8b949e]">{entry.title}</span>
+            <span className="text-chino-muted">{entry.title}</span>
           </div>
         ) : entry.year || entry.rating ? (
           <div className="text-xs truncate mt-0.5">
-            {entry.year ? <span className="text-[#8b949e]">{entry.year}</span> : null}
-            {entry.year && entry.rating ? <span className="text-[#8b949e]"> • </span> : null}
-            {entry.rating ? <span className="text-[#58a6ff]">{entry.rating.toFixed(1)}</span> : null}
+            {entry.year ? <span className="text-chino-muted">{entry.year}</span> : null}
+            {entry.year && entry.rating ? <span className="text-chino-muted"> • </span> : null}
+            {entry.rating ? <span className="text-chino-accent">{entry.rating.toFixed(1)}</span> : null}
           </div>
         ) : null}
       </div>
 
       {dateLabel ? (
-        <span className="text-xs text-[#8b949e] shrink-0">{dateLabel}</span>
+        <span className="text-xs text-chino-muted shrink-0">{dateLabel}</span>
       ) : null}
 
       <button
@@ -268,11 +268,11 @@ function HistoryRow({
           e.stopPropagation();
           onUnwatch();
         }}
-        className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors shrink-0"
+        className="w-8 h-8 flex items-center justify-center hover:bg-white/10 transition-colors shrink-0"
         title="Mark as unwatched"
         aria-label="Mark as unwatched"
       >
-        <EyeOff className="w-4 h-4 text-[#8b949e]" />
+        <EyeOff className="w-4 h-4 text-chino-muted" />
       </button>
     </div>
   );

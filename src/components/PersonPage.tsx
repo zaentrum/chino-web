@@ -24,7 +24,7 @@ export function PersonPage({ personId }: PersonPageProps) {
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-[#0d1117] text-[#8b949e] flex items-center justify-center">
+      <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
@@ -32,9 +32,9 @@ export function PersonPage({ personId }: PersonPageProps) {
 
   if (notFound || !data) {
     return (
-      <div className="min-h-screen bg-[#0d1117] text-white">
+      <div className="min-h-screen bg-chino-bg text-white">
         <BackButton />
-        <div className="max-w-6xl mx-auto px-6 py-24 text-center text-[#8b949e]">
+        <div className="max-w-6xl mx-auto px-6 py-24 text-center text-chino-muted">
           <p className="text-lg">Person not found.</p>
         </div>
       </div>
@@ -45,7 +45,7 @@ export function PersonPage({ personId }: PersonPageProps) {
   const credits = items.length;
 
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white">
+    <div className="min-h-screen bg-chino-bg text-white">
       <BackButton />
       <div className="max-w-6xl mx-auto px-6 pt-20 pb-16">
         {/* Header: initials avatar + name + credit count */}
@@ -53,14 +53,14 @@ export function PersonPage({ personId }: PersonPageProps) {
           <PersonAvatar name={data.name} size={88} className="text-3xl" />
           <div>
             <h1 className="text-3xl md:text-4xl font-bold">{data.name}</h1>
-            <p className="text-[#8b949e] mt-1">
+            <p className="text-chino-muted mt-1">
               {credits} title{credits === 1 ? '' : 's'}
             </p>
           </div>
         </div>
 
         {items.length === 0 ? (
-          <p className="text-[#8b949e]">No titles available for this person.</p>
+          <p className="text-chino-muted">No titles available for this person.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
             {items.map((it) => (
@@ -89,7 +89,7 @@ function BackButton() {
         if (window.history.length > 1) window.history.back();
         else window.location.assign(toApp('/'));
       }}
-      className="absolute top-4 left-4 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors z-10"
+      className="absolute top-4 left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors z-10"
       title="Back"
     >
       <ArrowLeft className="w-5 h-5" />

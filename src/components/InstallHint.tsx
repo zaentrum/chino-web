@@ -53,12 +53,12 @@ export function InstallHint() {
       // safe-area-inset-bottom + a little extra so it sits above the
       // iOS Safari bottom toolbar that hosts the Share button.
       style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
-      className="fixed left-3 right-3 z-50 rounded-xl bg-[#161b22] border border-white/15 shadow-2xl backdrop-blur p-4 flex items-start gap-3"
+      className="fixed left-3 right-3 z-50 rounded-xl bg-chino-surface border border-white/15 shadow-2xl backdrop-blur p-4 flex items-start gap-3"
     >
       <div className="flex-1 text-sm">
         <div className="font-medium text-white mb-1">Install Chino</div>
-        <div className="text-[#c9d1d9] leading-relaxed">
-          Tap the <Share className="inline w-4 h-4 -mt-0.5 mx-0.5 text-[#58a6ff]" /> Share button below,
+        <div className="text-chino-text leading-relaxed">
+          Tap the <Share className="inline w-4 h-4 -mt-0.5 mx-0.5 text-chino-accent" /> Share button below,
           then <span className="text-white">Add to Home Screen</span> to launch
           Chino full-screen without the Safari bar.
         </div>
@@ -66,7 +66,7 @@ export function InstallHint() {
       <button
         onClick={dismiss}
         aria-label="Dismiss"
-        className="p-1 -m-1 text-[#8b949e] hover:text-white"
+        className="p-1 -m-1 text-chino-muted hover:text-white"
       >
         <X className="w-5 h-5" />
       </button>

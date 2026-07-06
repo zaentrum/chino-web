@@ -63,23 +63,23 @@ export function UpdateAvailable() {
   return (
     <div
       style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
-      className="fixed left-3 right-3 md:left-auto md:right-6 md:max-w-sm z-50 rounded-xl bg-[#161b22] border border-white/15 shadow-2xl backdrop-blur p-4 flex items-start gap-3"
+      className="fixed left-3 right-3 md:left-auto md:right-6 md:max-w-sm z-50 rounded-xl bg-chino-surface border border-white/15 shadow-2xl backdrop-blur p-4 flex items-start gap-3"
     >
-      <RefreshCw className="w-5 h-5 mt-0.5 text-[#58a6ff] shrink-0" />
+      <RefreshCw className="w-5 h-5 mt-0.5 text-chino-accent shrink-0" />
       <div className="flex-1 text-sm">
         <div className="font-medium text-white">Update available</div>
-        <div className="text-[#c9d1d9]">Reload to get the latest Chino.</div>
+        <div className="text-chino-text">Reload to get the latest Chino.</div>
       </div>
       <button
         onClick={apply}
-        className="px-3 py-1.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white text-sm font-medium"
+        className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium"
       >
         Reload
       </button>
       <button
         onClick={() => setShow(false)}
         aria-label="Dismiss"
-        className="p-1 text-[#8b949e] hover:text-white"
+        className="p-1 text-chino-muted hover:text-white"
       >
         <X className="w-4 h-4" />
       </button>

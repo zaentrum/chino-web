@@ -31,13 +31,13 @@ export function SeriesSection() {
       <h1 className="text-4xl font-bold text-white mb-6">Shows</h1>
       <BrowseFilters value={filter} onChange={setFilter} />
       {error ? (
-        <p className="text-red-400 text-sm mb-4">Failed to load: {error.message}</p>
+        <p className="text-chino-red text-sm mb-4">Failed to load: {error.message}</p>
       ) : null}
 
       {items.length === 0 && loading ? (
         <LoadingState variant="full" />
       ) : items.length === 0 ? (
-        <p className="text-[#8b949e]">No shows match the current filters.</p>
+        <p className="text-chino-muted">No shows match the current filters.</p>
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
@@ -60,7 +60,7 @@ export function SeriesSection() {
               <LoadingState />
             </div>
           ) : (
-            <div className="mt-6 text-center text-xs text-[#8b949e]">
+            <div className="mt-6 text-center text-xs text-chino-muted">
               You've reached the end of the catalogue — {items.length} shows.
             </div>
           )}

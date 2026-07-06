@@ -2770,13 +2770,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           they were doing). */}
       {fatalError && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/70 px-6 text-center">
-          <AlertTriangle className="w-10 h-10 text-rose-300 mb-3" />
+          <AlertTriangle className="w-10 h-10 text-chino-red mb-3" />
           <p className="text-white text-lg font-medium">Playback failed</p>
-          <p className="mt-1 text-sm text-[#8b949e] max-w-md">{fatalError.label}</p>
+          <p className="mt-1 text-sm text-chino-muted max-w-md">{fatalError.label}</p>
           <div className="mt-5 flex gap-2">
             <button
               onClick={() => window.location.reload()}
-              className="px-5 py-2 rounded-lg bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white font-medium"
+              className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium"
             >
               Reload
             </button>
@@ -2791,7 +2791,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       )}
 
       {qualityNotice && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/80 text-sm text-white shadow-lg">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-sm text-white shadow-lg">
           {qualityNotice}
         </div>
       )}
@@ -2805,14 +2805,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           }}
           className="absolute inset-0 flex items-center justify-center bg-black/40"
         >
-          <span className="px-6 py-3 rounded-full bg-[#58a6ff] text-white font-medium shadow-xl">
+          <span className="px-6 py-3 bg-chino-accent text-white font-medium shadow-xl">
             Click to start
           </span>
         </button>
       )}
 
       {reconnecting && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-rose-500/20 text-rose-200 text-sm border border-rose-500/40 shadow-lg">
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-chino-red/20 text-chino-red text-sm border border-chino-red/40 shadow-lg">
           Stream paused — reconnecting…
         </div>
       )}
@@ -2820,7 +2820,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       {autoplayMuted && !needsClickToPlay && (
         <button
           onClick={startUnmuted}
-          className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/70 hover:bg-black/85 text-sm flex items-center gap-2 transition-colors"
+          className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/70 hover:bg-black/85 text-sm flex items-center gap-2 transition-colors"
         >
           <VolumeX className="w-4 h-4" />
           <span>Tap to unmute</span>
@@ -2857,7 +2857,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               // on the episode the user just left.
               window.location.replace(toApp(dest));
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -2865,7 +2865,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           <h1 className="text-lg font-medium truncate">{title || 'Playing'}</h1>
           {info && effectiveMode !== 'passthrough' && (
             <span
-              className="ml-2 shrink-0 px-2.5 py-1 rounded-full text-xs bg-white/10 text-white/80 border border-white/10"
+              className="ml-2 shrink-0 px-2.5 py-1 text-xs bg-white/10 text-white/80 border border-white/10"
               title={
                 effectiveMode === 'transcode'
                   ? `Transcoding ${info.video_codec.toUpperCase()} → H.264 at ${labelForQuality(streamQuality)}`
@@ -2888,23 +2888,23 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       {inIntro && autoSkipIntroSec != null && !autoSkipIntroDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-[#161b22]/95 backdrop-blur border border-white/10 shadow-2xl p-4"
+          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-chino-surface/95 backdrop-blur border border-white/10 shadow-2xl p-4"
         >
-          <div className="text-xs uppercase tracking-wider text-[#8b949e]">Binge mode</div>
+          <div className="text-xs uppercase tracking-wider text-chino-muted">Binge mode</div>
           <div className="mt-1 text-white font-medium">
             Skipping intro in {autoSkipIntroSec}…
           </div>
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => skipSegment('intro')}
-              className="px-3 py-1.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white text-sm font-medium flex items-center gap-1"
+              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
             >
               <SkipForward className="w-4 h-4" />
               Skip now
             </button>
             <button
               onClick={() => setAutoSkipIntroDismissed(true)}
-              className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm"
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
             >
               Watch intro
             </button>
@@ -2914,7 +2914,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         <button
           onClick={() => skipSegment(inIntro ? 'intro' : 'recap')}
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 px-4 py-2 rounded-full bg-white text-black font-medium shadow-2xl hover:bg-white/90 transition-colors"
+          className="absolute right-4 md:right-6 z-10 px-4 py-2 bg-white text-black font-medium shadow-2xl hover:bg-white/90 transition-colors"
         >
           {inIntro ? 'Skip Intro' : 'Skip Recap'}
         </button>
@@ -2925,12 +2925,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       {inCredits && nextEp && !autoNextDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-[#161b22]/95 backdrop-blur border border-white/10 shadow-2xl p-4"
+          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-chino-surface/95 backdrop-blur border border-white/10 shadow-2xl p-4"
         >
-          <div className="text-xs uppercase tracking-wider text-[#8b949e]">Up next</div>
+          <div className="text-xs uppercase tracking-wider text-chino-muted">Up next</div>
           <div className="mt-1 text-white font-medium truncate">{nextEp.title || 'Next episode'}</div>
           {nextEp.season_number != null && nextEp.episode_number != null ? (
-            <div className="text-sm text-[#8b949e]">
+            <div className="text-sm text-chino-muted">
               S{String(nextEp.season_number).padStart(2, '0')}
               E{String(nextEp.episode_number).padStart(2, '0')}
             </div>
@@ -2938,14 +2938,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(nextEp.id)}?binge=1`))}
-              className="px-3 py-1.5 rounded-full bg-[#58a6ff] hover:bg-[#58a6ff]/80 text-white text-sm font-medium flex items-center gap-1"
+              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
             >
               <Play className="w-4 h-4 fill-white" />
               Play now {autoNextSec != null ? `(${autoNextSec})` : ''}
             </button>
             <button
               onClick={() => setAutoNextDismissed(true)}
-              className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-sm"
+              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
             >
               Cancel
             </button>
@@ -2956,7 +2956,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         <button
           onClick={() => skipSegment('credits')}
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 px-4 py-2 rounded-full bg-white text-black font-medium shadow-2xl hover:bg-white/90 transition-colors"
+          className="absolute right-4 md:right-6 z-10 px-4 py-2 bg-white text-black font-medium shadow-2xl hover:bg-white/90 transition-colors"
         >
           Skip Credits
         </button>
@@ -2993,7 +2993,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                 the unplayed portion a visible base colour. */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-white/15"
+              className="pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 h-[6px] bg-white/15"
             />
             {/* Buffered overlay — lighter band showing how far the
                 network has fetched past the playhead. Width is the %
@@ -3004,7 +3004,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             {effectiveDuration > 0 && bufferedPct > 0 && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-white/30 transition-[width] duration-200 ease-linear"
+                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[6px] bg-white/30 transition-[width] duration-200 ease-linear"
                 style={{ width: `${bufferedPct}%` }}
               />
             )}
@@ -3017,7 +3017,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             {effectiveDuration > 0 && (
               <div
                 aria-hidden
-                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[6px] rounded-full bg-[#58a6ff]"
+                className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-[6px] bg-chino-accent"
                 style={{ width: `${Math.min(100, (displayedCurrent / effectiveDuration) * 100)}%` }}
               />
             )}
@@ -3124,16 +3124,16 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                       Math.min(100 - left, ((s.end_ms - s.start_ms) / 1000 / effectiveDuration) * 100),
                     );
                     const color =
-                      s.kind === 'intro'   ? '#a371f7' :
-                      s.kind === 'credits' ? '#fb8500' :
-                      s.kind === 'recap'   ? '#7ee787' :
-                      s.kind === 'sponsor' ? '#f85149' :
-                                              '#58a6ff';
+                      s.kind === 'intro'   ? '#58A6FF' :
+                      s.kind === 'credits' ? '#F2B233' :
+                      s.kind === 'recap'   ? '#2EA043' :
+                      s.kind === 'sponsor' ? '#F85149' :
+                                              '#58A6FF';
                     return (
                       <span
                         key={`seg-${i}`}
                         title={`${s.kind} ${fmt(s.start_ms / 1000)}–${fmt(s.end_ms / 1000)}`}
-                        className="absolute top-0 h-full rounded-full opacity-90"
+                        className="absolute top-0 h-full opacity-90"
                         style={{ left: `${left}%`, width: `${width}%`, background: color }}
                       />
                     );
@@ -3221,7 +3221,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         <div className="flex items-center gap-2 mt-2">
           <button
             onClick={() => userTogglePlay()}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title={playing ? 'Pause' : 'Play'}
           >
             {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -3232,7 +3232,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               const v = videoRef.current;
               if (v) v.muted = !v.muted;
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title={muted ? 'Unmute' : 'Mute'}
           >
             {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -3244,7 +3244,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             step={0.01}
             value={muted ? 0 : volume}
             onChange={onVolume}
-            className="hidden md:block w-24 accent-[#58a6ff]"
+            className="hidden md:block w-24 accent-chino-accent"
             aria-label="Volume"
           />
 
@@ -3257,22 +3257,22 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             <div className="relative">
               <button
                 onClick={() => toggleMenu('audio')}
-                className="px-3 py-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors text-xs uppercase tracking-wide"
+                className="px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors text-xs uppercase tracking-wide"
                 title="Audio language"
               >
                 {langLabel(info.audio_tracks.find((t) => t.index === streamAudioIdx)?.language ?? 'und').slice(0, 3).toUpperCase()}
               </button>
               {audioMenuOpen && (
-                <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-[#161b22] border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-[#8b949e]">Audio</div>
+                <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
+                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Audio</div>
                   {info.audio_tracks.map((t) => (
                     <button
                       key={t.index}
                       onClick={() => switchAudio(t.index)}
-                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamAudioIdx === t.index ? 'text-[#58a6ff]' : ''}`}
+                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamAudioIdx === t.index ? 'text-chino-accent' : ''}`}
                     >
                       {(t.title?.trim() || langLabel(t.language))}
-                      <span className="ml-2 text-xs text-[#8b949e]">
+                      <span className="ml-2 text-xs text-chino-muted">
                         {t.codec?.toUpperCase()}{t.channels ? ` · ${t.channels}ch` : ''}
                       </span>
                     </button>
@@ -3285,17 +3285,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           <div className="relative">
             <button
               onClick={() => toggleMenu('captions')}
-              className={`p-2 rounded-full transition-colors ${activeSubIds.length > 0 ? 'bg-[#58a6ff]/30 hover:bg-[#58a6ff]/40' : 'bg-white/10 hover:bg-white/20'}`}
+              className={`p-2 transition-colors ${activeSubIds.length > 0 ? 'bg-chino-accent/30 hover:bg-chino-accent/40' : 'bg-white/10 hover:bg-white/20'}`}
               title="Subtitles"
               disabled={mergedSubs.length === 0}
             >
               <Captions className="w-5 h-5" />
             </button>
             {showCaptionsMenu && mergedSubs.length > 0 && (
-              <div className="absolute right-0 bottom-full mb-3 w-72 bg-[#161b22] border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-[#8b949e] flex items-center justify-between">
+              <div className="absolute right-0 bottom-full mb-3 w-72 bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
+                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted flex items-center justify-between">
                   <span>Subtitles</span>
-                  <span className="text-[10px] normal-case tracking-normal text-[#8b949e]/70">
+                  <span className="text-[10px] normal-case tracking-normal text-chino-muted/70">
                     {activeSubIds.length}/{MAX_ACTIVE_SUBS}
                   </span>
                 </div>
@@ -3305,7 +3305,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                 <div className="max-h-72 overflow-y-auto">
                   <button
                     onClick={() => chooseSub(null)}
-                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${activeSubIds.length === 0 ? 'text-[#58a6ff]' : ''}`}
+                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${activeSubIds.length === 0 ? 'text-chino-accent' : ''}`}
                   >
                     None / Off
                   </button>
@@ -3316,11 +3316,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                       <button
                         key={s.id}
                         onClick={() => chooseSub(s)}
-                        className={`flex w-full items-center gap-2 text-left px-4 py-2 hover:bg-white/10 ${selected ? 'text-[#58a6ff]' : ''}`}
+                        className={`flex w-full items-center gap-2 text-left px-4 py-2 hover:bg-white/10 ${selected ? 'text-chino-accent' : ''}`}
                       >
                         <span
                           aria-hidden
-                          className={`inline-flex items-center justify-center w-4 h-4 rounded-sm border ${selected ? 'bg-[#58a6ff] border-[#58a6ff] text-white' : 'border-white/30'}`}
+                          className={`inline-flex items-center justify-center w-4 h-4 rounded-sm border ${selected ? 'bg-chino-accent border-chino-accent text-white' : 'border-white/30'}`}
                         >
                           {selected ? (idx === 0 ? '1' : '2') : ''}
                         </span>
@@ -3335,7 +3335,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                     re-fetching the VTT. Disabled when no track is
                     active. */}
                 <div className="border-t border-white/10 mt-1 px-4 py-2">
-                  <div className="text-[10px] uppercase tracking-wide text-[#8b949e] mb-1">
+                  <div className="text-[10px] uppercase tracking-wide text-chino-muted mb-1">
                     Timing offset
                   </div>
                   <div className="flex items-center gap-2">
@@ -3380,19 +3380,19 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             <div className="relative">
               <button
                 onClick={() => toggleMenu('quality')}
-                className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
                 title={`Quality (${effectiveMode === 'transcode' ? labelForQuality(streamQuality) : 'Direct'})`}
               >
                 <Settings className="w-5 h-5" />
               </button>
               {qualityMenuOpen && (
-                <div className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-[#161b22] border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-[#8b949e]">Quality</div>
+                <div className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
+                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Quality</div>
                   {QUALITY_RUNGS.map((q) => (
                     <button
                       key={q}
                       onClick={() => switchQuality(q)}
-                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamQuality === q ? 'text-[#58a6ff]' : ''}`}
+                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamQuality === q ? 'text-chino-accent' : ''}`}
                     >
                       {labelForQuality(q)}
                     </button>
@@ -3409,7 +3409,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           <div className="relative">
             <button
               onClick={() => toggleMenu('speed')}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
               title={`Playback speed (${playbackRate}x)`}
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
@@ -3418,10 +3418,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             </button>
             {speedMenuOpen && (
               <div
-                className="absolute right-0 bottom-full mb-2 min-w-[180px] bg-[#161b22] border border-white/10 rounded-lg shadow-xl py-1 z-50"
+                className="absolute right-0 bottom-full mb-2 min-w-[180px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
                 role="menu"
               >
-                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-[#8b949e]">Speed</div>
+                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Speed</div>
                 {PLAYBACK_RATES.map((rate) => (
                   <button
                     key={rate}
@@ -3431,7 +3431,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                       setOpenMenu(null);
                       reportEvent('playback_rate_change', { rate });
                     }}
-                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${playbackRate === rate ? 'text-[#58a6ff]' : ''}`}
+                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${playbackRate === rate ? 'text-chino-accent' : ''}`}
                   >
                     {rate === 1 ? 'Normal (1x)' : `${rate}x`}
                   </button>
@@ -3443,7 +3443,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           {episodeNav.prev && (
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.prev!.id)}`))}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
               title={`Previous episode: S${String(episodeNav.prev.season).padStart(2, '0')}E${String(episodeNav.prev.episode).padStart(2, '0')} — ${episodeNav.prev.title}`}
             >
               <ChevronLeft className="w-5 h-5" />
@@ -3452,7 +3452,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           {episodeNav.next && (
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.next!.id)}?binge=1`))}
-              className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
               title={`Next episode: S${String(episodeNav.next.season).padStart(2, '0')}E${String(episodeNav.next.episode).padStart(2, '0')} — ${episodeNav.next.title}`}
             >
               <ChevronRight className="w-5 h-5" />
@@ -3461,7 +3461,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
           <button
             onClick={() => setInfoOpen(true)}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title="Playback info"
           >
             <Info className="w-5 h-5" />
@@ -3469,7 +3469,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
           <button
             onClick={toggleFullscreen}
-            className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
             {fullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
@@ -3526,10 +3526,10 @@ function PlaybackInfoDialog({
   onClose: () => void;
 }) {
   const modeColor: Record<PlayInfo['mode'], string> = {
-    passthrough: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-    remux:       'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    transcode:   'bg-rose-500/20 text-rose-300 border-rose-500/40',
-    packaged:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    passthrough: 'bg-chino-green/20 text-chino-green border-chino-green/40',
+    remux:       'bg-chino-amber/20 text-chino-amber border-chino-amber/40',
+    transcode:   'bg-chino-red/20 text-chino-red border-chino-red/40',
+    packaged:    'bg-chino-green/20 text-chino-green border-chino-green/40',
   };
   const modeLabel: Record<PlayInfo['mode'], string> = {
     passthrough: 'Passthrough (no transcode)',
@@ -3563,7 +3563,7 @@ function PlaybackInfoDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto rounded-xl bg-[#161b22] border border-white/10 shadow-2xl"
+        className="w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto rounded-xl bg-chino-surface border border-white/10 shadow-2xl"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <h2 className="text-lg font-medium">Playback info</h2>
@@ -3574,26 +3574,26 @@ function PlaybackInfoDialog({
 
         <div className="p-6 space-y-6 text-sm">
           {!info ? (
-            <p className="text-[#8b949e]">Probing source file&hellip;</p>
+            <p className="text-chino-muted">Probing source file&hellip;</p>
           ) : (
             <>
               <div>
-                <div className={`inline-flex items-center px-3 py-1 rounded-full border ${modeColor[info.mode]}`}>
+                <div className={`inline-flex items-center px-3 py-1 border ${modeColor[info.mode]}`}>
                   {modeLabel[info.mode]}
                 </div>
-                <p className="mt-2 text-[#c9d1d9]">{info.reason}</p>
+                <p className="mt-2 text-chino-text">{info.reason}</p>
               </div>
 
               <div>
                 <h3 className="font-medium mb-2">Source file</h3>
                 <dl className="grid grid-cols-[8rem_1fr] gap-y-1">
-                  <dt className="text-[#8b949e]">Container</dt>
+                  <dt className="text-chino-muted">Container</dt>
                   <dd>{info.container || '—'}</dd>
-                  <dt className="text-[#8b949e]">Video</dt>
+                  <dt className="text-chino-muted">Video</dt>
                   <dd>{info.video_codec || '—'} {info.width > 0 && info.height > 0 ? `(${info.width}×${info.height})` : ''}</dd>
-                  <dt className="text-[#8b949e]">Audio</dt>
+                  <dt className="text-chino-muted">Audio</dt>
                   <dd>{info.audio_codec || '—'}</dd>
-                  <dt className="text-[#8b949e]">Duration</dt>
+                  <dt className="text-chino-muted">Duration</dt>
                   <dd>{info.duration_ms ? fmtDur(info.duration_ms / 1000) : '—'}</dd>
                 </dl>
               </div>
@@ -3601,40 +3601,40 @@ function PlaybackInfoDialog({
               <div>
                 <h3 className="font-medium mb-2">Live pipeline</h3>
                 <dl className="grid grid-cols-[8rem_1fr] gap-y-1">
-                  <dt className="text-[#8b949e]">Effective mode</dt>
+                  <dt className="text-chino-muted">Effective mode</dt>
                   <dd>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${modeColor[effectiveMode]}`}>
+                    <span className={`inline-flex items-center px-2 py-0.5 border text-xs ${modeColor[effectiveMode]}`}>
                       {modeLabel[effectiveMode]}
                     </span>
                   </dd>
                   {effectiveMode === 'transcode' ? (
                     <>
-                      <dt className="text-[#8b949e]">Quality</dt>
+                      <dt className="text-chino-muted">Quality</dt>
                       <dd>{labelForQuality(streamQuality)}</dd>
-                      <dt className="text-[#8b949e]">Encoder</dt>
+                      <dt className="text-chino-muted">Encoder</dt>
                       <dd>
                         {info.encoder === 'h264_nvenc'
                           ? 'h264_nvenc (NVIDIA NVENC, GPU)'
                           : `${info.encoder || 'libx264'} (CPU)`}
                       </dd>
-                      <dt className="text-[#8b949e]">Video target</dt>
+                      <dt className="text-chino-muted">Video target</dt>
                       <dd>H.264 High@4.0 · {QUALITY_SPEC[streamQuality].scale} · {info.encoder === 'h264_nvenc' ? `CQ ${22}` : `CRF ${QUALITY_SPEC[streamQuality].crf}`}</dd>
-                      <dt className="text-[#8b949e]">Audio target</dt>
+                      <dt className="text-chino-muted">Audio target</dt>
                       <dd>AAC stereo · {QUALITY_SPEC[streamQuality].abps}</dd>
                     </>
                   ) : (
                     <>
-                      <dt className="text-[#8b949e]">Quality</dt>
+                      <dt className="text-chino-muted">Quality</dt>
                       <dd>Direct ({info.video_codec.toUpperCase()})</dd>
-                      <dt className="text-[#8b949e]">Encoder</dt>
+                      <dt className="text-chino-muted">Encoder</dt>
                       <dd>None — source bytes pass through unmodified</dd>
                     </>
                   )}
-                  <dt className="text-[#8b949e]">Position</dt>
+                  <dt className="text-chino-muted">Position</dt>
                   <dd>{fmtDur(displayedCurrent)} / {info.duration_ms ? fmtDur(info.duration_ms / 1000) : '—'}</dd>
-                  <dt className="text-[#8b949e]">Buffered ahead</dt>
+                  <dt className="text-chino-muted">Buffered ahead</dt>
                   <dd>{bufferedAheadSec > 0 ? `${bufferedAheadSec.toFixed(1)}s` : '—'}</dd>
-                  <dt className="text-[#8b949e]">Element state</dt>
+                  <dt className="text-chino-muted">Element state</dt>
                   <dd>
                     {videoEl ? `${readyStateNames[videoEl.readyState] ?? '?'} · ${networkStateNames[videoEl.networkState] ?? '?'}` : '—'}
                   </dd>
@@ -3647,15 +3647,15 @@ function PlaybackInfoDialog({
                   <ul className="space-y-1 text-xs font-mono">
                     {switchHistory.slice().reverse().map((e, i) => (
                       <li key={i} className="flex items-start gap-3">
-                        <span className="text-[#8b949e] tabular-nums shrink-0">{fmtClock(e.ts)}</span>
+                        <span className="text-chino-muted tabular-nums shrink-0">{fmtClock(e.ts)}</span>
                         <span className={`shrink-0 uppercase tracking-wider w-14 ${
-                          e.reason === 'manual'  ? 'text-sky-300' :
-                          e.reason === 'auto'    ? 'text-amber-300' :
-                          e.reason === 'stall'   ? 'text-rose-300' :
-                                                    'text-[#8b949e]'
+                          e.reason === 'manual'  ? 'text-chino-accent' :
+                          e.reason === 'auto'    ? 'text-chino-amber' :
+                          e.reason === 'stall'   ? 'text-chino-red' :
+                                                    'text-chino-muted'
                         }`}>{e.reason}</span>
-                        <span className="text-[#c9d1d9]">{e.label}</span>
-                        {e.detail ? <span className="text-[#8b949e]">— {e.detail}</span> : null}
+                        <span className="text-chino-text">{e.label}</span>
+                        {e.detail ? <span className="text-chino-muted">— {e.detail}</span> : null}
                       </li>
                     ))}
                   </ul>
@@ -3669,12 +3669,12 @@ function PlaybackInfoDialog({
             <ul className="grid grid-cols-2 gap-y-1">
               {clientCodecs.map((c) => (
                 <li key={c.label} className="flex items-center gap-2">
-                  <span className={`inline-block w-2 h-2 rounded-full ${c.supported ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                  <span className={c.supported ? '' : 'text-[#8b949e]'}>{c.label}</span>
+                  <span className={`inline-block w-2 h-2 ${c.supported ? 'bg-chino-green' : 'bg-chino-red'}`} />
+                  <span className={c.supported ? '' : 'text-chino-muted'}>{c.label}</span>
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-xs text-[#8b949e]">
+            <p className="mt-3 text-xs text-chino-muted">
               When the source file uses a codec the browser can't decode, katalog-stream
               re-encodes it on the fly to H.264 + AAC inside a fragmented MP4.
             </p>

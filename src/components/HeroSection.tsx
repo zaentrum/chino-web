@@ -154,8 +154,8 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
             {heroYear && <span className="text-white drop-shadow">{heroYear}</span>}
             {heroRating && (
               <>
-                <span className="text-[#8b949e]">•</span>
-                <span className="px-2 py-0.5 bg-[#58a6ff] text-white rounded">{heroRating}</span>
+                <span className="text-chino-muted">•</span>
+                <span className="px-2 py-0.5 bg-chino-accent text-white rounded">{heroRating}</span>
               </>
             )}
           </div>
@@ -168,7 +168,7 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
               ordering, so the description rendered un-clamped and
               spilled below the hero box for long synopses
               (e.g. Star Wars Rebels). */}
-          <p className="hidden md:line-clamp-3 text-[#c9d1d9] text-base lg:text-lg drop-shadow">
+          <p className="hidden md:line-clamp-3 text-chino-text text-base lg:text-lg drop-shadow">
             {heroDesc}
           </p>
         </div>
@@ -182,7 +182,7 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
             <button
               onClick={goPlayer}
               disabled={!playTargetId}
-              className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-[#58a6ff] hover:bg-[#58a6ff]/80 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
+              className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
             >
               <Play className="w-4 h-4 md:w-5 md:h-5 fill-white" />
               <span>Play</span>
@@ -209,7 +209,7 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
                 <button
                   key={i}
                   onClick={() => setIdx(i)}
-                  className={`w-2 h-2 rounded-full transition-all ${
+                  className={`w-2 h-2 transition-all ${
                     i === idx
                       ? paused
                         ? 'bg-white ring-1 ring-white/60 ring-offset-1 ring-offset-black'
