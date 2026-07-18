@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { ArrowLeft, Check, ChevronDown, Eye, Heart, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Eye, Heart, House, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
 import { useLikes, useWatchlist } from '../hooks/useUserFlags';
 import { useMemberships } from '../hooks/useWatchlists';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
@@ -72,13 +72,32 @@ export function DetailPage({ itemId }: DetailPageProps) {
     return () => ctrl.abort();
   }, [itemId, auth.isAuthenticated, auth.isLoading, auth.user?.access_token]);
 
-  if (loading || !data) {
+  // An episode id has no standalone detail page — it duplicates the
+  // series' Episodes list. Redirect to the parent series detail with the
+  // episode carried in ?ep= so the season overview focuses + highlights
+  // it. replace() keeps the episode URL out of history.
+  const redirectEpisodeId =
+    data?.type === 'episode' && data.parent_id ? data.parent_id : null;
+  useEffect(() => {
+    if (redirectEpisodeId) {
+      window.location.replace(
+        toApp(`/i/${encodeURIComponent(redirectEpisodeId)}?ep=${encodeURIComponent(itemId)}`),
+      );
+    }
+  }, [redirectEpisodeId, itemId]);
+
+  if (loading || !data || redirectEpisodeId) {
     return (
       <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
+
+  // Deep-link focus: /i/<seriesId>?ep=<episodeId> focuses that episode in
+  // the season overview.
+  const focusEpisodeId =
+    new URLSearchParams(window.location.search).get('ep') || undefined;
 
   const goPlayer = (resume?: boolean) => {
     // The player auto-resumes by default. Pass ?startover=1 to force a
@@ -122,6 +141,14 @@ export function DetailPage({ itemId }: DetailPageProps) {
           title="Back"
         >
           <ArrowLeft className="w-5 h-5" />
+        </button>
+        <button
+          onClick={() => window.location.assign(toApp('/'))}
+          className="absolute top-4 left-16 p-2 bg-black/50 hover:bg-black/70 transition-colors"
+          title="Home"
+          aria-label="Home"
+        >
+          <House className="w-5 h-5" />
         </button>
       </div>
 
@@ -315,7 +342,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
           </div>
         </div>
 
-        {isSeries ? <EpisodesList seasons={seasons} /> : null}
+        {isSeries ? <EpisodesList seasons={seasons} focusEpisodeId={focusEpisodeId} /> : null}
 
         {/* "More like this" — only renders when the backend scored at
             least one candidate (#115). Episode detail pages don't

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, Eye, Play } from 'lucide-react';
 import type { Season } from '../hooks/useSeriesEpisodes';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
@@ -7,6 +7,9 @@ import { FadeImage } from './FadeImage';
 
 interface EpisodesListProps {
   seasons: Season[];
+  // When set (deep-link /i/<seriesId>?ep=<episodeId>), open the season
+  // that contains this episode, scroll it into view, and highlight it.
+  focusEpisodeId?: string;
 }
 
 /**
@@ -15,16 +18,22 @@ interface EpisodesListProps {
  * player. Defaults to season 1 open; subsequent seasons toggle on click
  * so a 30-episode series doesn't render a huge wall of HTML.
  */
-export function EpisodesList({ seasons }: EpisodesListProps) {
+export function EpisodesList({ seasons, focusEpisodeId }: EpisodesListProps) {
   // Episodes that have no SxxEyy coordinates land in season 0; hide that
   // accordion unless it's the only one, since the rest are usually
   // already covered by named seasons.
   const visible = seasons.filter((s) => s.season > 0 || seasons.length === 1);
 
-  // Open state: first season open by default.
+  // The season that holds the focused episode, if any — it drives the
+  // default-open season so a deep-linked episode is revealed on load.
+  const focusSeason = focusEpisodeId
+    ? visible.find((s) => s.episodes.some((e) => e.id === focusEpisodeId))?.season
+    : undefined;
+
+  // Open state: focused episode's season if deep-linked, else first open.
   const initial: Record<number, boolean> = {};
   visible.forEach((s, i) => {
-    initial[s.season] = i === 0;
+    initial[s.season] = focusSeason != null ? s.season === focusSeason : i === 0;
   });
   const [open, setOpen] = useState<Record<number, boolean>>(initial);
 
@@ -40,6 +49,7 @@ export function EpisodesList({ seasons }: EpisodesListProps) {
             season={s}
             open={!!open[s.season]}
             onToggle={() => setOpen((m) => ({ ...m, [s.season]: !m[s.season] }))}
+            focusEpisodeId={focusEpisodeId}
           />
         ))}
       </div>
@@ -51,10 +61,12 @@ function SeasonAccordion({
   season,
   open,
   onToggle,
+  focusEpisodeId,
 }: {
   season: Season;
   open: boolean;
   onToggle: () => void;
+  focusEpisodeId?: string;
 }) {
   return (
     <div className="rounded-lg bg-chino-surface border border-chino-border-2 overflow-hidden">
@@ -74,7 +86,12 @@ function SeasonAccordion({
       {open ? (
         <div className="divide-y divide-chino-border-2">
           {season.episodes.map((e) => (
-            <EpisodeRow key={e.id} ep={e} seasonNum={season.season} />
+            <EpisodeRow
+              key={e.id}
+              ep={e}
+              seasonNum={season.season}
+              focused={!!focusEpisodeId && e.id === focusEpisodeId}
+            />
           ))}
         </div>
       ) : null}
@@ -85,10 +102,20 @@ function SeasonAccordion({
 function EpisodeRow({
   ep,
   seasonNum,
+  focused,
 }: {
   ep: Season['episodes'][number];
   seasonNum: number;
+  focused?: boolean;
 }) {
+  // Deep-link focus: scroll the row into the viewport centre once mounted.
+  const rowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused && rowRef.current) {
+      rowRef.current.scrollIntoView({ block: 'center' });
+    }
+  }, [focused]);
+
   const runtimeMin = ep.duration_ms ? Math.round(ep.duration_ms / 60_000) : 0;
   const epNum = ep.episode_number ?? 0;
   const epLabel = `S${seasonNum.toString().padStart(2, '0')}E${epNum.toString().padStart(2, '0')}`;
@@ -111,8 +138,10 @@ function EpisodeRow({
   // Enter / Space for the same parity as the previous <button>.
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
+      aria-current={focused ? 'true' : undefined}
       onClick={open}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -120,7 +149,9 @@ function EpisodeRow({
           open();
         }
       }}
-      className="w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 transition-colors group cursor-pointer focus:outline-none focus:bg-chino-surface-2"
+      className={`w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 transition-colors group cursor-pointer focus:outline-none focus:bg-chino-surface-2 ${
+        focused ? 'bg-chino-surface-2 ring-1 ring-inset ring-chino-accent' : ''
+      }`}
     >
       <div className="relative w-40 aspect-video rounded overflow-hidden bg-chino-bg shrink-0">
         <FadeImage

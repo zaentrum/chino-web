@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle } from 'lucide-react';
+import { Captions, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle } from 'lucide-react';
 import Hls from 'hls.js';
 import { PgsRenderer } from 'libpgs';
 // Vite resolves this to an emitted asset URL; the worker file is
@@ -227,6 +227,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // by the overlay below the native captions.
   const [secondaryCueText, setSecondaryCueText] = useState<string>('');
   const [title, setTitle] = useState<string>('');
+  // Episode coordinates + resolved series title, so the chrome can show
+  // "Series — S01E02 · Episode" for episodes. season/episode come from the
+  // item payload; the series title is fetched via parent_id (see below).
+  const [episodeMeta, setEpisodeMeta] = useState<{ season?: number; episode?: number } | null>(null);
+  const [seriesTitle, setSeriesTitle] = useState<string>('');
 
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -890,6 +895,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (j?.title) setTitle(j.title);
+        // For episodes, remember the SxxEyy coordinates so the chrome
+        // title can render "Series — S01E02 · Title" once the parent
+        // series title resolves (fetched from parent_id below).
+        if (j?.type === 'episode') {
+          setEpisodeMeta({ season: j.season_number, episode: j.episode_number });
+        } else {
+          setEpisodeMeta(null);
+        }
         // NOTE: we do NOT call setApiDurationSec here. The item-level
         // duration_ms comes from TMDB enrichment and is rounded up to
         // the nearest minute (24:00 instead of the actual 23:40 etc).
@@ -1019,6 +1032,40 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
     return () => ctrl.abort();
   }, [itemId, token, streamToken, capsParam]);
+
+  // Resolve the parent series title so an episode's chrome title can read
+  // "Series — S01E02 · Episode". The episode payload carries the SxxEyy
+  // coordinates but not the series name; fetch it via parent_id. Until it
+  // lands, the title falls back to "S01E02 · Episode" (no series prefix).
+  useEffect(() => {
+    if (!token || !parentSeriesId) {
+      setSeriesTitle('');
+      return;
+    }
+    const ctrl = new AbortController();
+    fetch(`/api/v1/items/${parentSeriesId}`, {
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.title) setSeriesTitle(j.title);
+      })
+      .catch(() => undefined);
+    return () => ctrl.abort();
+  }, [parentSeriesId, token]);
+
+  // Composed chrome title. Movies/non-episodes show the plain title; an
+  // episode shows "Series — S01E02 · Episode" (series prefix omitted until
+  // the parent title resolves).
+  const displayTitle = useMemo(() => {
+    if (!title) return 'Playing';
+    if (!episodeMeta) return title;
+    const s = (episodeMeta.season ?? 0).toString().padStart(2, '0');
+    const e = (episodeMeta.episode ?? 0).toString().padStart(2, '0');
+    const code = `S${s}E${e}`;
+    return seriesTitle ? `${seriesTitle} — ${code} · ${title}` : `${code} · ${title}`;
+  }, [title, episodeMeta, seriesTitle]);
 
   // Merge sidecar subs (from /subtitles) and embedded subs (from
   // /play/info.subtitle_tracks) into a single list the menu can render.
@@ -2941,21 +2988,15 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-medium truncate">{title || 'Playing'}</h1>
-          {info && effectiveMode !== 'passthrough' && (
-            <span
-              className="ml-2 shrink-0 px-2.5 py-1 text-xs bg-white/10 text-white/80 border border-white/10"
-              title={
-                effectiveMode === 'transcode'
-                  ? `Transcoding ${info.video_codec.toUpperCase()} → H.264 at ${labelForQuality(streamQuality)}`
-                  : `Remuxing ${info.container} → MP4 (stream-copy, no re-encode)`
-              }
-            >
-              {effectiveMode === 'transcode'
-                ? `${info.video_codec.toUpperCase()} → H.264 · ${labelForQuality(streamQuality)}`
-                : `Remux ${info.container}`}
-            </span>
-          )}
+          <button
+            onClick={() => window.location.assign(toApp('/'))}
+            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            title="Home"
+            aria-label="Home"
+          >
+            <House className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg font-medium truncate">{displayTitle}</h1>
         </div>
       </div>
 
