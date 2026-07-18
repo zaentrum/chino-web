@@ -30,12 +30,24 @@ export function EpisodesList({ seasons, focusEpisodeId }: EpisodesListProps) {
     ? visible.find((s) => s.episodes.some((e) => e.id === focusEpisodeId))?.season
     : undefined;
 
-  // Open state: focused episode's season if deep-linked, else first open.
-  const initial: Record<number, boolean> = {};
-  visible.forEach((s, i) => {
-    initial[s.season] = focusSeason != null ? s.season === focusSeason : i === 0;
-  });
-  const [open, setOpen] = useState<Record<number, boolean>>(initial);
+  // Which accordions start open. seasons load ASYNC (useSeriesEpisodes), so the
+  // first mount usually has an empty list — a useState *initializer* would lock
+  // in "nothing open" forever and the season never reveals (the deep-linked
+  // episode's season stays collapsed, so its row never mounts and never
+  // scrolls). Instead seed once, in an effect, as soon as the seasons arrive:
+  // the focused episode's season on a deep-link (?ep=), else the first season.
+  // seeded guards against re-clobbering the user's later manual toggles.
+  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !visible.length) return;
+    seeded.current = true;
+    const next: Record<number, boolean> = {};
+    visible.forEach((s, i) => {
+      next[s.season] = focusSeason != null ? s.season === focusSeason : i === 0;
+    });
+    setOpen(next);
+  }, [visible.length, focusSeason]);
 
   if (!visible.length) return null;
 
@@ -108,12 +120,17 @@ function EpisodeRow({
   seasonNum: number;
   focused?: boolean;
 }) {
-  // Deep-link focus: scroll the row into the viewport centre once mounted.
+  // Deep-link focus: scroll the row into the viewport centre once mounted. The
+  // row only exists after its season auto-expands, so defer one frame (rAF) to
+  // let the just-expanded accordion + hero settle before measuring — a bare
+  // scrollIntoView can fire mid-layout and land short.
   const rowRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (focused && rowRef.current) {
-      rowRef.current.scrollIntoView({ block: 'center' });
-    }
+    if (!focused) return;
+    const id = requestAnimationFrame(() => {
+      rowRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(id);
   }, [focused]);
 
   const runtimeMin = ep.duration_ms ? Math.round(ep.duration_ms / 60_000) : 0;
