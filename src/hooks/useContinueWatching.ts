@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
+import { useCatalogGen } from './useCatalogEvents';
 
 export interface ContinueWatchingEntry extends KatalogItem {
   position_sec: number;
@@ -41,6 +42,7 @@ export interface UseContinueWatching {
 export function useContinueWatching(): UseContinueWatching {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  const gen = useCatalogGen(); // live refresh
   const [items, setItems] = useState<ContinueWatchingEntry[] | null>(null);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function useContinueWatching(): UseContinueWatching {
       })
       .catch(() => setItems([]));
     return () => ctrl.abort();
-  }, [auth.isAuthenticated, auth.isLoading, streamToken]);
+  }, [auth.isAuthenticated, auth.isLoading, streamToken, gen]);
 
   const dismiss = useCallback(
     (id: string) => {

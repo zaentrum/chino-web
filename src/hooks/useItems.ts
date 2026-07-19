@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from './useStreamToken';
+import { useCatalogGen } from './useCatalogEvents';
 
 export interface KatalogItem {
   id: string;
@@ -61,6 +62,7 @@ export function useItems(
 ) {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  const gen = useCatalogGen(); // live refresh: bumps when the catalog changes
   const [data, setData] = useState<ItemsResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +122,7 @@ export function useItems(
     // soon as it's available (initial mount races: items fetch can
     // resolve before the token mint does).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, limit, type, fKey, auth.isAuthenticated, auth.isLoading, streamToken]);
+  }, [q, limit, type, fKey, auth.isAuthenticated, auth.isLoading, streamToken, gen]);
 
   return { data, error, loading };
 }
@@ -143,6 +145,7 @@ export function usePagedItems(
 ) {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  const gen = useCatalogGen(); // live refresh: a catalog change restarts at page 0
   const [items, setItems] = useState<KatalogItem[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,7 +154,7 @@ export function usePagedItems(
 
   // Reset key — any change here drops the accumulated list and starts
   // fresh at offset 0.
-  const fKey = JSON.stringify({ filter: filter ?? {}, q: q ?? '', type, pageSize });
+  const fKey = JSON.stringify({ filter: filter ?? {}, q: q ?? '', type, pageSize, gen });
 
   useEffect(() => {
     setItems([]);

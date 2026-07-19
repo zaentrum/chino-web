@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { useCatalogEvents } from '../hooks/useCatalogEvents';
 import { AlertTriangle } from 'lucide-react';
 import { LoadingState } from '../components/LoadingState';
 import { toApp } from '../lib/basepath';
@@ -10,6 +11,8 @@ interface AuthGateProps {
 }
 
 export function AuthGate({ children }: AuthGateProps) {
+  // Live catalog refresh: one SSE bridge for the whole app.
+  useCatalogEvents();
   const auth = useAuth();
 
   // Auto-redirect to the IdP when we're not in flight and not signed
