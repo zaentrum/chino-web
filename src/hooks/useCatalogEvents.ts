@@ -85,7 +85,22 @@ export function useCatalogGen(): number {
   const [gen, setGen] = useState(0);
   const last = useRef(0);
   useEffect(() => {
-    const bump = () => setGen((g) => g + 1);
+    // Coalescing bump: on a bfcache restore the browser dispatches
+    // visibilitychange (visible) FIRST and pageshow(persisted) right
+    // after it, back-to-back in the same task — so a stamp written in
+    // onPageShow can never suppress the refocus handler (it already
+    // ran). Instead, every bump request just sets `queued` and the
+    // microtask after the task flushes at most ONE gen increment, so a
+    // restore never double-fires the consuming hooks' fetches.
+    let queued = false;
+    const bump = () => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        setGen((g) => g + 1);
+      });
+    };
     const onVisible = () => {
       // refetch at most once per minute on refocus
       if (document.visibilityState === 'visible' && Date.now() - last.current > 60_000) {
@@ -93,11 +108,28 @@ export function useCatalogGen(): number {
         bump();
       }
     };
+    const onPageShow = (e: PageTransitionEvent) => {
+      // Navigations are full page loads, so pressing Back can restore the
+      // page from the browser's back/forward cache: pre-navigation DOM and
+      // state, no load, no fetch — 'Continue watching' would show its
+      // pre-playback rows. persisted === true marks exactly that restore;
+      // bump unconditionally (no throttle — the data is known-stale) so
+      // every gen-consuming hook refetches. visibilitychange has ALREADY
+      // fired by now; if it bumped, the coalescer folds this request into
+      // that same single increment. Stamping `last` only refreshes the
+      // refocus throttle window.
+      if (e.persisted) {
+        last.current = Date.now();
+        bump();
+      }
+    };
     window.addEventListener(CATALOG_UPDATED, bump);
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       window.removeEventListener(CATALOG_UPDATED, bump);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
   return gen;

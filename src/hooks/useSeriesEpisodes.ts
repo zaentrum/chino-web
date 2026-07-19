@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
+import { useCatalogGen } from './useCatalogEvents';
 
 export interface EpisodeItem extends KatalogItem {
   season_number?: number;
@@ -16,6 +17,10 @@ export interface Season {
 
 export function useSeriesEpisodes(seriesId: string | undefined) {
   const auth = useAuth();
+  // Live refresh: bumps on catalog changes AND on a bfcache Back
+  // restore, so the per-episode watched checks don't stay stale next
+  // to the freshly-refetched continue-watching row state.
+  const gen = useCatalogGen();
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +49,7 @@ export function useSeriesEpisodes(seriesId: string | undefined) {
       .catch(() => setSeasons([]))
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [seriesId, auth.isAuthenticated, auth.isLoading, auth.user?.access_token]);
+  }, [seriesId, auth.isAuthenticated, auth.isLoading, auth.user?.access_token, gen]);
 
   return { seasons, loading };
 }

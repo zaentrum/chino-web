@@ -89,6 +89,19 @@ function toCard(it: ItemDetail) {
     year: it.year ? String(it.year) : undefined,
     rating: it.rating ? it.rating.toFixed(1) : undefined,
     type: (it.type === 'series' ? 'series' : 'movie') as 'series' | 'movie',
+    // Episodes saved to a list carry their SxxEyy coordinates — pass
+    // them through MediaCard's `episode` prop (the same shape the CW
+    // rail wires) so the entry reads "S01E05 · Title" instead of a
+    // bare-title pseudo-movie card. Unlike the CW feed, /items/{id}
+    // has no series_title, so the card title stays the episode title.
+    episode:
+      it.type === 'episode' && it.season_number != null && it.episode_number != null
+        ? {
+            season: it.season_number,
+            episode: it.episode_number,
+            title: it.title,
+          }
+        : undefined,
     watchedAt: it.watched_at,
   };
 }

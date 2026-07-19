@@ -38,14 +38,27 @@ export interface UseContinueWatching {
  * playback_progress with katalog metadata). Items are ordered most-
  * recently-watched first; only ones with > 30 s of progress and not
  * yet at the end are returned.
+ *
+ * `enabled` (default true) lets a caller opt out of the fetch entirely
+ * — the detail page passes false once the item is known to be a movie,
+ * where the feed has no consumer. When disabled the hook still runs
+ * (hooks rules), but the effect skips the network call and `items`
+ * stays / resets to null.
  */
-export function useContinueWatching(): UseContinueWatching {
+export function useContinueWatching(opts?: { enabled?: boolean }): UseContinueWatching {
+  const enabled = opts?.enabled ?? true;
   const auth = useAuth();
   const streamToken = useStreamToken();
   const gen = useCatalogGen(); // live refresh
   const [items, setItems] = useState<ContinueWatchingEntry[] | null>(null);
 
   useEffect(() => {
+    if (!enabled) {
+      // No fetch while disabled; null mirrors the "not loaded" state so
+      // consumers don't render stale rows from an earlier enabled phase.
+      setItems(null);
+      return;
+    }
     if (auth.isLoading || !auth.isAuthenticated) return;
     const ctrl = new AbortController();
     fetch('/api/v1/me/continue-watching', {
@@ -68,7 +81,7 @@ export function useContinueWatching(): UseContinueWatching {
       })
       .catch(() => setItems([]));
     return () => ctrl.abort();
-  }, [auth.isAuthenticated, auth.isLoading, streamToken, gen]);
+  }, [enabled, auth.isAuthenticated, auth.isLoading, streamToken, gen]);
 
   const dismiss = useCallback(
     (id: string) => {

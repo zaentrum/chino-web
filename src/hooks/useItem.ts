@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
+import { useCatalogGen } from './useCatalogEvents';
 
 export interface CastEntry {
   // katalog-api now carries the catalogue person id on each cast/crew
@@ -54,6 +55,10 @@ export interface ItemDetail extends KatalogItem {
 export function useItem(itemId: string | undefined) {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  // Live refresh: bumps on catalog changes AND on a bfcache Back
+  // restore, so watched_at (and the rest of the payload) doesn't stay
+  // stale while the CW-driven state refetches.
+  const gen = useCatalogGen();
   const [data, setData] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,7 +87,7 @@ export function useItem(itemId: string | undefined) {
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
-  }, [itemId, auth.isAuthenticated, auth.isLoading, streamToken]);
+  }, [itemId, auth.isAuthenticated, auth.isLoading, streamToken, gen]);
 
   return { data, loading };
 }

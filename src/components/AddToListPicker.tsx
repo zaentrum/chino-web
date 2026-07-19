@@ -13,6 +13,23 @@ interface AddToListPickerProps {
    * 'down'.
    */
   align?: 'down' | 'up';
+  /**
+   * Horizontal anchor edge. 'right' (default) pins the popover's right
+   * edge to the container's right edge — correct when the trigger sits
+   * near the viewport's right half. 'left' pins the LEFT edges instead
+   * so the 256px popover opens rightward: the episode rows use this
+   * because their anchor is the 160px thumbnail and a right-anchored
+   * popover would extend 96px past the thumbnail's left edge (clipped
+   * off-viewport on narrow windows).
+   */
+  alignX?: 'left' | 'right';
+  /**
+   * Element whose mousedowns the outside-click closer must IGNORE —
+   * pass the trigger button here. Without it, pressing the open
+   * trigger again closes the picker on mousedown (outside-click) and
+   * instantly reopens it on the trigger's own click toggle.
+   */
+  ignoreRef?: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -25,7 +42,7 @@ interface AddToListPickerProps {
  * overlay. The caller owns open/close state and positions this absolutely
  * relative to the trigger button.
  */
-export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPickerProps) {
+export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'right', ignoreRef }: AddToListPickerProps) {
   const auth = useAuth();
   const token = auth.user?.access_token;
   const { lists, loading, create } = useWatchlists();
@@ -40,8 +57,12 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Close on outside click / Escape — same idiom as MediaCard's menu.
+  // Mousedowns inside the caller's trigger (ignoreRef) are skipped so
+  // the trigger's own click handler can TOGGLE the picker closed
+  // instead of close-on-mousedown + reopen-on-click.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
+      if (ignoreRef?.current && ignoreRef.current.contains(e.target as Node)) return;
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +74,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose]);
+  }, [onClose, ignoreRef]);
 
   useEffect(() => {
     if (creating) inputRef.current?.focus();
@@ -92,7 +113,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down' }: AddToListPi
       // stopPropagation so a click inside the picker never falls through
       // to the card body's openDetail handler.
       onClick={(e) => e.stopPropagation()}
-      className={`absolute right-0 ${align === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-64 max-h-80 overflow-y-auto bg-chino-surface border border-chino-border rounded-md shadow-xl py-1`}
+      className={`absolute ${alignX === 'left' ? 'left-0' : 'right-0'} ${align === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-64 max-h-80 overflow-y-auto bg-chino-surface border border-chino-border rounded-md shadow-xl py-1`}
     >
       <div className="px-3 py-2 flex items-center justify-between border-b border-chino-border">
         <span className="text-xs uppercase tracking-wide text-chino-muted">Add to list</span>

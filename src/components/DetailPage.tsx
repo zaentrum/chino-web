@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { ArrowLeft, Check, ChevronDown, Eye, Heart, House, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
 import { useLikes, useWatchlist } from '../hooks/useUserFlags';
@@ -7,8 +7,10 @@ import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { useItem, type CastEntry } from '../hooks/useItem';
 import { useSeriesEpisodes } from '../hooks/useSeriesEpisodes';
 import { useSimilarItems } from '../hooks/useSimilarItems';
+import { useContinueWatching } from '../hooks/useContinueWatching';
+import { useCatalogGen } from '../hooks/useCatalogEvents';
 import { AddToListPicker } from './AddToListPicker';
-import { EpisodesList } from './EpisodesList';
+import { EpisodesList, type EpisodeProgress } from './EpisodesList';
 import { FadeImage } from './FadeImage';
 import { toApp } from '../lib/basepath';
 import { MediaRow } from './MediaRow';
@@ -26,6 +28,11 @@ interface DetailPageProps {
 export function DetailPage({ itemId }: DetailPageProps) {
   const auth = useAuth();
   const { data, loading } = useItem(itemId);
+  // Live refresh generation — bumps on catalog changes and on a bfcache
+  // Back restore. Wired into the resume-position effect below so the
+  // header Resume button refetches alongside the CW-driven row state
+  // instead of showing the pre-playback position.
+  const gen = useCatalogGen();
   const [resumeSec, setResumeSec] = useState<number>(0);
 
   // Episodes are fetched only for type=series — the hook short-circuits
@@ -36,6 +43,35 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // genre + cast (tracker #115). Hook returns [] when nothing
   // scored above zero; the row below short-circuits in that case.
   const { items: similar } = useSimilarItems(itemId, 12);
+  // Per-episode resume state for the Episodes accordion. The
+  // /series/{id}/episodes payload carries NO per-user progress, so
+  // cross-reference the continue-watching feed (it carries
+  // position/duration for episodes too). Canonical cross-client
+  // resume-row predicate: include iff !up_next && position_sec > 30 &&
+  // (duration_sec <= 0 || position_sec < duration_sec - 60). up_next
+  // rows are server-substituted "next episode" suggestions with no real
+  // progress; <= 30 s isn't meaningfully started; >= duration - 60 is
+  // the server's own finished cutoff. Rows with duration_sec <= 0 are
+  // KEPT — the episode row falls back to the catalogue runtime
+  // (duration_ms/1000) for the bar + remaining label.
+  //
+  // enabled: movie pages never mount the Episodes accordion, so the
+  // /me/continue-watching fetch would be wasted there. `data?.type !==
+  // 'movie'` is the simplest correct gate: fetch while the type is
+  // still unknown (data == null) and for series; skip once the item is
+  // known to be a movie. (An in-flight fetch from the unknown phase is
+  // aborted by the hook's effect cleanup when the gate flips false.)
+  const { items: cwItems } = useContinueWatching({ enabled: data?.type !== 'movie' });
+  const episodeProgress = useMemo(() => {
+    const map: Record<string, EpisodeProgress> = {};
+    for (const it of cwItems ?? []) {
+      if (it.up_next) continue;
+      if (!(it.position_sec > 30)) continue;
+      if (it.duration_sec > 0 && it.position_sec >= it.duration_sec - 60) continue;
+      map[it.id] = { position_sec: it.position_sec, duration_sec: it.duration_sec };
+    }
+    return map;
+  }, [cwItems]);
   const watchlist = useWatchlist();
   const likes = useLikes();
   const liked = likes.has(itemId);
@@ -58,7 +94,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
   }, [itemId]);
   const watched = watchedOverride ?? !!data?.watched_at;
 
-  // Resume position
+  // Resume position. `gen` in the deps refetches it on catalog bumps —
+  // most importantly the bfcache Back restore, where the pre-playback
+  // position would otherwise stick on the Resume button.
   useEffect(() => {
     if (auth.isLoading || !auth.isAuthenticated) return;
     const ctrl = new AbortController();
@@ -70,7 +108,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
       .then((j) => setResumeSec(typeof j?.position_sec === 'number' ? j.position_sec : 0))
       .catch(() => undefined);
     return () => ctrl.abort();
-  }, [itemId, auth.isAuthenticated, auth.isLoading, auth.user?.access_token]);
+  }, [itemId, auth.isAuthenticated, auth.isLoading, auth.user?.access_token, gen]);
 
   // An episode id has no standalone detail page — it duplicates the
   // series' Episodes list. Redirect to the parent series detail with the
@@ -342,7 +380,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
           </div>
         </div>
 
-        {isSeries ? <EpisodesList seasons={seasons} focusEpisodeId={focusEpisodeId} /> : null}
+        {isSeries ? (
+          <EpisodesList seasons={seasons} focusEpisodeId={focusEpisodeId} progressById={episodeProgress} />
+        ) : null}
 
         {/* "More like this" — only renders when the backend scored at
             least one candidate (#115). Episode detail pages don't
