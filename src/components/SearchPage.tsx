@@ -4,6 +4,7 @@ import { PersonAvatar } from './PersonAvatar';
 import { useItems } from '../hooks/useItems';
 import { usePeople, type PersonSummary } from '../hooks/usePeople';
 import { toApp } from '../lib/basepath';
+import { ExtensionSlot } from './ExtensionSlot';
 
 interface SearchPageProps {
   query: string;
@@ -107,6 +108,12 @@ export function SearchPage({ query }: SearchPageProps) {
               ))}
             </div>
           )}
+
+          {/* No titles matched: offer any addon-contributed actions (e.g. a
+              "request" button from the acquisition addon). Empty in core. */}
+          {!loading && total === 0 && peopleList.length === 0 ? (
+            <ExtensionSlot slot="search.empty" vars={{ q: query }} />
+          ) : null}
         </>
       )}
     </div>
