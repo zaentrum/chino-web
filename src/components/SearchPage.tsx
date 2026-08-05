@@ -31,6 +31,10 @@ export function SearchPage({ query }: SearchPageProps) {
   const movieItems = movies.data?.source === 'katalog' ? movies.data.items : [];
   const seriesItems = series.data?.source === 'katalog' ? series.data.items : [];
   const loading = movies.loading || series.loading;
+  // A catalog that is DOWN and a catalog with no match are not the same thing,
+  // and rendering them identically is how a total search outage looked like a
+  // library that simply did not have the film — for weeks.
+  const catalogError = movies.error ?? series.error ?? null;
 
   // Merge movies + series, preserving the server's per-type relevance
   // order via a stable interleave-free concat. Each type already arrives
@@ -50,8 +54,9 @@ export function SearchPage({ query }: SearchPageProps) {
   const headline = useMemo(() => {
     if (!query) return 'Search the library';
     if (loading) return `Searching for "${query}"…`;
+    if (catalogError) return `Couldn't search for "${query}"`;
     return total > 0 ? `${total} result${total === 1 ? '' : 's'} for "${query}"` : `No results for "${query}"`;
-  }, [query, total, loading]);
+  }, [query, total, loading, catalogError]);
 
   const openPerson = (id: string) => {
     window.location.assign(toApp(`/person/${encodeURIComponent(id)}`));
@@ -111,7 +116,15 @@ export function SearchPage({ query }: SearchPageProps) {
 
           {/* No titles matched: offer any addon-contributed actions (e.g. a
               "request" button from the acquisition addon). Empty in core. */}
-          {!loading && total === 0 && peopleList.length === 0 ? (
+          {/* Say the catalog is unreachable rather than implying the title
+              does not exist — and do NOT offer to acquire something we simply
+              could not look up. */}
+          {!loading && catalogError ? (
+            <p className="search__error">
+              The catalog is unavailable right now, so we couldn't check whether
+              this title is in your library. Try again in a moment.
+            </p>
+          ) : !loading && total === 0 && peopleList.length === 0 ? (
             <ExtensionSlot slot="search.empty" vars={{ q: query }} />
           ) : null}
         </>
