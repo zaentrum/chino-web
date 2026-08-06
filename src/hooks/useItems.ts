@@ -88,6 +88,12 @@ export function useItems(
     if (f.unwatched) params.set('unwatched', 'true');
     const url = `/api/v1/items${params.toString() ? `?${params}` : ''}`;
     setLoading(true);
+    // Clear the previous error before refetching. Without this a single
+    // failure is permanent: `data` updates on the next success but `error`
+    // never does, so the UI shows results and "the catalog is unavailable"
+    // at the same time. usePagedItems below already does this — useItems
+    // was the copy that drifted.
+    setError(null);
     fetch(url, {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
@@ -114,7 +120,15 @@ export function useItems(
         }
         setData(j);
       })
-      .catch((e) => setError(e))
+      // An aborted request is not a failure. This effect re-runs whenever the
+      // stream token mints or the catalog generation bumps, and its cleanup
+      // aborts the in-flight fetch — so on essentially every search the
+      // previous request rejected with AbortError and was stored as a
+      // catalog outage. That is what put "The catalog is unavailable right
+      // now" on screen next to two perfectly good results.
+      .catch((e) => {
+        if ((e as Error).name !== 'AbortError') setError(e as Error);
+      })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
     // fKey captures every filter field, so the effect refires when any of

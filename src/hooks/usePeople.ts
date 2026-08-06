@@ -51,6 +51,7 @@ export function usePeople(q?: string, limit = 12) {
     params.set('q', q);
     if (limit) params.set('limit', String(limit));
     setLoading(true);
+    setError(null); // otherwise a recovered outage still reads as broken
     fetch(`/api/v1/people?${params}`, {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
@@ -96,6 +97,7 @@ export function usePerson(personId: string | undefined, limit = 100) {
     const params = new URLSearchParams();
     if (limit) params.set('limit', String(limit));
     setLoading(true);
+    setError(null); // otherwise a recovered outage still reads as broken
     setNotFound(false);
     fetch(`/api/v1/people/${personId}${params.toString() ? `?${params}` : ''}`, {
       signal: ctrl.signal,
