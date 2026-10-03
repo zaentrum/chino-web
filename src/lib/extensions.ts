@@ -4,11 +4,47 @@
 // to put behind a native chino button. Pure: extensions.test.ts runs it under
 // node --test.
 
+/** A slot row as chino-api serves it (portal-api's model.Extension). Typed
+ *  loosely on purpose: every field is checked before it is used. */
+export interface SlotRow {
+  key?: unknown;
+  kind?: unknown;
+  label?: unknown;
+  icon?: unknown;
+  url?: unknown;
+  method?: unknown;
+  enabled?: unknown;
+}
+
+export type SlotKind = 'link' | 'action';
+
+/** A row that passed: what the slot renders, with the address resolved. */
+export interface SlotButton {
+  key: string;
+  kind: SlotKind;
+  label: string;
+  icon: string;
+  /** A link's href, or the URL an action POSTs to. */
+  href: string;
+}
+
+/** The portal's app proxy: /api/portal/apps/<key>/… reaches an addon's own
+ *  backend, forwarding the viewer's bearer for the addon to authorise. */
+export const PORTAL_APP_PROXY = '/api/portal/apps/';
+
 /** {var} tokens in a slot URL, replaced by the encoded value (unknown: ''). */
 export function substitute(url: string, vars: Record<string, string>): string {
   return url.replace(/\{(\w+)\}/g, (_, k: string) =>
     Object.prototype.hasOwnProperty.call(vars, k) ? encodeURIComponent(vars[k]) : '',
   );
+}
+
+/** The two kinds chino renders; anything else (an unknown or empty kind) is
+ *  not something it knows how to show, so it shows nothing. */
+export function slotKind(raw: unknown): SlotKind | null {
+  if (typeof raw !== 'string') return null;
+  const k = raw.trim().toLowerCase();
+  return k === 'link' || k === 'action' ? k : null;
 }
 
 /**
@@ -22,6 +58,55 @@ export function substitute(url: string, vars: Record<string, string>): string {
 export function slotLinkHref(raw: unknown, pageUrl: string, vars: Record<string, string> = {}): string | null {
   const u = resolve(raw, pageUrl, vars);
   return u ? u.href : null;
+}
+
+/**
+ * The URL a slot `action` row may POST to, or null. An action sends the
+ * viewer's bearer, so it goes only to the portal's app proxy on this
+ * instance's own origin (/api/portal/apps/<key>/…) and only as a POST (no
+ * method means POST): the token never leaves the origin, and a row cannot
+ * spend it on chino-api's or the portal's own endpoints.
+ */
+export function slotActionUrl(
+  raw: unknown,
+  method: unknown,
+  pageUrl: string,
+  vars: Record<string, string> = {},
+): string | null {
+  if (method !== undefined && method !== null && method !== '') {
+    if (typeof method !== 'string' || method.trim().toUpperCase() !== 'POST') return null;
+  }
+  const u = resolve(raw, pageUrl, vars);
+  if (!u) return null;
+  // An encoded separator may become a real one behind a proxy.
+  if (/%2f|%5c/i.test(u.pathname)) return null;
+  // The path is already normalised: "..", "%2e%2e" are resolved away.
+  if (!new RegExp(`^${PORTAL_APP_PROXY}[^/]+(/|$)`).test(u.pathname)) return null;
+  return u.href;
+}
+
+/** The rows of a slot that chino can render, in the order given. */
+export function slotButtons(rows: unknown, pageUrl: string, vars: Record<string, string> = {}): SlotButton[] {
+  if (!Array.isArray(rows)) return [];
+  const out: SlotButton[] = [];
+  rows.forEach((row: SlotRow, i) => {
+    if (!row || typeof row !== 'object' || !row.enabled) return;
+    const label = typeof row.label === 'string' ? row.label.trim() : '';
+    if (!label) return;
+    const kind = slotKind(row.kind);
+    if (!kind) return;
+    const href =
+      kind === 'link' ? slotLinkHref(row.url, pageUrl, vars) : slotActionUrl(row.url, row.method, pageUrl, vars);
+    if (!href) return;
+    out.push({
+      key: typeof row.key === 'string' && row.key ? row.key : `row-${i}`,
+      kind,
+      label,
+      icon: typeof row.icon === 'string' ? row.icon : '',
+      href,
+    });
+  });
+  return out;
 }
 
 /** The URL a row names, resolved; null unless it stays on the page's origin

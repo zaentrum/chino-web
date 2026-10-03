@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import * as Icons from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useExtensions, type Extension } from '../hooks/useExtensions';
+import { useExtensions } from '../hooks/useExtensions';
 import { useAuth } from 'react-oidc-context';
-import { slotLinkHref, substitute } from '../lib/extensions';
+import { slotButtons, type SlotButton } from '../lib/extensions';
 
 interface ExtensionSlotProps {
   slot: string;
@@ -24,35 +24,33 @@ function lucideByName(name: string): LucideIcon {
 
 /**
  * ExtensionSlot renders the addon-contributed buttons for a named slot as
- * NATIVE chino buttons. A `link` navigates to its (var-substituted) url —
- * only an http(s) page of this instance's own origin; a row pointing
- * anywhere else renders nothing. An `action` POSTs to it with the user's
- * bearer. Renders nothing when no addon contributes — the neutral-core
- * property.
+ * NATIVE chino buttons. Only two kinds, each held to what is safe behind a
+ * chino button (lib/extensions.ts): a `link` opens an http(s) page of this
+ * instance's own origin; an `action` POSTs, with the user's bearer, to the
+ * portal's app proxy on this origin. A row of another kind, or pointing
+ * anywhere else, renders nothing — as does a slot no addon contributes to:
+ * the neutral-core property.
  */
 export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
   const exts = useExtensions(slot);
   const auth = useAuth();
 
+  const varsKey = JSON.stringify(vars);
   const buttons = useMemo(
-    () =>
-      exts
-        .filter((e) => e.enabled && e.label && e.url)
-        .map((e) => ({
-          ext: e,
-          href: e.kind === 'link' ? slotLinkHref(e.url, window.location.href, vars) : null,
-        }))
-        .filter((b) => b.ext.kind !== 'link' || b.href !== null),
+    () => slotButtons(exts, window.location.href, vars),
     // vars is a fresh object each render; its values are what matter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [exts, JSON.stringify(vars)],
+    [exts, varsKey],
   );
   if (buttons.length === 0) return null;
 
-  const onAction = async (e: Extension) => {
+  const onAction = async (b: SlotButton) => {
     try {
-      await fetch(substitute(e.url, vars), {
-        method: e.method || 'POST',
+      await fetch(b.href, {
+        method: 'POST',
+        credentials: 'same-origin',
+        // A redirect could carry the bearer somewhere the URL check never saw.
+        redirect: 'error',
         headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
       });
     } catch {
@@ -62,22 +60,22 @@ export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
 
   return (
     <div className="flex flex-wrap gap-2 mt-4">
-      {buttons.map(({ ext: e, href }) => {
-        const Icon = lucideByName(e.icon);
+      {buttons.map((b) => {
+        const Icon = lucideByName(b.icon);
         const cls =
           'px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2';
-        if (e.kind === 'link' && href) {
+        if (b.kind === 'link') {
           return (
-            <a key={e.key} href={href} className={cls}>
+            <a key={b.key} href={b.href} className={cls}>
               <Icon className="w-4 h-4" />
-              {e.label}
+              {b.label}
             </a>
           );
         }
         return (
-          <button key={e.key} onClick={() => onAction(e)} className={cls}>
+          <button key={b.key} type="button" onClick={() => void onAction(b)} className={cls}>
             <Icon className="w-4 h-4" />
-            {e.label}
+            {b.label}
           </button>
         );
       })}
