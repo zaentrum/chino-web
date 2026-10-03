@@ -10,9 +10,14 @@ type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
  * Manual bug-report dialog. Opened from the Settings page and the
  * player's error overlay.
  *
+ * A screenshot is the viewer's to give: nothing is captured until they
+ * tick "Attach a screenshot of the page", and only a ticked box sends
+ * one. (The dialog used to capture the page as it opened and send the
+ * shot unless the box was cleared.)
+ *
  * Screenshot choreography: the dialog renders NOTHING while a capture
  * is in flight ('capturing' phase) so the dialog itself never appears
- * in the shot. Initial mount starts in that phase; "Retake" re-enters
+ * in the shot. Ticking the box enters that phase; "Retake" re-enters
  * it — React commits the null render before the effect fires, so
  * html2canvas clones a dialog-free DOM both times.
  */
@@ -27,11 +32,13 @@ export function BugReportDialog({
   extraContext?: Record<string, string>;
   onClose: () => void;
 }) {
-  const [phase, setPhase] = useState<Phase>('capturing');
+  const [phase, setPhase] = useState<Phase>('editing');
   const [description, setDescription] = useState(initialDescription);
   const [shot, setShot] = useState<Blob | null>(null);
   const [shotUrl, setShotUrl] = useState<string | null>(null);
-  const [includeShot, setIncludeShot] = useState(true);
+  const [includeShot, setIncludeShot] = useState(false);
+  // Whether a capture was attempted: a failed one says so.
+  const [captured, setCaptured] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<FeedbackResult | null>(null);
 
@@ -43,6 +50,7 @@ export function BugReportDialog({
     captureScreenshot().then((blob) => {
       if (cancelled) return;
       setShot(blob);
+      setCaptured(true);
       setPhase('editing');
     });
     return () => {
@@ -151,23 +159,22 @@ export function BugReportDialog({
               />
             </div>
 
-            {shotUrl ? (
-              <div>
-                <img
-                  src={shotUrl}
-                  alt="Screenshot preview"
-                  className="max-h-40 rounded-lg border border-chino-border"
-                />
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <label className="flex items-center gap-2 text-chino-text cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={includeShot}
-                      onChange={(e) => setIncludeShot(e.target.checked)}
-                      className="accent-chino-accent"
-                    />
-                    Include screenshot
-                  </label>
+            <div>
+              <div className="flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-chino-text cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeShot}
+                    onChange={(e) => {
+                      setIncludeShot(e.target.checked);
+                      // The first tick takes the picture.
+                      if (e.target.checked && !captured) setPhase('capturing');
+                    }}
+                    className="accent-chino-accent"
+                  />
+                  Attach a screenshot of the page
+                </label>
+                {includeShot && shotUrl ? (
                   <button
                     onClick={() => setPhase('capturing')}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-chino-text"
@@ -175,13 +182,20 @@ export function BugReportDialog({
                     <Camera className="w-3.5 h-3.5" />
                     Retake
                   </button>
-                </div>
+                ) : null}
               </div>
-            ) : (
-              <p className="text-xs text-chino-muted">
-                Couldn't capture a screenshot on this page — the report will be sent without one.
-              </p>
-            )}
+              {includeShot && shotUrl ? (
+                <img
+                  src={shotUrl}
+                  alt="Screenshot preview"
+                  className="mt-2 max-h-40 rounded-lg border border-chino-border"
+                />
+              ) : includeShot && captured && !shot ? (
+                <p className="mt-2 text-xs text-chino-muted">
+                  Couldn't capture a screenshot on this page — the report will be sent without one.
+                </p>
+              ) : null}
+            </div>
 
             {error ? (
               <p className="text-sm text-chino-red bg-chino-red/10 border border-chino-red/30 rounded-lg px-3 py-2">

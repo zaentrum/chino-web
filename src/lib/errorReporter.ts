@@ -1,5 +1,5 @@
-import { captureScreenshot } from './screenshot';
 import { submitBugReport, type FeedbackKind, type FeedbackResult } from './feedback';
+import { isNotFoundError } from './reportPolicy';
 
 /**
  * Automatic error reporting. installErrorReporting() hooks window
@@ -9,6 +9,12 @@ import { submitBugReport, type FeedbackKind, type FeedbackResult } from './feedb
  *
  *   - one report per unique fingerprint per session (module-level Set)
  *   - hard cap of 3 auto reports per session
+ *
+ * An auto report never carries a screenshot: a picture of the viewer's
+ * screen leaves the device only when they attach it themselves, in the
+ * manual dialog. And something that is simply not there - a bad link, a
+ * removed title (reportPolicy.ts) - is no bug: callers tell the viewer
+ * and file nothing, and the listeners drop such errors.
  *
  * Auto reports are strictly fire-and-forget — every failure mode
  * (offline API, 429 rate limit, 503 unconfigured) is swallowed
@@ -33,11 +39,13 @@ let installed = false;
 //   - AbortError              our own cancelled fetches (route changes)
 //   - Failed to fetch / NetworkError   the API is unreachable — it
 //     couldn't receive the report anyway
+//   - "chino-api 404" and the like   something not there, not a bug
 const IGNORED_MESSAGE_RE = /ResizeObserver loop|Failed to fetch|NetworkError/i;
 
 function shouldIgnore(name: string, message: string): boolean {
   if (name === 'AbortError') return true;
   if (message.trim() === 'Script error.') return true;
+  if (isNotFoundError(message)) return true;
   return IGNORED_MESSAGE_RE.test(message);
 }
 
@@ -99,7 +107,7 @@ export interface AutoReportInput {
 
 /**
  * Shared auto-report path: ignore-list → session guards → fingerprint →
- * best-effort screenshot → submit. Resolves with the ticket (so the
+ * submit, without a screenshot. Resolves with the ticket (so the
  * ErrorBoundary can show "#<id>") or null when skipped/failed. Never
  * throws.
  */
@@ -109,12 +117,11 @@ export async function fileAutoReport(input: AutoReportInput): Promise<FeedbackRe
     if (autoReportCount >= MAX_AUTO_REPORTS_PER_SESSION) return null;
     const fingerprint = await fingerprintFor(input.errorName, input.message, input.stack);
     if (reportedFingerprints.has(fingerprint)) return null;
-    // Reserve the slot BEFORE the await points below — a render-loop
-    // error can re-fire while the screenshot is still in flight.
+    // Reserve the slot BEFORE the await point below — a render-loop
+    // error can re-fire while the submit is still in flight.
     reportedFingerprints.add(fingerprint);
     autoReportCount += 1;
 
-    const screenshot = await captureScreenshot(); // null is fine
     return await submitBugReport({
       source: 'web',
       kind: input.kind,
@@ -122,7 +129,6 @@ export async function fileAutoReport(input: AutoReportInput): Promise<FeedbackRe
       description: input.description,
       fingerprint,
       context: { ...baseContext(), ...input.extraContext },
-      screenshot: screenshot ?? undefined,
     });
   } catch {
     return null;

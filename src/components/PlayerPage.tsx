@@ -11,6 +11,7 @@ import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } fro
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
+import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
 import { defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import {
@@ -1998,7 +1999,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // The player gives up: the source is torn down, the overlay says what
   // happened and offers Try again, and one automatic report is filed -
   // at the moment the viewer is told, not silently while a spinner
-  // still promises the film.
+  // still promises the film. None for a stream that is not there (a 404
+  // from the server): a bad link is not a bug.
   const giveUp = (title: string, label: string, tech: string, errName: string, message: string) => {
     gaveUpRef.current = true;
     // Where Try again picks up: the source is about to go.
@@ -2017,6 +2019,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     setBuffering(false);
     setFatalError({ title, label, tech });
     setReportedId(null);
+    if (isNotFoundStatus(lastStreamErrorRef.current?.status)) return;
     void filePlayerReport(tech, errName, message).then((r) => {
       if (r) setReportedId(r.id);
     });

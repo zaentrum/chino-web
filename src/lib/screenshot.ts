@@ -1,5 +1,7 @@
 /**
- * Capture the current page as a JPEG blob for bug reports.
+ * Capture the current page as a JPEG blob for a bug report — only when
+ * the viewer asks to attach one in the report dialog (BugReportDialog);
+ * automatic reports never carry a screenshot.
  *
  * html2canvas re-renders the DOM onto a canvas — it cannot paint
  * <video> elements (they come out black), so the `onclone` hook swaps

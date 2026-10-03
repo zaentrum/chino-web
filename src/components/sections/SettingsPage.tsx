@@ -97,13 +97,13 @@ export function SettingsPage() {
 
       <Section
         title="Feedback"
-        subtitle="Found something broken or confusing? File a bug report — a screenshot of the current page is attached so we can see what you saw."
+        subtitle="Found something broken or confusing? File a bug report — and attach a screenshot of the page if you want us to see what you saw."
       >
         <div className="flex items-start justify-between gap-4 p-4">
           <span className="flex-1">
             <span className="block text-white font-medium">Report a bug</span>
             <span className="block text-xs text-chino-muted mt-1 leading-relaxed">
-              Opens a short form. Crashes and playback failures are also reported automatically.
+              Opens a short form. Crashes and playback failures are also reported automatically, without a screenshot.
             </span>
           </span>
           <button
