@@ -48,11 +48,15 @@ interface MediaCardProps {
  *   - Plus  → watchlist (placeholder, disabled for now)
  *   - Info  → detail page (same as body click)
  *
- * The overlay shows via `group-hover` (pure CSS) so it ONLY appears on
- * devices with a real pointer. Touch devices get no overlay — a tap
- * just opens the detail page (no double-tap-then-pick-button dance).
- * Each button uses stopPropagation so a click on it doesn't also fall
- * through to the body's openDetail handler.
+ * The overlay shows via `group-hover` (pure CSS), and only where the
+ * device can hover (`(hover: hover)`), or while a button in it has the
+ * keyboard focus. Its buttons take pointer events only while it shows:
+ * invisible, they used to sit over the poster and take taps meant for
+ * it, so a tap on a poster's lower edge on a phone played the title
+ * instead of opening it. Touch devices get no overlay — a tap just opens
+ * the detail page (no double-tap-then-pick-button dance). Each button
+ * uses stopPropagation so a click on it doesn't also fall through to the
+ * body's openDetail handler.
  */
 export function MediaCard({ id, title, image, year, rating, type, episode, progress, watchedAt, onRemoveFromContinueWatching, dropWhenWatched, credit }: MediaCardProps) {
   const watchlist = useWatchlist();
@@ -64,6 +68,8 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
   const [pickerOpen, setPickerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { play, pending } = usePlayTitle();
+  // The list picker or the menu holds the overlay open.
+  const overlayOpen = pickerOpen || menuOpen;
 
   // Watched state: seed from the catalogue payload's watched_at stamp,
   // override locally on toggle so the badge + menu label reflect the
@@ -189,12 +195,14 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
           </div>
         )}
 
-        {/* Hover overlay — opacity-gated so touch devices (no :hover)
-            never see it. Higher z-index than the MediaRow chevron
+        {/* Hover overlay — shown on hover where there is hover, on
+            keyboard focus, and while its list picker or menu is open;
+            touch devices never see it. Its buttons take pointer events
+            only while it shows. Higher z-index than the MediaRow chevron
             buttons (z-10) so the play button wins clicks on the
             leftmost / rightmost card. */}
-        <div className={`absolute inset-0 z-30 bg-gradient-to-t from-black via-black/60 to-transparent flex flex-col justify-end p-4 transition-opacity duration-200 pointer-events-none ${pickerOpen ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
-          <div className="flex gap-2 mb-2 pointer-events-auto items-center">
+        <div className={`absolute inset-0 z-30 bg-gradient-to-t from-black via-black/60 to-transparent flex flex-col justify-end p-4 transition-opacity duration-200 pointer-events-none ${overlayOpen ? 'opacity-100' : 'opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
+          <div className={`flex gap-2 mb-2 items-center ${overlayOpen ? 'pointer-events-auto' : 'pointer-events-none [@media(hover:hover)]:group-hover/card:pointer-events-auto group-focus-within/card:pointer-events-auto'}`}>
             <button
               className="p-2 bg-chino-accent hover:bg-chino-accent/80 transition-colors disabled:opacity-50"
               disabled={!id || pending}
