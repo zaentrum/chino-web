@@ -137,6 +137,10 @@ interface TelemetryEvent {
   payload?: Record<string, unknown>;
 }
 
+// How long a title may take to show its first frame before the player
+// gives up and says so.
+const STARTUP_DEADLINE_MS = 20_000;
+
 // Funny + status-flavoured loading messages. Rotated while the video is
 // buffering / not-yet-ready so the user knows something is happening.
 const LOADING_MESSAGES: string[] = [
@@ -385,13 +389,24 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // initial mount. Cleared by the next `playing` event.
   const [actionLabel, setActionLabel] = useState<string | null>('Preparing your movie…');
 
-  // Terminal playback failure — set when the hls circuit breakers give
-  // up (network unreachable, decode error even on transcode, or an
-  // unrecoverable error type). `label` is the human-readable line on
-  // the error overlay; `tech` is the raw signature that pre-fills the
-  // manual bug-report dialog.
-  const [fatalError, setFatalError] = useState<{ label: string; tech: string } | null>(null);
+  // Terminal playback failure — set when the player gives up: a title
+  // that shows no frame within STARTUP_DEADLINE_MS, a stream the hls
+  // circuit breakers give up on (network unreachable, decode error even
+  // on transcode, or an unrecoverable error type). `title` and `label`
+  // are what the error overlay says; `tech` is the raw signature that
+  // pre-fills the manual bug-report dialog.
+  const [fatalError, setFatalError] = useState<{ title: string; label: string; tech: string } | null>(null);
   const [bugDialogOpen, setBugDialogOpen] = useState(false);
+  // The ticket the give-up's automatic report became, to say so on the
+  // overlay (null: none filed, or not yet).
+  const [reportedId, setReportedId] = useState<number | null>(null);
+  // One attempt = from the page opening, or from Try again, to the first
+  // frame. The startup deadline is per attempt.
+  const [attempt, setAttempt] = useState(0);
+  const startedRef = useRef(false);
+  const gaveUpRef = useRef(false);
+  // The last stream error hls.js reported, for the give-up's details.
+  const lastStreamErrorRef = useRef<{ type: string; details: string; status: number | null; url: string | null } | null>(null);
 
   // ---- Telemetry batcher + resume + stall recovery state ----
   // sessionId stays stable for the whole player mount so server-side
@@ -731,12 +746,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !playUrl) return;
+    // Once the player gave up, only Try again brings a source back: a
+    // token or caps change must not start a new attempt silently, with
+    // no deadline left to end it.
+    if (gaveUpRef.current) return;
     // eslint-disable-next-line no-console
     console.log('[hls-effect] SETUP', playUrl.slice(0, 100));
-    // A fresh attach is a fresh chance — drop any terminal error from
-    // the previous source (e.g. the forced-transcode rebuild after a
-    // media circuit-break).
-    setFatalError(null);
     // Prefer hls.js (MSE-based) over native HLS — Chrome's
     // canPlayType('application/vnd.apple.mpegurl') returns "maybe"
     // but doesn't actually decode the playlist correctly. Only fall
@@ -800,14 +815,25 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // position.
     let mediaRecoverCount = 0;
     let mediaRecoverFirst = 0;
-    let networkRetryCount = 0;
-    let networkRetryFirst = 0;
+    // Fatal network errors in a row, with no fragment loaded in between.
+    // (It used to be "more than 3 within 10 s" - but hls.js retries a
+    // request itself, with backoff, before an error turns fatal, so
+    // fatal errors come more than 10 s apart and the count never got
+    // past one: a stream that could not load retried forever.)
+    let networkFatals = 0;
+    hls.on(Hls.Events.FRAG_LOADED, () => { networkFatals = 0; });
     hls.on(Hls.Events.ERROR, (_, data) => {
       // Log every error (fatal and non-fatal) so we can see what hls.js
       // is silently retrying. The verbose channel is rate-limited by
       // browser console deduplication anyway.
       // eslint-disable-next-line no-console
       console.warn('[hls] err', data.fatal ? 'FATAL' : 'soft', data.type, data.details, data.reason || '', { frag: data.frag?.sn });
+      lastStreamErrorRef.current = {
+        type: String(data.type),
+        details: String(data.details),
+        status: (data.response as { code?: number } | undefined)?.code ?? null,
+        url: (data.frag as { url?: string } | undefined)?.url || (data as { url?: string }).url || null,
+      };
       if (!data.fatal) {
         // bufferAppendError on init or fragment is a permanent failure
         // for this src — Chrome rejects the MSE append, the segment
@@ -835,9 +861,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         url: (data.frag as { url?: string } | undefined)?.url || (data as { url?: string }).url || null,
         httpStatus: (data.response as { code?: number } | undefined)?.code ?? null,
       });
-      // Auto bug-report — fingerprinted on type+details, so a retry
-      // storm of the same fatal files exactly one ticket per session
-      // (the session guards inside fileAutoReport handle the rest).
+      // The technical signature of what failed. It pre-fills the manual
+      // report dialog; an automatic report is filed once, when the
+      // player gives up and says so - not on every fatal error on the
+      // way, which hls.js may still recover from.
       const techDetail = [
         'hls.js fatal error',
         `type: ${data.type}`,
@@ -846,23 +873,28 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         `frag: ${data.frag?.sn ?? 'n/a'}`,
         `item: ${itemId}`,
       ].filter(Boolean).join('\n');
-      filePlayerReport(techDetail, String(data.type), String(data.details));
       const now = performance.now();
       switch (data.type) {
         case Hls.ErrorTypes.NETWORK_ERROR:
-          if (now - networkRetryFirst > 10_000) { networkRetryCount = 0; networkRetryFirst = now; }
-          networkRetryCount += 1;
-          if (networkRetryCount > 3) {
-            hls.destroy();
-            setActionLabel('Stream unreachable — please check connection');
-            setFatalError({
-              label: 'Stream unreachable — please check your connection.',
-              tech: techDetail,
-            });
-            reportEvent('circuit_breaker', { kind: 'network', attempts: networkRetryCount, lastDetails: data.details });
+          networkFatals += 1;
+          if (networkFatals > 3) {
+            reportEvent('circuit_breaker', { kind: 'network', attempts: networkFatals, lastDetails: data.details });
+            giveUp(
+              'Playback failed',
+              'Stream unreachable — please check your connection.',
+              techDetail,
+              String(data.type),
+              String(data.details),
+            );
             return;
           }
-          hls.startLoad();
+          // A playlist that failed to load leaves startLoad nothing to
+          // resume: ask for it again.
+          if (/^(manifest|level)/.test(String(data.details))) {
+            hls.loadSource(playUrl);
+          } else {
+            hls.startLoad();
+          }
           break;
         case Hls.ErrorTypes.MEDIA_ERROR:
           if (now - mediaRecoverFirst > 10_000) { mediaRecoverCount = 0; mediaRecoverFirst = now; }
@@ -886,21 +918,22 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               setActionLabel('Codec issue — switching to transcode…');
               reportEvent('circuit_breaker', { kind: 'media_to_transcode', attempts: mediaRecoverCount, lastDetails: data.details });
             } else {
-              setActionLabel('Playback failed: media decode error');
-              setFatalError({
-                label: 'Playback failed — this file could not be decoded.',
-                tech: techDetail,
-              });
               reportEvent('circuit_breaker', { kind: 'media_terminal', attempts: mediaRecoverCount, lastDetails: data.details });
+              giveUp(
+                'Playback failed',
+                'Playback failed — this file could not be decoded.',
+                techDetail,
+                String(data.type),
+                String(data.details),
+              );
             }
             return;
           }
           hls.recoverMediaError();
           break;
         default:
-          hls.destroy();
-          setFatalError({ label: 'Playback failed unexpectedly.', tech: techDetail });
           reportEvent('circuit_breaker', { kind: 'other', type: data.type, lastDetails: data.details });
+          giveUp('Playback failed', 'Playback failed unexpectedly.', techDetail, String(data.type), String(data.details));
       }
     });
     hlsRef.current = hls;
@@ -1937,17 +1970,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     telemetryQueueRef.current.push({ ts: Date.now(), kind, itemId, payload });
   };
 
-  // Auto bug-report for fatal playback errors. Goes through the shared
-  // session guards in errorReporter (max 3 auto reports per session,
-  // one per unique error signature) so a fatal-retry storm doesn't
-  // spam tickets, and it's fire-and-forget like reportEvent — a failed
-  // submit must never affect playback. Reads position through the
-  // video element because it's called from the hls effect's mount-time
-  // closure.
+  // Auto bug-report for a playback failure the player gave up on. Goes
+  // through the shared session guards in errorReporter (max 3 auto
+  // reports per session, one per unique error signature), and it's
+  // fire-and-forget like reportEvent — a failed submit must never affect
+  // playback. Resolves with the ticket so the overlay can say it was
+  // filed. Reads everything through refs and the video element because
+  // it's called from the hls effect's mount-time closure.
   const filePlayerReport = (tech: string, errName: string, message: string) => {
     const v = videoRef.current;
     const positionSec = Math.floor(v?.currentTime ?? 0);
-    void fileAutoReport({
+    return fileAutoReport({
       kind: 'player',
       errorName: errName,
       message,
@@ -1955,12 +1988,103 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       description: tech,
       extraContext: {
         itemId,
-        mode: effectiveMode,
+        mode: forceTranscodeRef.current ? 'transcode' : infoRef.current?.mode ?? 'unknown',
         positionSec: String(positionSec),
-        quality: streamQuality,
+        quality: streamQualityRef.current,
       },
     });
   };
+
+  // The player gives up: the source is torn down, the overlay says what
+  // happened and offers Try again, and one automatic report is filed -
+  // at the moment the viewer is told, not silently while a spinner
+  // still promises the film.
+  const giveUp = (title: string, label: string, tech: string, errName: string, message: string) => {
+    gaveUpRef.current = true;
+    // Where Try again picks up: the source is about to go.
+    keepPosition();
+    const hls = hlsRef.current;
+    if (hls) {
+      hls.destroy();
+      hlsRef.current = null;
+    } else {
+      const v = videoRef.current;
+      if (v?.getAttribute('src')) {
+        v.removeAttribute('src');
+        v.load();
+      }
+    }
+    setBuffering(false);
+    setFatalError({ title, label, tech });
+    setReportedId(null);
+    void filePlayerReport(tech, errName, message).then((r) => {
+      if (r) setReportedId(r.id);
+    });
+  };
+
+  // Try again: a fresh source, a fresh deadline, at the position the
+  // give-up kept. Without a stream token there is no source to rebuild
+  // — reload.
+  const retryPlayback = () => {
+    if (!playUrl) {
+      window.location.reload();
+      return;
+    }
+    reportEvent('retry', { attempt: attempt + 1 });
+    gaveUpRef.current = false;
+    setFatalError(null);
+    setReportedId(null);
+    setBuffering(true);
+    setActionLabel('Trying again…');
+    userWantsPlayingRef.current = true;
+    setAttempt((a) => a + 1);
+    setReloadKey((k) => k + 1);
+  };
+
+  // Startup deadline: a title that shows no frame within
+  // STARTUP_DEADLINE_MS of the page opening (or of Try again) gives up
+  // with a message and Try again, instead of spinning "Preparing your
+  // movie…" forever while its stream fails behind it. Counts only time
+  // the page is visible: a tab opened in the background is not stuck.
+  useEffect(() => {
+    startedRef.current = false;
+    let visibleMs = 0;
+    let last = performance.now();
+    const id = window.setInterval(() => {
+      const now = performance.now();
+      if (document.visibilityState === 'visible') visibleMs += now - last;
+      last = now;
+      if (startedRef.current) {
+        window.clearInterval(id);
+        return;
+      }
+      if (visibleMs < STARTUP_DEADLINE_MS) return;
+      window.clearInterval(id);
+      const err = lastStreamErrorRef.current;
+      const tech = [
+        `no frame within ${STARTUP_DEADLINE_MS / 1000} s`,
+        `item: ${itemId}`,
+        `mode: ${infoRef.current?.mode ?? 'unknown'}${forceTranscodeRef.current ? ' (forced transcode)' : ''}`,
+        `quality: ${streamQualityRef.current}`,
+        `caps: ${capsParamRef.current || '(none)'}`,
+        err ? `last error: ${err.type} ${err.details}${err.status ? ` (HTTP ${err.status})` : ''}` : 'last error: none',
+        err?.url ? `url: ${err.url.split('?')[0]}` : '',
+      ].filter(Boolean).join('\n');
+      reportEvent('startup_timeout', { attempt, lastDetails: err?.details ?? null, status: err?.status ?? null });
+      giveUp(
+        "This title won't start",
+        `Nothing playable arrived from the server within ${STARTUP_DEADLINE_MS / 1000} seconds. Try again in a moment, or report it if it keeps happening.`,
+        tech,
+        'StartupTimeout',
+        // hls.js's details ("fragLoadError"), not its type: the reporter
+        // drops any message that reads "NetworkError" as the API being
+        // unreachable, and hls.js calls the type "networkError".
+        err?.details ?? 'no frame',
+      );
+    }, 1000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt]);
 
   // Unified stream-fault recovery. Called by BOTH onError (decode
   // failures) and onEnded (premature EOF when the server truncated the
@@ -2669,10 +2793,52 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     if (nv > 0 && v.muted) v.muted = false;
   };
 
+  // Leave the player for its natural parent: the series for an episode,
+  // the title's page, home as a last resort. Not history.back(): a binge
+  // session leaves a trail of /player/<id> entries.
+  const goBack = () => {
+    const dest = parentSeriesId
+      ? `/i/${encodeURIComponent(parentSeriesId)}`
+      : itemId
+        ? `/i/${encodeURIComponent(itemId)}`
+        : '/';
+    // Replace so the player URL drops out of history. Otherwise the
+    // browser's Back from the series page lands right back on the
+    // episode the user just left.
+    window.location.replace(toApp(dest));
+  };
+
+  const bugDialog = bugDialogOpen ? (
+    <BugReportDialog
+      initialDescription={`Playback failed while watching this item.\n\n--- technical details ---\n${fatalError?.tech ?? '(none captured)'}`}
+      extraContext={{
+        itemId,
+        mode: effectiveMode,
+        positionSec: String(Math.floor(current)),
+        quality: streamQuality,
+      }}
+      onClose={() => setBugDialogOpen(false)}
+    />
+  ) : null;
+
   if (!playUrl) {
+    // No stream token (yet): nothing to attach. Spins until it comes -
+    // or, past the startup deadline, says the title won't start.
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+      <div className="fixed inset-0 bg-black text-white flex items-center justify-center">
+        {fatalError ? (
+          <PlaybackFailure
+            title={fatalError.title}
+            label={fatalError.label}
+            reportedId={reportedId}
+            onRetry={retryPlayback}
+            onBack={goBack}
+            onReport={() => setBugDialogOpen(true)}
+          />
+        ) : (
+          <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
+        )}
+        {bugDialog}
       </div>
     );
   }
@@ -2811,8 +2977,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           }
         }}
         onWaiting={() => { setBuffering(true); onStall(); reportEvent('waiting', { t: videoRef.current?.currentTime, q: streamQuality }); }}
-        onPlaying={() => { setBuffering(false); setActionLabel(null); }}
+        onLoadedData={() => { startedRef.current = true; }}
+        onPlaying={() => { startedRef.current = true; setBuffering(false); setActionLabel(null); }}
         onCanPlay={(e) => {
+          startedRef.current = true;
           setBuffering(false);
           setActionLabel(null);
           // Pair with the onPause stall recovery above: when the
@@ -2911,30 +3079,21 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         </div>
       )}
 
-      {/* Terminal-error overlay — the circuit breakers above gave up.
-          Reload rebuilds the whole pipeline; Report a bug opens the
-          manual dialog pre-filled with the technical signature (the
-          auto report already fired; this is for the user to add what
-          they were doing). */}
+      {/* Terminal-error overlay — the player gave up (startup deadline,
+          circuit breakers). Try again rebuilds the source where it was;
+          Back leaves the player (the overlay covers its top bar); Report
+          a bug opens the manual dialog pre-filled with the technical
+          signature, for the viewer to add what they were doing. */}
       {fatalError && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/70 px-6 text-center">
-          <AlertTriangle className="w-10 h-10 text-chino-red mb-3" />
-          <p className="text-white text-lg font-medium">Playback failed</p>
-          <p className="mt-1 text-sm text-chino-muted max-w-md">{fatalError.label}</p>
-          <div className="mt-5 flex gap-2">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium"
-            >
-              Reload
-            </button>
-            <button
-              onClick={() => setBugDialogOpen(true)}
-              className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
-            >
-              Report a bug
-            </button>
-          </div>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
+          <PlaybackFailure
+            title={fatalError.title}
+            label={fatalError.label}
+            reportedId={reportedId}
+            onRetry={retryPlayback}
+            onBack={goBack}
+            onReport={() => setBugDialogOpen(true)}
+          />
         </div>
       )}
 
@@ -2988,23 +3147,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       >
         <div className="flex items-center gap-3">
           <button
-            onClick={() => {
-              // Don't trust history.back() — a binge session leaves a
-              // trail of /player/<id> entries, so the user would skip
-              // back to the previous episode (or further back through
-              // the chain) instead of escaping the player. Jump to the
-              // natural parent context: series detail for episodes,
-              // item detail for movies/shows, home as fallback.
-              const dest = parentSeriesId
-                ? `/i/${encodeURIComponent(parentSeriesId)}`
-                : itemId
-                  ? `/i/${encodeURIComponent(itemId)}`
-                  : '/';
-              // Replace so the player URL drops out of history. Otherwise
-              // the browser's Back from the series page lands right back
-              // on the episode the user just left.
-              window.location.replace(toApp(dest));
-            }}
+            // Don't trust history.back() — a binge session leaves a
+            // trail of /player/<id> entries, so the user would skip back
+            // to the previous episode (or further back through the
+            // chain) instead of escaping the player (goBack).
+            onClick={goBack}
             className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
             title="Back"
           >
@@ -3660,18 +3807,58 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         />
       )}
 
-      {bugDialogOpen && (
-        <BugReportDialog
-          initialDescription={`Playback failed while watching this item.\n\n--- technical details ---\n${fatalError?.tech ?? '(none captured)'}`}
-          extraContext={{
-            itemId,
-            mode: effectiveMode,
-            positionSec: String(Math.floor(displayedCurrent)),
-            quality: streamQuality,
-          }}
-          onClose={() => setBugDialogOpen(false)}
-        />
-      )}
+      {bugDialog}
+    </div>
+  );
+}
+
+/** What the player says when it gave up, and what the viewer can do. */
+function PlaybackFailure({
+  title,
+  label,
+  reportedId,
+  onRetry,
+  onBack,
+  onReport,
+}: {
+  title: string;
+  label: string;
+  reportedId: number | null;
+  onRetry: () => void;
+  onBack: () => void;
+  onReport: () => void;
+}) {
+  return (
+    <div role="alert" className="flex flex-col items-center px-6 text-center">
+      <AlertTriangle className="w-10 h-10 text-chino-red mb-3" aria-hidden />
+      <h2 className="text-white text-lg font-medium">{title}</h2>
+      <p className="mt-1 text-sm text-chino-muted max-w-md">{label}</p>
+      {reportedId != null ? (
+        <p className="mt-2 text-xs text-chino-muted">Reported automatically as #{reportedId}.</p>
+      ) : null}
+      <div className="mt-5 flex flex-wrap justify-center gap-2">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium"
+        >
+          Try again
+        </button>
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={onReport}
+          className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+        >
+          Report a bug
+        </button>
+      </div>
     </div>
   );
 }
