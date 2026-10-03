@@ -16,6 +16,7 @@ import { CastNames, Starring } from './Credits';
 import { MetaItem } from './MetaItem';
 import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
+import { languageName } from '../lib/languages';
 import { MediaRow } from './MediaRow';
 
 interface DetailPageProps {
@@ -360,7 +361,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
               ))}
               {data.subtitles && data.subtitles.length > 0 ? (
                 <MetaItem label="Subtitles">
-                  {Array.from(new Set(data.subtitles.map((s) => s.label || s.lang).filter(Boolean))).join(', ')}
+                  {Array.from(new Set(data.subtitles.map((s) => languageName(s.lang)))).join(', ')}
                 </MetaItem>
               ) : null}
               {data.segments && data.segments.count > 0 ? (

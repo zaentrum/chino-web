@@ -12,14 +12,21 @@ import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
 import { toApp } from '../lib/basepath';
+import { languageName, languageTag, subtitleLabels } from '../lib/languages';
 import { BugReportDialog } from './BugReportDialog';
 
 interface Subtitle {
   id: string;
+  /** The menu's label, named by language (lib/languages.ts) once the
+   *  sidecar and embedded tracks are merged. */
   label: string;
   lang: string;
   url: string;
   default?: boolean;
+  /** The track's own title (the catalog's label of a sidecar, the file's
+   *  title of an embedded track), when it has one. */
+  title?: string;
+  forced?: boolean;
   // Renderer hint. webvtt/srt go through the native <track> element;
   // pgs goes through libpgs-js's canvas overlay. Missing means a
   // text track (backward compatibility with manager-api builds that
@@ -49,8 +56,10 @@ function bufferedRanges(v: HTMLMediaElement): string {
   return '[' + out.join(', ') + ']';
 }
 
+// A sidecar subtitle as /api/v1/items/<id>/subtitles lists it: the
+// catalog's label is optional, and usually absent.
 interface SubtitlesResponse {
-  subtitles: Subtitle[];
+  subtitles: (Omit<Subtitle, 'label' | 'title'> & { label?: string })[];
 }
 
 interface TrackInfo {
@@ -83,19 +92,6 @@ interface PlayInfo {
   audio_tracks?: TrackInfo[];
   subtitle_tracks?: TrackInfo[];
 }
-
-// ISO 639-2/B → human-readable label for the language menu. Falls back
-// to the raw code so a track tagged "tha" still shows "tha".
-const LANG_NAMES: Record<string, string> = {
-  eng: 'English', deu: 'German',  fra: 'French',  spa: 'Spanish',
-  ita: 'Italian', jpn: 'Japanese', zho: 'Chinese', por: 'Portuguese',
-  rus: 'Russian', nld: 'Dutch',   pol: 'Polish',  tur: 'Turkish',
-  kor: 'Korean',  ara: 'Arabic',  hin: 'Hindi',   ces: 'Czech',
-  swe: 'Swedish', nor: 'Norwegian', dan: 'Danish', fin: 'Finnish',
-  ukr: 'Ukrainian', ron: 'Romanian',
-  und: 'Unknown',
-};
-const langLabel = (code: string) => LANG_NAMES[code?.toLowerCase()] || code || 'Unknown';
 
 // localStorage key for the user's preferred subtitle language. Special
 // values: 'off' = user explicitly disabled subtitles (don't auto-pick a
@@ -1008,12 +1004,16 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           'dvb', 'dvbsub', 'dvb_subtitle',
           'xsub',
         ]);
-        const list = (j?.subtitles ?? [])
+        const list: Subtitle[] = (j?.subtitles ?? [])
           .filter((s) => !NO_WEB_RENDERER.has((s.format || '').toLowerCase()))
-          .map((s) => ({
+          .map(({ label, ...s }) => ({
             // `format` field flows through verbatim so the renderer
             // hook can route PGS to libpgs-js instead of a <track>.
             ...s,
+            // The catalog's label, when it has one, is the track's title;
+            // the menu label is the language's name (mergedSubs below).
+            title: label?.trim() || undefined,
+            label: '',
             // Use the STABLE ?stream= token (not the rotating OIDC bearer):
             // the /play/subs route accepts it (StreamMiddleware), and a stable
             // URL means a silent OIDC renewal doesn't change activePgsSub.url —
@@ -1071,7 +1071,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // /play/info.subtitle_tracks) into a single list the menu can render.
   // Each entry gets a stable id ('emb-N' for embedded, the sidecar's
   // raw id otherwise) so React reconciles them across renders without
-  // collisions.
+  // collisions, and a label naming its language - "German", not the
+  // "ger" it is tagged with (lib/languages.ts).
   const mergedSubs = useMemo<Subtitle[]>(() => {
     const out: Subtitle[] = subs.map((s) => ({ ...s }));
     if (info?.subtitle_tracks && streamToken) {
@@ -1105,15 +1106,16 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         out.push({
           id: `emb-${t.index}`,
           lang: t.language || 'und',
-          label:
-            t.title?.trim() ||
-            `${langLabel(t.language)} (embedded)`,
+          label: '',
+          title: t.title?.trim() || undefined,
+          forced: t.forced,
           url: `/api/v1/items/${itemId}/play/subtitles/${t.index}.vtt?stream=${enc}${tParam}`,
           default: t.default,
         });
       }
     }
-    return out;
+    const labels = subtitleLabels(out);
+    return out.map((s, i) => ({ ...s, label: labels[i] }));
   }, [subs, info?.subtitle_tracks, itemId, streamToken, streamOffsetSec]);
 
   // Preferred-language auto-pick. Runs once per merged-list change.
@@ -2828,7 +2830,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               id={s.id}
               kind="subtitles"
               src={s.url}
-              srcLang={s.lang}
+              srcLang={languageTag(s.lang) || undefined}
               label={s.label}
             />
           );
@@ -3420,7 +3422,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                 className="px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors text-xs uppercase tracking-wide"
                 title="Audio language"
               >
-                {langLabel(info.audio_tracks.find((t) => t.index === streamAudioIdx)?.language ?? 'und').slice(0, 3).toUpperCase()}
+                {languageName(info.audio_tracks.find((t) => t.index === streamAudioIdx)?.language ?? 'und').slice(0, 3).toUpperCase()}
               </button>
               {audioMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
@@ -3431,7 +3433,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                       onClick={() => switchAudio(t.index)}
                       className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamAudioIdx === t.index ? 'text-chino-accent' : ''}`}
                     >
-                      {(t.title?.trim() || langLabel(t.language))}
+                      {(t.title?.trim() || languageName(t.language))}
                       <span className="ml-2 text-xs text-chino-muted">
                         {t.codec?.toUpperCase()}{t.channels ? ` · ${t.channels}ch` : ''}
                       </span>
