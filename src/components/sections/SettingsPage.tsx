@@ -31,12 +31,6 @@ export function SettingsPage() {
           onChange={(v) => updateBinge({ autoSkipIntro: v })}
         />
         <Toggle
-          label="Auto-skip credits"
-          help="Skips the closing credits at the end of an episode."
-          value={binge.autoSkipCredits}
-          onChange={(v) => updateBinge({ autoSkipCredits: v })}
-        />
-        <Toggle
           label="Auto-play next episode"
           help="Automatically starts the next episode when the credits roll. Off shows the Next Episode card and lets you click to continue."
           value={binge.autoPlayNext}

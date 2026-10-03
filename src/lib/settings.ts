@@ -10,9 +10,6 @@ import { useEffect, useState } from 'react';
  *                        segment AND a binge continuation is detected
  *                        (the user already watched a different episode
  *                        of this series recently).
- *   - autoSkipCredits    skips the credits roll at the end of an
- *                        episode (rather than just offering Skip
- *                        Credits / Next episode buttons).
  *   - autoPlayNext       fires the next-episode auto-play when the
  *                        playhead enters credits and the chromaprint
  *                        pipeline identified a sibling episode.
@@ -23,7 +20,6 @@ export interface ChinoSettings {
   binge: {
     enabled: boolean;
     autoSkipIntro: boolean;
-    autoSkipCredits: boolean;
     autoPlayNext: boolean;
     countdownSec: number;
   };
@@ -44,7 +40,6 @@ export const DEFAULT_SETTINGS: ChinoSettings = {
   binge: {
     enabled: true,
     autoSkipIntro: true,
-    autoSkipCredits: true,
     autoPlayNext: true,
     countdownSec: 3,
   },
@@ -66,8 +61,10 @@ export function loadSettings(): ChinoSettings {
     const raw = window.localStorage.getItem(SETTINGS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw);
+    // autoSkipCredits was a toggle nothing read; a stored one is dropped.
+    const { autoSkipCredits: _unused, ...binge } = parsed.binge ?? {};
     return {
-      binge: { ...DEFAULT_SETTINGS.binge, ...(parsed.binge ?? {}) },
+      binge: { ...DEFAULT_SETTINGS.binge, ...binge },
       subtitles: { ...DEFAULT_SETTINGS.subtitles, ...(parsed.subtitles ?? {}) },
       audio: { ...DEFAULT_SETTINGS.audio, ...(parsed.audio ?? {}) },
     };
