@@ -79,7 +79,7 @@ export function SettingsPage() {
 
       <Section
         title="Subtitles"
-        subtitle="Default subtitle language. Picks the closest matching track on each item. Choose Off to keep subtitles disabled by default."
+        subtitle="Subtitles stay off while a title's audio is in this language or your audio language. When it is in another, they come on in this language. Choose Off to never turn them on by themselves. The player's subtitle menu changes them for the current playback only."
       >
         <ChipRow
           label="Preferred language"

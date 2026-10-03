@@ -7,12 +7,12 @@ import { PgsRenderer } from 'libpgs';
 // already an IIFE so it loads via `new Worker(url)` with no extra
 // glue. Keeps libpgs's worker out of the main bundle.
 import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
-import { useSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
+import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
 import { toApp } from '../lib/basepath';
-import { languageName, languageTag, subtitleLabels } from '../lib/languages';
+import { defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import { BugReportDialog } from './BugReportDialog';
 
 interface Subtitle {
@@ -93,11 +93,10 @@ interface PlayInfo {
   subtitle_tracks?: TrackInfo[];
 }
 
-// localStorage key for the user's preferred subtitle language. Special
-// values: 'off' = user explicitly disabled subtitles (don't auto-pick a
-// fallback), missing key = first-mount user, default to English if a
-// matching track exists.
-const SUB_LANG_KEY = 'chino:preferredSubLang';
+// Where the player once kept the last subtitle language picked in its
+// menu - read instead of the Settings preference, which it never saw. The
+// Settings value is the one read now; the old key is dropped on mount.
+const LEGACY_SUB_LANG_KEY = 'chino:preferredSubLang';
 
 type Quality = 'high' | 'medium' | 'low';
 const QUALITY_RUNGS: Quality[] = ['high', 'medium', 'low'];
@@ -206,6 +205,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const hideTimer = useRef<number | null>(null);
 
   const [subs, setSubs] = useState<Subtitle[]>([]);
+  // Whether /subtitles and /play/info have answered (or failed): the
+  // default subtitle is decided once both track lists and the audio
+  // language are known.
+  const [subsSettled, setSubsSettled] = useState(false);
+  const [infoSettled, setInfoSettled] = useState(false);
   // Multi-select: up to 2 simultaneous subtitle tracks (e.g. learner pairs
   // English + Chinese). Index 0 → native <track mode="showing">, index 1 →
   // <track mode="hidden"> whose cues are mirrored to a custom overlay
@@ -952,19 +956,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         // and an English audio track WILL switch off the source default.
         const tracks = j.audio_tracks ?? [];
         let picked: number | null = null;
-        const pref =
-          typeof window !== 'undefined'
-            ? (() => {
-                try {
-                  const raw = window.localStorage.getItem('chino:settings:v1');
-                  if (!raw) return 'eng';
-                  return JSON.parse(raw)?.audio?.preferredLang ?? 'eng';
-                } catch { return 'eng'; }
-              })()
-            : 'eng';
+        const pref = loadSettings().audio.preferredLang;
         if (pref && pref !== 'orig') {
+          // Codes compared as languages: a track tagged "ger" is the
+          // "deu" the setting names.
           const match = tracks.find(
-            (t) => (t.language ?? '').toLowerCase() === pref.toLowerCase(),
+            (t) => normalizeLang(t.language) !== '' && normalizeLang(t.language) === normalizeLang(pref),
           );
           if (match) picked = match.index;
         }
@@ -985,7 +982,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                                     `Direct (${j.video_codec.toUpperCase()})`;
         recordSwitch(initialLabel, 'startup', j.reason);
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => { if (!ctrl.signal.aborted) setInfoSettled(true); });
 
     fetch(`/api/v1/items/${itemId}/subtitles`, {
       signal: ctrl.signal,
@@ -1028,7 +1026,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         // landed.
         setSubs(list);
       })
-      .catch(() => setSubs([]));
+      .catch(() => setSubs([]))
+      .finally(() => { if (!ctrl.signal.aborted) setSubsSettled(true); });
 
     return () => ctrl.abort();
   }, [itemId, token, streamToken, capsParam]);
@@ -1118,30 +1117,34 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return out.map((s, i) => ({ ...s, label: labels[i] }));
   }, [subs, info?.subtitle_tracks, itemId, streamToken, streamOffsetSec]);
 
-  // Preferred-language auto-pick. Runs once per merged-list change.
-  // The localStorage key honours:
-  //   'off'   → user explicitly disabled subs, leave selection empty.
-  //   'eng' / 'deu' / etc. → pick the first track in that language.
-  //   missing → default to English; if no English track exists, leave off.
-  // Multi-select state, but the auto-pick only ever seeds a single
-  // track — second tracks are an explicit user opt-in via the picker.
+  // The default subtitle, decided once per playback when both track
+  // lists and the audio language are known: OFF, unless the audio is in
+  // a language the viewer has not said they follow - not the subtitle
+  // language chosen in Settings, not the preferred audio language - and
+  // then the track in the Settings subtitle language (lib/languages.ts).
+  // The file's own default flag does not count: it marked German
+  // subtitles on an English film. Multi-select state, but the default
+  // only ever seeds one track — a second is the viewer's choice.
   const autoPickedRef = useRef(false);
   useEffect(() => {
-    if (mergedSubs.length === 0) return;
-    if (autoPickedRef.current) return;
-    if (activeSubIds.length > 0) { autoPickedRef.current = true; return; }
-    const stored =
-      typeof window !== 'undefined' ? window.localStorage.getItem(SUB_LANG_KEY) : null;
-    if (stored === 'off') { autoPickedRef.current = true; return; }
-    const wantedLang = stored || 'eng';
-    const match =
-      mergedSubs.find((s) => s.lang?.toLowerCase() === wantedLang.toLowerCase()) ||
-      mergedSubs.find((s) => s.default);
-    if (match) {
-      setActiveSubIds([match.id]);
-      autoPickedRef.current = true;
-    }
-  }, [mergedSubs, activeSubIds]);
+    if (autoPickedRef.current || !subsSettled || !infoSettled) return;
+    autoPickedRef.current = true;
+    if (activeSubIds.length > 0) return; // already chosen in the menu
+    const tracks = info?.audio_tracks ?? [];
+    const audio =
+      tracks.find((t) => t.index === streamAudioIdx) ?? tracks.find((t) => t.default) ?? tracks[0];
+    const id = defaultSubtitleTrack(mergedSubs, {
+      audioLang: audio?.language,
+      subtitlePref: settings.subtitles.preferredLang,
+      audioPref: settings.audio.preferredLang,
+    });
+    if (id) setActiveSubIds([id]);
+  }, [subsSettled, infoSettled, mergedSubs, info, streamAudioIdx, activeSubIds, settings]);
+
+  // The menu's old key is not read any more; drop it.
+  useEffect(() => {
+    try { window.localStorage.removeItem(LEGACY_SUB_LANG_KEY); } catch { /* storage off */ }
+  }, []);
 
   // Apply active subtitle selection to the <track> mode.
   //
@@ -1373,35 +1376,23 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
   // Multi-select toggle. Picking the same id twice removes it; picking
   // a third clears the oldest and slots the new one. Picking `null`
-  // clears everything (the "Off" entry in the picker). The persisted
-  // preference stays single-language — it's only a seed for the next
-  // session, second-subtitle selection is an explicit per-mount opt-in.
+  // clears everything (the "Off" entry in the picker). A pick here is for
+  // this playback only, like a switch in the audio menu: the default is
+  // what Settings says. (Writing every pick back made one "Off" on a
+  // film the viewer understood switch subtitles off for every foreign
+  // one after it.)
   const MAX_ACTIVE_SUBS = 2;
   const chooseSub = (s: Subtitle | null) => {
+    autoPickedRef.current = true;
     if (s === null) {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(SUB_LANG_KEY, 'off');
-      }
       setActiveSubIds([]);
       return;
     }
     setActiveSubIds((prev) => {
       const idx = prev.indexOf(s.id);
-      let next: string[];
-      if (idx >= 0) {
-        next = prev.filter((id) => id !== s.id);
-      } else if (prev.length >= MAX_ACTIVE_SUBS) {
-        next = [...prev.slice(1), s.id];
-      } else {
-        next = [...prev, s.id];
-      }
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(
-          SUB_LANG_KEY,
-          next[0] ? (mergedSubs.find((m) => m.id === next[0])?.lang || 'und') : 'off',
-        );
-      }
-      return next;
+      if (idx >= 0) return prev.filter((id) => id !== s.id);
+      if (prev.length >= MAX_ACTIVE_SUBS) return [...prev.slice(1), s.id];
+      return [...prev, s.id];
     });
   };
 
