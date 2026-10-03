@@ -4,6 +4,8 @@ import { useStreamToken } from './useStreamToken';
 
 export interface HeroEntry {
   id: string;
+  /** 'movie' or 'series': what Play does depends on it. */
+  type: string;
   title: string;
   description?: string;
   year?: number;
@@ -44,8 +46,9 @@ function ytIdFromUrl(url: string): string {
 // a trailer enriched, while 328 series do, so a movie-only query
 // produced a 1-entry pool and the rotation never kicked in
 // (rotation requires pool.length >= 2). Mixing both pools fills the
-// 8-slot rotation reliably.
-const CACHE_KEY = 'chino:hero-pool:v3';
+// 8-slot rotation reliably. v4 records each entry's type: Play on a
+// series plays an episode, not the series' own id.
+const CACHE_KEY = 'chino:hero-pool:v4';
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h — fresh enough that newly-added items show up next session
 
 interface PoolCache { at: number; entries: HeroEntry[] }
@@ -78,10 +81,13 @@ export function useHeroPool(): HeroEntry[] {
           fetch('/api/v1/items?limit=40&type=series&sort=newest', { signal: ctrl.signal, headers }),
         ]);
         if (!rMov.ok && !rSer.ok) return;
-        type RawItem = { id: string; title: string; description?: string; year?: number; rating?: number; backdrop_url?: string; poster_url?: string };
+        type RawItem = { id: string; type?: string; title: string; description?: string; year?: number; rating?: number; backdrop_url?: string; poster_url?: string };
         const jMov = rMov.ok ? (await rMov.json()) as { items: RawItem[] } : { items: [] };
         const jSer = rSer.ok ? (await rSer.json()) as { items: RawItem[] } : { items: [] };
-        const candidates: RawItem[] = [...(jMov.items ?? []), ...(jSer.items ?? [])];
+        const candidates: RawItem[] = [
+          ...(jMov.items ?? []).map((it) => ({ ...it, type: it.type || 'movie' })),
+          ...(jSer.items ?? []).map((it) => ({ ...it, type: it.type || 'series' })),
+        ];
         const enc = streamToken ? encodeURIComponent(streamToken) : '';
         // Parallel detail fetches. Limited to 40 → minor traffic.
         const settled = await Promise.allSettled(
@@ -102,6 +108,7 @@ export function useHeroPool(): HeroEntry[] {
           const c = candidates[i];
           entries.push({
             id: c.id,
+            type: c.type ?? 'movie',
             title: c.title,
             description: d.description || c.description,
             year: c.year,

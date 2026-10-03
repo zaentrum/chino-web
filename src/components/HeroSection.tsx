@@ -1,6 +1,7 @@
 import { Play, Info } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useHeroPool, type HeroEntry } from '../hooks/useHeroPool';
+import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
 import { FadeImage } from './FadeImage';
 
@@ -14,6 +15,8 @@ interface HeroSectionProps {
   rating?: string;
   year?: string;
   itemId?: string;
+  /** The fallback entry's type ('movie' or 'series'). */
+  itemType?: string;
 }
 
 const ROTATE_MS = 20_000; // ~20 s per trailer — long enough to recognise the title, short enough to feel alive.
@@ -34,8 +37,9 @@ const TRAILERS_ON_HERO = false;
  *   - The pool query hasn't completed yet (first 200 ms).
  *   - No catalogue entry has a usable trailer.
  */
-export function HeroSection({ title, description, image, rating, year, itemId }: HeroSectionProps) {
+export function HeroSection({ title, description, image, rating, year, itemId, itemType = 'movie' }: HeroSectionProps) {
   const pool = useHeroPool();
+  const { play, pending } = usePlayTitle();
   const [idx, setIdx] = useState(0);
   // Randomise the start index ONCE when the pool first arrives, so
   // refreshes don't always show the same entry. Subsequent cycles
@@ -70,9 +74,12 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
   const heroRating = entry?.rating != null ? entry.rating.toFixed(1) : rating;
   const heroYear = entry?.year != null ? String(entry.year) : year;
   const playTargetId = entry?.id ?? itemId;
+  const playTargetType = entry ? entry.type : itemType;
 
+  // A series plays its next episode, or S01E01 (usePlayTitle) — not the
+  // series' own id, which has no stream.
   const goPlayer = () => {
-    if (playTargetId) window.location.assign(toApp(`/player/${encodeURIComponent(playTargetId)}`));
+    if (playTargetId) void play(playTargetId, playTargetType);
   };
   const goDetail = () => {
     if (playTargetId) window.location.assign(toApp(`/i/${encodeURIComponent(playTargetId)}`));
@@ -182,7 +189,7 @@ export function HeroSection({ title, description, image, rating, year, itemId }:
           <div className="flex gap-2 md:gap-4">
             <button
               onClick={goPlayer}
-              disabled={!playTargetId}
+              disabled={!playTargetId || pending}
               className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
             >
               <Play className="w-4 h-4 md:w-5 md:h-5 fill-white" />

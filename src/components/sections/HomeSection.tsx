@@ -142,6 +142,7 @@ export function HomeSection({ onNavigate }: HomeSectionProps) {
       {hero ? (
         <HeroSection
           itemId={hero.id}
+          itemType="movie"
           title={hero.title}
           description={hero.description || 'No description available.'}
           image={hero.backdrop_url || hero.poster_url || ''}

@@ -4,6 +4,7 @@ import { FadeImage } from './FadeImage';
 import { useWatchlist } from '../hooks/useUserFlags';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { useMemberships } from '../hooks/useWatchlists';
+import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
 import { AddToListPicker } from './AddToListPicker';
 
@@ -62,6 +63,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
   const [menuOpen, setMenuOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { play, pending } = usePlayTitle();
 
   // Watched state: seed from the catalogue payload's watched_at stamp,
   // override locally on toggle so the badge + menu label reflect the
@@ -110,7 +112,9 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
     // any "Resume from X?" dialog. The flag is consumed by PlayerPage
     // via the URL query.
     const resumeHint = progress !== undefined && progress > 0 ? '?autoresume=1' : '';
-    window.location.assign(toApp(`/player/${encodeURIComponent(id)}${resumeHint}`));
+    // A series card (not an episode's, which carries `episode`) plays
+    // the series' next episode or S01E01 — not the series' own id.
+    void play(id, type === 'series' && !episode ? 'series' : 'movie', resumeHint);
   };
   // Plain tap on the bookmark: drop into the default list when the item
   // is in no list (casual fast-path, fills the icon); open the picker
@@ -193,7 +197,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
           <div className="flex gap-2 mb-2 pointer-events-auto items-center">
             <button
               className="p-2 bg-chino-accent hover:bg-chino-accent/80 transition-colors disabled:opacity-50"
-              disabled={!id}
+              disabled={!id || pending}
               onClick={openPlayer}
               title="Play"
             >
