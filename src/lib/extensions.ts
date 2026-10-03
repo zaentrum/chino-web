@@ -18,12 +18,41 @@ export interface SlotRow {
 
 export type SlotKind = 'link' | 'action';
 
+/** The icons a row may name: the portal's palette (zaentrum-portal
+ *  src/lib/icons.tsx), so a row shows the same glyph on the launchpad and in
+ *  chino. A fixed list, not a lookup into lucide's exports: those include
+ *  components that are not icons at all ("icon" crashed the app), and
+ *  reaching any of them by name puts all ~1,500 in the bundle. */
+export const SLOT_ICON_NAMES = [
+  'library',
+  'radar',
+  'download',
+  'tv',
+  'music',
+  'clapperboard',
+  'settings',
+  'layout-grid',
+  'server',
+  'boxes',
+  'globe',
+  'wrench',
+  'file-text',
+  'image',
+  'list-video',
+  'users',
+  'gauge',
+  'database',
+  'puzzle',
+] as const;
+
+export type SlotIconName = (typeof SLOT_ICON_NAMES)[number];
+
 /** A row that passed: what the slot renders, with the address resolved. */
 export interface SlotButton {
   key: string;
   kind: SlotKind;
   label: string;
-  icon: string;
+  icon: SlotIconName;
   /** A link's href, or the URL an action POSTs to. */
   href: string;
 }
@@ -37,6 +66,19 @@ export function substitute(url: string, vars: Record<string, string>): string {
   return url.replace(/\{(\w+)\}/g, (_, k: string) =>
     Object.prototype.hasOwnProperty.call(vars, k) ? encodeURIComponent(vars[k]) : '',
   );
+}
+
+/** A row's icon as a palette name: kebab or lower case as the portal stores
+ *  it ("list-video"), or as lucide spells the export ("ListVideo"). Any
+ *  other name is the puzzle, the portal's icon for an installed addon. */
+export function slotIconName(raw: unknown): SlotIconName {
+  if (typeof raw !== 'string') return 'puzzle';
+  const name = raw
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/[\s_]+/g, '-')
+    .toLowerCase();
+  return (SLOT_ICON_NAMES as readonly string[]).includes(name) ? (name as SlotIconName) : 'puzzle';
 }
 
 /** The two kinds chino renders; anything else (an unknown or empty kind) is
@@ -102,7 +144,7 @@ export function slotButtons(rows: unknown, pageUrl: string, vars: Record<string,
       key: typeof row.key === 'string' && row.key ? row.key : `row-${i}`,
       kind,
       label,
-      icon: typeof row.icon === 'string' ? row.icon : '',
+      icon: slotIconName(row.icon),
       href,
     });
   });

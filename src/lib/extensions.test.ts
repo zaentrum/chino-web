@@ -1,7 +1,7 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slotActionUrl, slotButtons, slotKind, slotLinkHref, substitute } from './extensions.ts';
+import { SLOT_ICON_NAMES, slotActionUrl, slotButtons, slotIconName, slotKind, slotLinkHref, substitute } from './extensions.ts';
 
 const PAGE = 'https://media.example/chino/search?q=zz';
 
@@ -124,4 +124,28 @@ test('slotButtons: what the review saw rendered, and what is left of it', () => 
   ]);
   assert.deepEqual(slotButtons({ not: 'an array' }, PAGE), []);
   assert.deepEqual(slotButtons(undefined, PAGE), []);
+});
+
+test('icons: the portal\'s nineteen names, as the portal stores them or as lucide spells them', () => {
+  assert.equal(SLOT_ICON_NAMES.length, 19);
+  for (const name of SLOT_ICON_NAMES) assert.equal(slotIconName(name), name);
+  assert.equal(slotIconName('ListVideo'), 'list-video');
+  assert.equal(slotIconName('layoutGrid'), 'layout-grid');
+  assert.equal(slotIconName(' FileText '), 'file-text');
+  assert.equal(slotIconName('Puzzle'), 'puzzle');
+  assert.equal(slotIconName('TV'), 'tv');
+});
+
+test('icons: any other name is the puzzle - "icon" (which crashed the app) included', () => {
+  for (const raw of ['icon', 'Icon', 'createLucideIcon', 'rocket', 'zap', 'glyph:c', '', undefined, null, 3, {}]) {
+    assert.equal(slotIconName(raw), 'puzzle', String(raw));
+  }
+});
+
+test('slotButtons gives each row its palette icon', () => {
+  const row = (icon: unknown) => ({ key: 'k', kind: 'link', label: 'L', icon, url: '/portal/app/x', enabled: true });
+  assert.deepEqual(
+    slotButtons([row('ListVideo'), row('icon'), row(undefined)], PAGE).map((b) => b.icon),
+    ['list-video', 'puzzle', 'puzzle'],
+  );
 });

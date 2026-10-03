@@ -1,9 +1,29 @@
-import { useMemo } from 'react';
-import * as Icons from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Component, useMemo, type ReactNode } from 'react';
+import {
+  Boxes,
+  Clapperboard,
+  Database,
+  Download,
+  FileText,
+  Gauge,
+  Globe,
+  Image,
+  LayoutGrid,
+  Library,
+  ListVideo,
+  Music,
+  Puzzle,
+  Radar,
+  Server,
+  Settings,
+  Tv,
+  Users,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react';
 import { useExtensions } from '../hooks/useExtensions';
 import { useAuth } from 'react-oidc-context';
-import { slotButtons, type SlotButton } from '../lib/extensions';
+import { slotButtons, type SlotButton, type SlotIconName } from '../lib/extensions';
 
 interface ExtensionSlotProps {
   slot: string;
@@ -11,16 +31,29 @@ interface ExtensionSlotProps {
   vars?: Record<string, string>;
 }
 
-// lucideByName resolves a lucide icon by its PascalCase export name, falling
-// back to a neutral Puzzle glyph when an addon names an unknown icon.
-function lucideByName(name: string): LucideIcon {
-  if (name) {
-    const key = name.charAt(0).toUpperCase() + name.slice(1);
-    const found = (Icons as unknown as Record<string, LucideIcon>)[key];
-    if (found) return found;
-  }
-  return Icons.Puzzle;
-}
+// The portal's icon palette, glyph by glyph (lib/extensions.ts names them).
+// Named imports keep the bundle to these nineteen.
+const SLOT_ICONS: Record<SlotIconName, LucideIcon> = {
+  library: Library,
+  radar: Radar,
+  download: Download,
+  tv: Tv,
+  music: Music,
+  clapperboard: Clapperboard,
+  settings: Settings,
+  'layout-grid': LayoutGrid,
+  server: Server,
+  boxes: Boxes,
+  globe: Globe,
+  wrench: Wrench,
+  'file-text': FileText,
+  image: Image,
+  'list-video': ListVideo,
+  users: Users,
+  gauge: Gauge,
+  database: Database,
+  puzzle: Puzzle,
+};
 
 /**
  * ExtensionSlot renders the addon-contributed buttons for a named slot as
@@ -30,8 +63,19 @@ function lucideByName(name: string): LucideIcon {
  * portal's app proxy on this origin. A row of another kind, or pointing
  * anywhere else, renders nothing — as does a slot no addon contributes to:
  * the neutral-core property.
+ *
+ * The slot is its own error boundary: whatever a row holds, the worst it
+ * can do is not show up. It must never take the page around it down.
  */
-export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
+export function ExtensionSlot(props: ExtensionSlotProps) {
+  return (
+    <SlotBoundary slot={props.slot}>
+      <SlotButtons {...props} />
+    </SlotBoundary>
+  );
+}
+
+function SlotButtons({ slot, vars = {} }: ExtensionSlotProps) {
   const exts = useExtensions(slot);
   const auth = useAuth();
 
@@ -61,24 +105,43 @@ export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
   return (
     <div className="flex flex-wrap gap-2 mt-4">
       {buttons.map((b) => {
-        const Icon = lucideByName(b.icon);
+        const Icon = SLOT_ICONS[b.icon];
         const cls =
           'px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2';
         if (b.kind === 'link') {
           return (
             <a key={b.key} href={b.href} className={cls}>
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4" aria-hidden />
               {b.label}
             </a>
           );
         }
         return (
           <button key={b.key} type="button" onClick={() => void onAction(b)} className={cls}>
-            <Icon className="w-4 h-4" />
+            <Icon className="w-4 h-4" aria-hidden />
             {b.label}
           </button>
         );
       })}
     </div>
   );
+}
+
+/** Renders nothing in place of a slot that failed to render. Not reported:
+ *  what a slot shows comes from an addon's rows, not from chino. */
+class SlotBoundary extends Component<{ slot: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    // eslint-disable-next-line no-console
+    console.warn(`[slot ${this.props.slot}] not rendered:`, error);
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }
