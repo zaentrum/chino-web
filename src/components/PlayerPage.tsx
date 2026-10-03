@@ -23,6 +23,7 @@ import {
   type Quality,
 } from '../lib/playback';
 import { BugReportDialog } from './BugReportDialog';
+import { StatusPage } from './StatusPage';
 
 interface Subtitle {
   id: string;
@@ -406,6 +407,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const [attempt, setAttempt] = useState(0);
   const startedRef = useRef(false);
   const gaveUpRef = useRef(false);
+  // No such title: the item or its stream answered 404 (or 410, or 400
+  // for an id that is not one). The page says so instead of playing.
+  const [notFound, setNotFound] = useState(false);
+  const notFoundRef = useRef(false);
+  const markNotFound = () => {
+    notFoundRef.current = true;
+    setNotFound(true);
+  };
   // The last stream error hls.js reported, for the give-up's details.
   const lastStreamErrorRef = useRef<{ type: string; details: string; status: number | null; url: string | null } | null>(null);
 
@@ -682,7 +691,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // pendingSeekRef so loadedmetadata can replay it. The URL stays
   // stable across token refreshes (the stream token has a 6 h TTL).
   const playUrl = useMemo(() => {
-    if (!streamToken) return '';
+    if (!streamToken || notFound) return '';
     const params = new URLSearchParams({ stream: streamToken, q: streamQuality });
     if (capsParam) params.set('caps', capsParam);
     if (reloadKey > 0) params.set('_r', String(reloadKey));
@@ -690,7 +699,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // eslint-disable-next-line no-console
     console.log('[playUrl] recomputed', { itemId, q: streamQuality, caps: capsParam, reload: reloadKey, tokenHash: streamToken.slice(0, 8) });
     return url;
-  }, [itemId, streamToken, streamQuality, capsParam, reloadKey]);
+  }, [itemId, streamToken, streamQuality, capsParam, reloadKey, notFound]);
 
   // Trickplay (scrub-preview thumbnails). The analyzer writes a
   // thumbnails.vtt + sprite-NNNN.jpg set for every packaged item; the
@@ -835,6 +844,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         status: (data.response as { code?: number } | undefined)?.code ?? null,
         url: (data.frag as { url?: string } | undefined)?.url || (data as { url?: string }).url || null,
       };
+      // A master playlist that is not there: no such title. Nothing to
+      // retry, nothing to report.
+      const status = lastStreamErrorRef.current.status;
+      if (data.details === 'manifestLoadError' && (status === 400 || isNotFoundStatus(status))) {
+        hls.destroy();
+        markNotFound();
+        return;
+      }
       if (!data.fatal) {
         // bufferAppendError on init or fragment is a permanent failure
         // for this src — Chrome rejects the MSE append, the segment
@@ -986,7 +1003,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (r.status === 400 || isNotFoundStatus(r.status)) {
+          markNotFound();
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
       .then((j) => {
         if (j?.title) setTitle(j.title);
         // For episodes, remember the SxxEyy coordinates so the chrome
@@ -2057,7 +2080,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       const now = performance.now();
       if (document.visibilityState === 'visible') visibleMs += now - last;
       last = now;
-      if (startedRef.current) {
+      if (startedRef.current || notFoundRef.current) {
         window.clearInterval(id);
         return;
       }
@@ -2823,6 +2846,15 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       onClose={() => setBugDialogOpen(false)}
     />
   ) : null;
+
+  if (notFound) {
+    return (
+      <StatusPage
+        title="Title not found"
+        message="There's nothing to play at this address. The link may be wrong, or the title has been removed."
+      />
+    );
+  }
 
   if (!playUrl) {
     // No stream token (yet): nothing to attach. Spins until it comes -
