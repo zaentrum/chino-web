@@ -413,9 +413,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
 
 /**
  * Comma-separated cast / crew names. Each name that carries a person_id
- * becomes a link to the Person surface (`/person/{id}`); names without a
- * person_id render as plain text. The separators stay outside the link
- * so only the name is tappable.
+ * becomes a link to the Person surface (`/person/{id}` under the app's
+ * mount, like search's links); names without a person_id render as plain
+ * text. The separators stay outside the link so only the name is tappable.
  */
 function CastNames({ people }: { people: CastEntry[] }) {
   return (
@@ -425,7 +425,7 @@ function CastNames({ people }: { people: CastEntry[] }) {
           {i > 0 ? ', ' : ''}
           {p.person_id ? (
             <a
-              href={`/person/${encodeURIComponent(p.person_id)}`}
+              href={toApp(`/person/${encodeURIComponent(p.person_id)}`)}
               className="hover:text-chino-accent hover:underline transition-colors"
             >
               {p.name}
