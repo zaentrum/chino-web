@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
 import { withStreamToken } from '../lib/artwork';
+import { acceptLanguage } from '../lib/people';
 
 /**
  * People search + filmography, served by katalog-api:
@@ -80,6 +81,20 @@ export interface PersonDetail {
   // with the stream token, as the posters. A 404 there is "no portrait".
   has_profile?: boolean;
   profile_url?: string;
+  // What the catalog knows about them, each field omitted when unknown.
+  // Dates are YYYY-MM-DD. The biography is in biography_lang (a primary
+  // language subtag, "en"): the first of the request's Accept-Language
+  // languages the catalog has it in, else English, else any.
+  sort_name?: string;
+  also_known_as?: string[];
+  birth_date?: string;
+  death_date?: string;
+  birthplace?: string;
+  known_for_department?: string;
+  biography?: string;
+  biography_lang?: string;
+  tmdb_person_id?: string;
+  imdb_id?: string;
   items: KatalogItem[];
 }
 
@@ -105,9 +120,15 @@ export function usePerson(personId: string | undefined, limit = 100) {
     setLoading(true);
     setError(null); // otherwise a recovered outage still reads as broken
     setNotFound(false);
+    const headers: Record<string, string> = { Authorization: `Bearer ${auth.user?.access_token ?? ''}` };
+    // The biography in the browser's languages, in order of preference
+    // (the response varies on it). Said outright rather than left to the
+    // browser's default header, which is what it would send anyway.
+    const languages = acceptLanguage(typeof navigator === 'undefined' ? [] : navigator.languages);
+    if (languages) headers['Accept-Language'] = languages;
     fetch(`/api/v1/people/${personId}${params.toString() ? `?${params}` : ''}`, {
       signal: ctrl.signal,
-      headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
+      headers,
     })
       .then((r) => {
         if (r.status === 404) {
