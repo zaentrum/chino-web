@@ -89,6 +89,18 @@ export function HomeSection({ onNavigate }: HomeSectionProps) {
   const topRated = useItems(undefined, 20, 'movie', { sort: 'rating', ratingMin: 8, unwatched: true });
   const { items: cw, dismiss: dismissCW } = useContinueWatching();
 
+  // A catalog outage: every rail of titles failed and none has anything
+  // to show. Home says so, instead of a page with only the rails that
+  // come from elsewhere (Continue watching) and nothing to explain the
+  // rest.
+  const catalogDown =
+    [recent, recentSeries, topRated].every((r) => r.error && !r.data) && !recent.loading;
+  const retryCatalog = () => {
+    recent.retry();
+    recentSeries.retry();
+    topRated.retry();
+  };
+
   const recentMovies = recent.data?.source === 'katalog' ? recent.data.items : [];
   const recentShows  = recentSeries.data?.source === 'katalog' ? recentSeries.data.items : [];
   const topRatedMovies = topRated.data?.source === 'katalog' ? topRated.data.items : [];
@@ -110,6 +122,23 @@ export function HomeSection({ onNavigate }: HomeSectionProps) {
 
   return (
     <>
+      {catalogDown ? (
+        <div role="alert" className="mb-8 p-6 bg-chino-surface border border-chino-border">
+          <h2 className="text-xl font-semibold text-white mb-1">The catalog is unavailable right now</h2>
+          <p className="text-sm text-chino-muted mb-4">
+            Your movies and shows couldn't be loaded. That's on the server's side, not yours — try again in a
+            moment.
+          </p>
+          <button
+            type="button"
+            onClick={retryCatalog}
+            className="px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
       {hero ? (
         <HeroSection
           itemId={hero.id}

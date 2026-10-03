@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { MediaCard } from '../MediaCard';
 import { BrowseFilters, type BrowseQuery } from '../BrowseFilters';
-import { LoadingState } from '../LoadingState';
+import { LoadFailed, LoadingState } from '../LoadingState';
 import { usePagedItems } from '../../hooks/useItems';
 
 const PAGE_SIZE = 48;
 
 export function SeriesSection() {
   const [filter, setFilter] = useState<BrowseQuery>({});
-  const { items, loading, error, hasMore, loadMore } = usePagedItems('series', PAGE_SIZE, filter);
+  const { items, loading, error, hasMore, loadMore, retry } = usePagedItems('series', PAGE_SIZE, filter);
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -30,12 +30,11 @@ export function SeriesSection() {
     <div>
       <h1 className="text-4xl font-bold text-white mb-6">Shows</h1>
       <BrowseFilters value={filter} onChange={setFilter} />
-      {error ? (
-        <p className="text-chino-red text-sm mb-4">Failed to load: {error.message}</p>
-      ) : null}
-
       {items.length === 0 && loading ? (
         <LoadingState variant="full" />
+      ) : items.length === 0 && error ? (
+        // Not "No shows match": nothing could be asked.
+        <LoadFailed what="the shows" onRetry={retry} />
       ) : items.length === 0 ? (
         <p className="text-chino-muted">No shows match the current filters.</p>
       ) : (
@@ -55,7 +54,11 @@ export function SeriesSection() {
             ))}
           </div>
           <div ref={sentinelRef} className="h-1" aria-hidden />
-          {hasMore ? (
+          {error ? (
+            <div className="mt-6 flex justify-center">
+              <LoadFailed what="more shows" onRetry={retry} />
+            </div>
+          ) : hasMore ? (
             <div className="mt-6 flex justify-center">
               <LoadingState />
             </div>

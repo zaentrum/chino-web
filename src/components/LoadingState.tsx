@@ -57,3 +57,19 @@ export function LoadingState({ message, variant = 'inline', intervalMs = 2200 }:
     </div>
   );
 }
+
+/** A load that failed — the catalog didn't answer — with Try again. */
+export function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="py-10 flex flex-col items-center gap-3 text-center">
+      <p className="text-chino-text">Couldn't load {what} — the catalog didn't answer.</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}

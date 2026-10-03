@@ -77,6 +77,7 @@ export function useItems(
   const [data, setData] = useState<ItemsResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0); // retry() asks again
 
   // Stable key for the filter so the effect doesn't refetch on every render.
   const fKey = JSON.stringify(filter ?? {});
@@ -147,9 +148,11 @@ export function useItems(
     // soon as it's available (initial mount races: items fetch can
     // resolve before the token mint does).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, limit, type, fKey, auth.isAuthenticated, auth.isLoading, streamToken, gen]);
+  }, [q, limit, type, fKey, auth.isAuthenticated, auth.isLoading, streamToken, gen, attempt]);
 
-  return { data, error, loading };
+  const retry = () => setAttempt((a) => a + 1);
+
+  return { data, error, loading, retry };
 }
 
 /**
