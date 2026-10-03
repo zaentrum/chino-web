@@ -11,7 +11,8 @@ interface PersonPageProps {
 /**
  * Person / Filmography surface. Top-level route (`/person/:id`), reached
  * from the search "Cast & crew" section and from tappable cast names on
- * the detail page. Header = name + initials avatar + credit count; body =
+ * the detail page. Header = portrait (initials without one) + name + credit
+ * count; body =
  * a grid of the person's titles, rendered with the same MediaCard / grid
  * the Browse and Watchlist surfaces use (watched / saved badges, tap →
  * detail).
@@ -43,14 +44,18 @@ export function PersonPage({ personId }: PersonPageProps) {
 
   const items = data.items ?? [];
   const credits = items.length;
+  // The portrait in a 2:3 frame, like the posters below; the initials, in
+  // the square they have always had, for someone the catalog has no
+  // portrait of.
+  const portrait = data.has_profile ? data.profile_url : undefined;
 
   return (
     <div className="min-h-screen bg-chino-bg text-white">
       <BackButton />
       <div className="max-w-6xl mx-auto px-6 pt-20 pb-16">
-        {/* Header: initials avatar + name + credit count */}
+        {/* Header: portrait (or initials) + name + credit count */}
         <div className="flex items-center gap-5 mb-8">
-          <PersonAvatar name={data.name} size={88} className="text-3xl" />
+          <PersonAvatar name={data.name} src={portrait} size={portrait ? 128 : 88} portrait={!!portrait} />
           <div>
             <h1 className="text-3xl md:text-4xl font-bold">{data.name}</h1>
             <p className="text-chino-muted mt-1">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
+import { withStreamToken } from '../lib/artwork';
 
 /**
  * People search + filmography, served by katalog-api:
@@ -74,6 +75,11 @@ export function usePeople(q?: string, limit = 12) {
 export interface PersonDetail {
   id: string;
   name: string;
+  // The catalog holds a portrait of them, at profile_url: chino-api's
+  // portrait route (/api/v1/people/{id}/profile), which usePerson hands out
+  // with the stream token, as the posters. A 404 there is "no portrait".
+  has_profile?: boolean;
+  profile_url?: string;
   items: KatalogItem[];
 }
 
@@ -117,10 +123,11 @@ export function usePerson(personId: string | undefined, limit = 100) {
           return;
         }
         // Long-lived stream token in artwork URLs so silent renews don't
-        // refetch every poster in the filmography grid.
+        // refetch every poster in the filmography grid (or the portrait).
         const enc = streamToken ? encodeURIComponent(streamToken) : '';
         setData({
           ...j,
+          profile_url: withStreamToken(j.profile_url, streamToken),
           items: (j.items ?? []).map((it) => ({
             ...it,
             poster_url: it.poster_url && enc ? `${it.poster_url}?stream=${enc}` : it.poster_url,
