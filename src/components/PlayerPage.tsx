@@ -13,6 +13,14 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { toApp } from '../lib/basepath';
 import { defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
+import {
+  QUALITY_RUNGS,
+  downgradeStep,
+  mediaFallback,
+  restorePosition,
+  stallAction,
+  type Quality,
+} from '../lib/playback';
 import { BugReportDialog } from './BugReportDialog';
 
 interface Subtitle {
@@ -44,6 +52,14 @@ function networkStateName(n: number): string {
 }
 function mediaErrorName(n: number): string {
   return ['', 'ABORTED', 'NETWORK', 'DECODE', 'SRC_NOT_SUPPORTED'][n] ?? String(n);
+}
+// Seconds buffered past the playhead, in the range that holds it.
+function bufferedAheadOf(v: HTMLMediaElement): number {
+  const b = v.buffered;
+  for (let i = 0; i < (b?.length ?? 0); i++) {
+    if (v.currentTime >= b.start(i) - 0.1 && v.currentTime <= b.end(i)) return b.end(i) - v.currentTime;
+  }
+  return 0;
 }
 function bufferedRanges(v: HTMLMediaElement): string {
   const b = v.buffered;
@@ -97,9 +113,6 @@ interface PlayInfo {
 // menu - read instead of the Settings preference, which it never saw. The
 // Settings value is the one read now; the old key is dropped on mount.
 const LEGACY_SUB_LANG_KEY = 'chino:preferredSubLang';
-
-type Quality = 'high' | 'medium' | 'low';
-const QUALITY_RUNGS: Quality[] = ['high', 'medium', 'low'];
 
 interface SwitchEntry {
   ts: number;
@@ -284,26 +297,27 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return fromVideo > 0 ? fromVideo : apiDurationSec;
   }, [duration, apiDurationSec]);
 
-  // Refs mirroring apiDurationSec / streamOffsetSec — handlers
-  // registered in useEffects with `[]` deps read these to get
-  // always-current values (closures capture mount-time state).
+  // Refs mirroring state that handlers registered in useEffects with
+  // `[]` deps (or the hls.js handlers, bound once per source) read to
+  // get always-current values (closures capture mount-time state).
   const apiDurationSecRef = useRef(apiDurationSec);
   useEffect(() => { apiDurationSecRef.current = apiDurationSec; }, [apiDurationSec]);
-  const streamOffsetSecRef = useRef(0);
 
   const [info, setInfo] = useState<PlayInfo | null>(null);
+  const infoRef = useRef<PlayInfo | null>(null);
+  useEffect(() => { infoRef.current = info; }, [info]);
   const [infoOpen, setInfoOpen] = useState(false);
   const clientCodecs = useMemo(probeClientCodecs, []);
 
   // Adaptive-bitrate state. streamQuality is the rung we're currently
-  // asking ffmpeg for; streamOffsetSec is how many seconds into the movie
-  // the current stream STARTS — set when we switch quality mid-playback
-  // so the displayed clock + slider stay correct.
+  // asking the server's transcode ladder for (a packaged title has one
+  // rendition; the server ignores ?q= for it). Under HLS the media
+  // element's currentTime IS the position in the title, whatever the
+  // rung: a switch rebuilds the source and seeks it back there
+  // (pendingSeekRef below).
   const [streamQuality, setStreamQuality] = useState<Quality>('high');
-  const [streamOffsetSec, setStreamOffsetSec] = useState(0);
-  // Mirror into the ref declared above so closures in []-deps effects
-  // see live values.
-  useEffect(() => { streamOffsetSecRef.current = streamOffsetSec; }, [streamOffsetSec]);
+  const streamQualityRef = useRef(streamQuality);
+  useEffect(() => { streamQualityRef.current = streamQuality; }, [streamQuality]);
   // (legacy qualityMenuOpen/setQualityMenuOpen removed — driven by `openMenu` above.)
   const [qualityNotice, setQualityNotice] = useState<string | null>(null);
   const stallCountRef = useRef<{ count: number; firstAt: number }>({ count: 0, firstAt: 0 });
@@ -318,17 +332,19 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // real stall worth counting toward a downgrade.
   const lastWaitingCtRef = useRef(-1);
   // forceTranscode flips on when a passthrough/remux stream stalls badly
-  // on a flaky network — we ask the stream service to upgrade to a
-  // transcoded pipeline so ffmpeg can input-seek to the resume position
-  // (passthrough can't seek by time) AND the quality switcher becomes
-  // available to step bandwidth down.
+  // on a flaky network — a ?q= below High puts it on the server's
+  // transcode ladder, and the quality switcher becomes available to step
+  // bandwidth down. Never for a packaged title: the server serves the same
+  // packaged files whatever ?q= says (lib/playback.ts).
   const [forceTranscode, setForceTranscode] = useState(false);
+  const forceTranscodeRef = useRef(forceTranscode);
+  useEffect(() => { forceTranscodeRef.current = forceTranscode; }, [forceTranscode]);
 
-  // When the user switches BACK to Direct mode from a transcoded
-  // pipeline, the browser resets currentTime to 0 because the <video
-  // src> changes. Stash the pre-switch wall-clock time here and replay
-  // it via the loadedmetadata handler — for passthrough that triggers
-  // a single Range request to the right byte offset.
+  // The position a rebuilt source must go back to. Whatever rebuilds the
+  // source — a quality, caps or audio switch, a stall, a fault, a tab
+  // resumed after a long time hidden, Try again — stashes the playhead
+  // here first; the next loadedmetadata (and hls.js's startPosition)
+  // puts it back. A resume position waits here for the first source too.
   const pendingSeekRef = useRef<number | null>(null);
 
   // User-intent gate for the loadedmetadata autoplay path. Every <video
@@ -451,9 +467,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const [reloadKey, setReloadKey] = useState(0);
   // Hard-stall detector: every 2s we sample currentTime; if it hasn't
   // advanced for ~8s while we think we're playing, show the
-  // "reconnecting" overlay and force a reload of the src.
-  const stallWatchRef = useRef<{ lastT: number; lastChange: number }>({ lastT: 0, lastChange: 0 });
+  // "reconnecting" overlay and recover (lib/playback.ts stallAction):
+  // in place first, a rebuilt source at the same position after that.
+  const stallWatchRef = useRef<{ lastT: number; lastChange: number; tries: number }>({ lastT: 0, lastChange: 0, tries: 0 });
   const [reconnecting, setReconnecting] = useState(false);
+  const reconnectingRef = useRef(false);
+  useEffect(() => { reconnectingRef.current = reconnecting; }, [reconnecting]);
 
   // ---- Audio track selection ----
   // streamAudioIdx is the audio-stream ordinal currently being mapped by
@@ -535,9 +554,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     [parentSeriesId, itemId],
   );
 
-  // Displayed playhead lives below the segments effect block (it needs
-  // streamOffsetSec, which is in scope there). Adding a here-only stub
-  // would shadow it.
+  // Displayed playhead lives below, with the segments effect block.
 
   const token = auth.user?.access_token;
 
@@ -603,6 +620,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return t;
   }, []);
   const [capsParam, setCapsParam] = useState(() => initialCaps.join(','));
+  const capsParamRef = useRef(capsParam);
+  useEffect(() => { capsParamRef.current = capsParam; }, [capsParam]);
   useEffect(() => {
     if (!initialCaps.includes('hvc')) return;
     // The probe below asks specifically about the MSE pipeline
@@ -752,6 +771,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       manifestLoadingMaxRetry: 4,
       fragLoadingRetryDelay: 1000,
       fragLoadingMaxRetry: 6,
+      // A rebuilt source starts loading where the old one was (or at the
+      // resume position), not at 0 - onLoadedMetadata seeks there too.
+      startPosition: restorePosition(pendingSeekRef.current) ?? -1,
     });
     hls.attachMedia(v);
     let loadCount = 0;
@@ -768,9 +790,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // Circuit breaker — without this, a chronic codec / MSE-append
     // error sends recoverMediaError into a hot loop that hammers
     // master.m3u8 30+ times per second. Cap at 3 attempts inside a
-    // 10 s window; after that, fall back to forced transcode (a
-    // freshly libx264-encoded h264 stream is the safest fallback) or
-    // surface a visible error if we're already on transcode.
+    // 10 s window; after that, fall back (lib/playback.ts
+    // mediaFallback): a direct stream onto the transcode ladder (a
+    // freshly libx264-encoded h264 stream is the safest fallback), a
+    // packaged title asked for again without HEVC when the browser
+    // claimed it and cannot decode it - never forced onto the ladder,
+    // which would serve the same files - and a visible error where
+    // there is nothing further to fall back to. Any fallback keeps the
+    // position.
     let mediaRecoverCount = 0;
     let mediaRecoverFirst = 0;
     let networkRetryCount = 0;
@@ -842,7 +869,18 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           mediaRecoverCount += 1;
           if (mediaRecoverCount > 3) {
             hls.destroy();
-            if (!forceTranscode) {
+            const fallback = mediaFallback({
+              mode: infoRef.current?.mode ?? null,
+              forcedTranscode: forceTranscodeRef.current,
+              caps: capsParamRef.current.split(','),
+            });
+            if (fallback.kind === 'drop-hevc') {
+              keepPosition();
+              setCapsParam((c) => c.split(',').filter((t) => t !== 'hvc').join(','));
+              setActionLabel('This browser can\'t decode HEVC — switching…');
+              reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
+            } else if (fallback.kind === 'transcode') {
+              keepPosition();
               setForceTranscode(true);
               setStreamQuality('medium');
               setActionLabel('Codec issue — switching to transcode…');
@@ -875,14 +913,36 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   }, [playUrl]);
 
   // What the server is ACTUALLY doing right now. info.mode is the
-  // initial probe; once we've requested ?t=<sec> or set
-  // forceTranscode, the server upgrades the pipeline to transcode
-  // regardless of codec compatibility. The quality switcher and
-  // auto-downgrade logic key off this, not info.mode.
+  // initial probe; once forceTranscode is set (a ?q= below High on a
+  // direct stream), the server serves the transcode ladder regardless
+  // of codec compatibility. The quality switcher keys off this, not
+  // info.mode.
   const effectiveMode: PlayInfo['mode'] = useMemo(() => {
-    if (forceTranscode || streamOffsetSec > 0) return 'transcode';
+    if (forceTranscode) return 'transcode';
     return info?.mode ?? 'passthrough';
-  }, [info?.mode, forceTranscode, streamOffsetSec]);
+  }, [info?.mode, forceTranscode]);
+
+  // Stash the playhead for a source about to be rebuilt (pendingSeekRef).
+  // At the very start a resume position may still be waiting there for
+  // the first source; it stays.
+  const keepPosition = () => {
+    const t = videoRef.current?.currentTime ?? 0;
+    if (t > 0.5) pendingSeekRef.current = t;
+  };
+  // A position for the source playing now (a resume that arrived after
+  // it loaded): applied at once when its metadata is in, else at its
+  // loadedmetadata.
+  const seekWhenReady = (sec: number) => {
+    const v = videoRef.current;
+    if (v && v.readyState >= 1) {
+      const t = restorePosition(sec, v.duration);
+      if (t != null) {
+        try { v.currentTime = t; } catch { /* not seekable yet */ }
+      }
+      return;
+    }
+    pendingSeekRef.current = sec;
+  };
 
   // Fetch item title + subtitles list.
   useEffect(() => {
@@ -1076,13 +1136,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const out: Subtitle[] = subs.map((s) => ({ ...s }));
     if (info?.subtitle_tracks && streamToken) {
       const enc = encodeURIComponent(streamToken);
-      // Mirror the play URL's `t=` so embedded subtitle cues stay in
-      // sync after a quality switch (which restarts ffmpeg at -ss N).
-      // Depending on streamOffsetSec also forces the <track> src to
-      // change, which is what triggers the browser to refetch.
-      const tParam = streamOffsetSec > 0
-        ? `&t=${Math.floor(streamOffsetSec)}`
-        : '';
+      // No `t=`: under HLS the cues are on the title's own timeline, as
+      // the media element's currentTime is, whatever rung is playing.
       // Skip bitmap/image subtitle codecs (PGS, DVB-sub, DVD-sub,
       // XSUB). ffmpeg can't transmux those to WebVTT — the encoder
       // bails with "Subtitle encoding currently only possible from
@@ -1108,14 +1163,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           label: '',
           title: t.title?.trim() || undefined,
           forced: t.forced,
-          url: `/api/v1/items/${itemId}/play/subtitles/${t.index}.vtt?stream=${enc}${tParam}`,
+          url: `/api/v1/items/${itemId}/play/subtitles/${t.index}.vtt?stream=${enc}`,
           default: t.default,
         });
       }
     }
     const labels = subtitleLabels(out);
     return out.map((s, i) => ({ ...s, label: labels[i] }));
-  }, [subs, info?.subtitle_tracks, itemId, streamToken, streamOffsetSec]);
+  }, [subs, info?.subtitle_tracks, itemId, streamToken]);
 
   // The default subtitle, decided once per playback when both track
   // lists and the audio language are known: OFF, unless the audio is in
@@ -1578,9 +1633,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // every tick — the array is short (typically ≤10 segments) so this
   // costs nothing.
   // Under HLS, v.currentTime IS the wall-clock movie position — hls.js
-  // maps segments to the global timeline via per-segment tfdt. The old
-  // streamOffsetSec offset (used when the URL itself carried `?t=`)
-  // stays at 0 in the HLS path.
+  // maps segments to the global timeline via per-segment tfdt, whatever
+  // rung or pipeline is playing.
   const displayedCurrent = current;
   const activeSegment = useMemo(() => {
     if (!segments.length) return null;
@@ -1871,9 +1925,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const targetSec = activeSegment.end_ms / 1000 + 0.25;
     reportEvent('skip_segment', { kind, from: displayedCurrent, to: targetSec });
     // Under HLS, v.currentTime is the canonical seek — hls.js will
-    // fetch the right segments. The old transcode-mode branch
-    // (setStreamOffsetSec + v.currentTime=0 so the URL rebuilt with
-    // -ss) is dead because the URL no longer encodes the offset.
+    // fetch the right segments.
     v.currentTime = targetSec;
   };
 
@@ -1890,11 +1942,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // one per unique error signature) so a fatal-retry storm doesn't
   // spam tickets, and it's fire-and-forget like reportEvent — a failed
   // submit must never affect playback. Reads position through the
-  // video element + offset ref because it's called from the hls
-  // effect's mount-time closure.
+  // video element because it's called from the hls effect's mount-time
+  // closure.
   const filePlayerReport = (tech: string, errName: string, message: string) => {
     const v = videoRef.current;
-    const positionSec = Math.floor((v?.currentTime ?? 0) + streamOffsetSecRef.current);
+    const positionSec = Math.floor(v?.currentTime ?? 0);
     void fileAutoReport({
       kind: 'player',
       errorName: errName,
@@ -1911,20 +1963,24 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   };
 
   // Unified stream-fault recovery. Called by BOTH onError (decode
-  // failures) and onEnded (premature EOF when ffmpeg truncated the
-  // output). Without this, the two handlers could race: onPause sets
-  // the "Reconnecting…" label, onError tries to set "Skipping bad
-  // frame…", onEnded tries to setStreamOffsetSec to (wall-1) — the
-  // last setState in the batch wins and the others appear to have
-  // never fired. Funneling both paths through one helper makes the
-  // sequencing explicit and dedups rapid re-firings (we observed
-  // onError firing repeatedly while a recovery was already pending,
-  // burning the recovery on a stale wall position).
+  // failures) and onEnded (premature EOF when the server truncated the
+  // stream).
+  // Without this, the two handlers could race: onPause sets the
+  // "Reconnecting…" label, onError tries to set "Skipping bad frame…",
+  // onEnded tries to restart at (wall-1) — the last setState in the
+  // batch wins and the others appear to have never fired. Funneling
+  // both paths through one helper makes the sequencing explicit and
+  // dedups rapid re-firings (we observed onError firing repeatedly
+  // while a recovery was already pending, burning the recovery on a
+  // stale wall position).
   //
-  // Reads `apiDurationSec` / `streamOffsetSec` through refs because
-  // it's called from useEffect-installed handlers whose closures
-  // capture mount-time state.
-  const lastFaultRecoveryAtRef = useRef(0);
+  // The recovery rebuilds the source and seeks the new one to the
+  // target (pendingSeekRef) — the old version set a stream offset the
+  // HLS URL no longer carried, so nothing happened. Reads
+  // `apiDurationSec` through a ref because it's called from
+  // useEffect-installed handlers whose closures capture mount-time
+  // state.
+  const lastFaultRef = useRef<{ at: number; target: number }>({ at: 0, target: -1 });
   const recoverFault = (
     reason: 'decode_error' | 'premature_eof',
     detail?: Record<string, unknown>,
@@ -1932,14 +1988,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const v = videoRef.current;
     if (!v) return;
     const now = Date.now();
-    if (now - lastFaultRecoveryAtRef.current < 2000) {
+    if (now - lastFaultRef.current.at < 2000) {
       reportEvent('fault_dedup', { reason, ...detail });
       // eslint-disable-next-line no-console
       console.log(`[player] fault_dedup: ${reason}`);
       return;
     }
-    const apiDur = apiDurationSecRef.current;
-    const off = streamOffsetSecRef.current;
     // Pick the best duration ceiling we have. apiDur (catalog/ffprobe)
     // is preferred but a real decode error can fire mid-playback before
     // it's populated (today: 2026-05-30 09:18 UTC, item def80e8e — the
@@ -1950,36 +2004,38 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // recover with no ceiling at all (small jump distances make this
     // safe — at worst we land past EOS and the natural end-of-stream
     // teardown kicks in).
-    let ceiling = apiDur;
+    let ceiling = apiDurationSecRef.current;
     if (ceiling <= 0 && Number.isFinite(v.duration) && v.duration > 0) {
-      ceiling = v.duration + off;
+      ceiling = v.duration;
       reportEvent('fault_apidur_fallback', { reason, source: 'video.duration', ceiling });
     } else if (ceiling <= 0) {
       reportEvent('fault_apidur_fallback', { reason, source: 'none', ceiling: 0 });
     }
-    const wall = (v.currentTime || 0) + off;
+    const wall = v.currentTime || 0;
     // decode_error → skip 1 s past the bad frame.
     // premature_eof → restart at wall - 1 s (small overlap so the
-    // new ffmpeg seek catches the next keyframe).
+    // new stream catches the next keyframe).
     const targetRaw = reason === 'decode_error'
       ? Math.floor(wall) + 1
       : Math.max(0, Math.floor(wall) - 1);
     const target = ceiling > 0 ? Math.min(targetRaw, Math.floor(ceiling) - 2) : targetRaw;
-    if (target <= off) {
+    const last = lastFaultRef.current.target;
+    if (target <= last) {
       // Would jump backwards or to the same position — that means we
       // already recovered to here. Don't loop.
-      reportEvent('fault_skip', { reason, wall, target, off });
+      reportEvent('fault_skip', { reason, wall, target, last });
       // eslint-disable-next-line no-console
-      console.log(`[player] fault_skip: ${reason} target=${target} <= off=${off}`);
+      console.log(`[player] fault_skip: ${reason} target=${target} <= last=${last}`);
       return;
     }
-    lastFaultRecoveryAtRef.current = now;
+    lastFaultRef.current = { at: now, target };
     setBuffering(true);
     setActionLabel(reason === 'decode_error' ? 'Skipping bad frame…' : 'Reconnecting…');
-    reportEvent('fault_recover', { reason, wall, target, off, ...detail });
+    reportEvent('fault_recover', { reason, wall, target, ...detail });
     // eslint-disable-next-line no-console
-    console.log(`[player] fault_recover: ${reason} wall=${wall.toFixed(2)} off=${off} → t=${target}`);
-    setStreamOffsetSec(target);
+    console.log(`[player] fault_recover: ${reason} wall=${wall.toFixed(2)} → t=${target}`);
+    pendingSeekRef.current = target;
+    setReloadKey((k) => k + 1);
   };
 
   const flushTelemetry = (final = false) => {
@@ -2057,7 +2113,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       if (hiddenMs < 15_000) return;
       const v = videoRef.current;
       if (!v) return;
-      const wall = (v.currentTime || 0) + streamOffsetSecRef.current;
+      const wall = v.currentTime || 0;
       if (wall > 1) pendingSeekRef.current = wall;
       // eslint-disable-next-line no-console
       console.log(`[player] tab-resume reload after ${(hiddenMs/1000).toFixed(1)}s @ wall=${wall.toFixed(1)}`);
@@ -2100,7 +2156,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const resumeParamRaw = qp.get('resume') ?? qp.get('autoresume');
     const resumeParam = resumeParamRaw != null ? Number(resumeParamRaw) : NaN;
     if (Number.isFinite(resumeParam) && resumeParam > 1) {
-      pendingSeekRef.current = resumeParam;
+      seekWhenReady(resumeParam);
       setResumeChecked(true);
       if (hadOneShotFlag) {
         try {
@@ -2122,9 +2178,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         if (startover || pos <= 30 || (total > 0 && pos >= total - 60)) {
           return;
         }
-        // The loadedmetadata listener consumes pendingSeekRef once the
-        // <video> is ready, so stash the offset and let it pick up.
-        pendingSeekRef.current = pos;
+        // Now if the source is already loaded (the position came after
+        // it), else at its loadedmetadata.
+        seekWhenReady(pos);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -2140,15 +2196,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return () => ctrl.abort();
   }, [token, itemId, apiDurationSec, resumeChecked]);
 
-  // Throttled save every 10s while we're actually playing. Uses
-  // displayedCurrent (account for stream offset after a quality switch
-  // or seek) so the resume value matches the wall-clock position.
+  // Throttled save every 10s while we're actually playing. Under HLS
+  // currentTime is the position in the title, whatever the rung.
   useEffect(() => {
     if (!token) return;
     const id = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.ended) return;
-      const pos = Math.floor((v.currentTime || 0) + streamOffsetSec);
+      const pos = Math.floor(v.currentTime || 0);
       const total = Math.floor(effectiveDuration);
       if (pos <= 0) return;
       fetch(`/api/v1/items/${itemId}/progress`, {
@@ -2162,9 +2217,19 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       }).catch(() => undefined);
     }, 10_000);
     return () => window.clearInterval(id);
-  }, [token, itemId, streamOffsetSec, effectiveDuration]);
+  }, [token, itemId, effectiveDuration]);
 
   // ---- Hard-stall watcher: video says "playing" but currentTime stays put ----
+  // Every 2 s; after 8 s without forward progress while playing, recover
+  // as lib/playback.ts stallAction says. A packaged title (one rendition;
+  // the server ignores ?q= for it) is retried in place - nudged where it
+  // stands, or its loading restarted there - and rebuilt only when that
+  // keeps failing, at the same quality, never as a forced transcode. A
+  // direct stream moves onto the transcode ladder at Medium. Whatever is
+  // rebuilt goes back to where it was: the old watcher recorded the
+  // position in an offset nothing applied, so a stalled film restarted
+  // at 0:00 - at q=medium the server ignored. Reads everything through
+  // refs: the interval lives for the whole mount.
   useEffect(() => {
     const id = window.setInterval(() => {
       const v = videoRef.current;
@@ -2174,61 +2239,61 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       if (Math.abs(v.currentTime - s.lastT) > 0.05) {
         s.lastT = v.currentTime;
         s.lastChange = now;
-        if (reconnecting) setReconnecting(false);
+        s.tries = 0;
+        if (reconnectingRef.current) setReconnecting(false);
         return;
       }
       if (s.lastChange === 0) {
         s.lastChange = now;
         return;
       }
-      // 8 seconds without forward progress while not paused — assume
-      // the pipeline got wedged. Toggle the reconnecting overlay, log
-      // the event, and force-reload the source. Re-setting
-      // streamOffsetSec to its current value triggers a playUrl
-      // rebuild. The server treats any ?t>0 as a transcode request
-      // (passthrough can't seek by time), so this also upgrades a
-      // bandwidth-starved passthrough/remux to a transcoded pipeline
-      // — that's what the user needs on an unstable connection
-      // because (a) ffmpeg input-seek resumes at the right wall time
-      // and (b) the quality switcher becomes available to step the
-      // bitrate down.
-      if (now - s.lastChange > 8000 && !reconnecting) {
-        setReconnecting(true);
-        reportEvent('stall_recover', {
-          position: v.currentTime + streamOffsetSec,
-          quality: streamQuality,
-          fromMode: info?.mode ?? 'unknown',
-        });
-        const wall = (v.currentTime || 0) + streamOffsetSec;
-        // Treat "info not loaded yet" the same as "mode != transcode":
-        // if we don't know we're already transcoding, the safe move is
-        // to downgrade. Skipping the downgrade branch when info is
-        // undefined left users stuck on the failing high-quality
-        // pipeline (today: 2026-05-30 09:17 UTC — stall_recover fired
-        // 5× in 3 minutes with fromMode="unknown" and the player never
-        // stepped down).
-        const knownTranscoding = info?.mode === 'transcode';
-        if (!knownTranscoding && !forceTranscode) {
-          // Flip the explicit flag too so the auto-downgrade onStall
-          // handler treats subsequent waits as transcode-mode stalls.
-          setForceTranscode(true);
-          // Start the recovery at a lower rung — the user has already
-          // hit a hard stall on the original bitrate.
-          setStreamQuality('medium');
-          setQualityNotice('Unstable connection — switching to adaptive streaming');
-          window.setTimeout(() => setQualityNotice(null), 5000);
-          recordSwitch(`→ Medium (auto, ${info?.mode ?? 'unknown'} → transcode)`, 'stall', `8s no progress @ ${fmt(wall)}`);
-        } else {
-          recordSwitch(`reconnecting`, 'stall', `8s no progress @ ${fmt(wall)}`);
-        }
-        setStreamOffsetSec(Math.max(0, wall - 2));
-        s.lastChange = now; // reset; the new src will start producing.
+      if (now - s.lastChange <= 8000) return;
+      s.lastChange = now; // look again in another 8 s
+      const mode = infoRef.current?.mode ?? null;
+      const hls = hlsRef.current;
+      const action = stallAction({
+        mode,
+        quality: streamQualityRef.current,
+        forcedTranscode: forceTranscodeRef.current,
+        positionSec: v.currentTime,
+        bufferedAheadSec: bufferedAheadOf(v),
+        loading: hls ? hls.loadingEnabled : true,
+        tries: s.tries,
+      });
+      setReconnecting(true);
+      reportEvent('stall_recover', {
+        position: v.currentTime,
+        quality: streamQualityRef.current,
+        fromMode: mode ?? 'unknown',
+        action: action.kind,
+      });
+      switch (action.kind) {
+        case 'wait':
+          return;
+        case 'resume-loading':
+          s.tries += 1;
+          hls?.startLoad(action.at);
+          return;
+        case 'nudge':
+          s.tries += 1;
+          try { v.currentTime = action.at; } catch { /* not seekable yet */ }
+          return;
+        case 'reload':
+          s.tries = 0;
+          if (action.at > 0.5) pendingSeekRef.current = action.at;
+          if (action.forceTranscode !== forceTranscodeRef.current) setForceTranscode(action.forceTranscode);
+          if (action.quality !== streamQualityRef.current) setStreamQuality(action.quality);
+          setReloadKey((k) => k + 1);
+          if (action.notice) {
+            setQualityNotice(action.notice);
+            window.setTimeout(() => setQualityNotice(null), 5000);
+          }
+          recordSwitch(action.label, 'stall', `8s no progress @ ${fmt(action.at)}`);
       }
     }, 2000);
     return () => window.clearInterval(id);
-    // reconnecting included so the cleared state takes effect; offset/
-    // quality so the closure picks up fresh values.
-  }, [reconnecting, streamQuality, streamOffsetSec]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cycle the funny loading message every 2s while we don't have enough
   // buffered data. Stops cycling once we're playing smoothly.
@@ -2257,9 +2322,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   }, [buffering, duration, effectiveMode]);
 
   // Auto-downgrade: if the stream stalls (`waiting` fires) three times
-  // within ~30 seconds, step down a rung. Works in transcode mode out
-  // of the box; for passthrough/remux we flip into forced-transcode
-  // mode first (the server upgrades the pipeline, ffmpeg can seek).
+  // within ~30 seconds, step down (lib/playback.ts downgradeStep): the
+  // transcode ladder a rung, a direct stream onto the ladder at Medium.
+  // A packaged title has one rendition and nothing to step down to - the
+  // switch only restarted it. The position is kept.
   const onStall = () => {
     if (!info) return;
     const now = performance.now();
@@ -2290,37 +2356,31 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       s.count += 1;
     }
     if (s.count < 3) return;
-    lastAutoDowngradeAtRef.current = now;
-    // In passthrough / remux: upgrade to transcode at medium quality
-    // and resume from the current position. No further work needed
-    // this tick — the next stall will step down again.
-    if (effectiveMode !== 'transcode') {
-      const wallTime = (videoRef.current?.currentTime ?? 0) + streamOffsetSec;
-      setForceTranscode(true);
-      setStreamQuality('medium');
-      setStreamOffsetSec(Math.max(0, wallTime - 2));
-      reportEvent('quality_switch', { from: info.mode, to: 'medium', manual: false, reason: 'bandwidth' });
-      recordSwitch(`→ Medium (auto, ${info.mode} → transcode)`, 'auto', `3 stalls in 30s @ ${fmt(wallTime)}`);
-      setQualityNotice('Slow connection — switching to adaptive streaming');
-      window.setTimeout(() => setQualityNotice(null), 4000);
-      s.count = 0;
-      return;
-    }
-    const idx = QUALITY_RUNGS.indexOf(streamQuality);
-    if (idx < 0 || idx >= QUALITY_RUNGS.length - 1) return;
-    const next = QUALITY_RUNGS[idx + 1];
-    // Resume from where we are. video.currentTime is relative to the
-    // current segment; add the offset back to get the wall-clock movie
-    // position.
-    const wallTime = (videoRef.current?.currentTime ?? 0) + streamOffsetSec;
-    setStreamOffsetSec(Math.max(0, wallTime - 2)); // 2s rewind to mask the restart
-    reportEvent('quality_switch', { from: streamQuality, to: next, manual: false });
-    recordSwitch(`→ ${labelForQuality(next)}`, 'auto', `3 stalls in 30s @ ${fmt(wallTime)}`);
-    setStreamQuality(next);
-    setQualityNotice(`Slow connection — switching to ${labelForQuality(next)}`);
-    window.setTimeout(() => setQualityNotice(null), 4000);
     s.count = 0;
     s.firstAt = 0;
+    const step = downgradeStep({ mode: info.mode, quality: streamQuality, forcedTranscode: forceTranscode });
+    if (!step) return;
+    lastAutoDowngradeAtRef.current = now;
+    const wallTime = v?.currentTime ?? 0;
+    keepPosition();
+    const onto = step.forceTranscode && !forceTranscode;
+    reportEvent('quality_switch', {
+      from: onto ? info.mode : streamQuality,
+      to: step.quality,
+      manual: false,
+      reason: 'bandwidth',
+    });
+    recordSwitch(
+      onto ? `→ ${labelForQuality(step.quality)} (auto, ${info.mode} → transcode)` : `→ ${labelForQuality(step.quality)}`,
+      'auto',
+      `3 stalls in 30s @ ${fmt(wallTime)}`,
+    );
+    if (onto) setForceTranscode(true);
+    setStreamQuality(step.quality);
+    setQualityNotice(
+      onto ? 'Slow connection — switching to adaptive streaming' : `Slow connection — switching to ${labelForQuality(step.quality)}`,
+    );
+    window.setTimeout(() => setQualityNotice(null), 4000);
   };
 
   // Verbose diagnostics. Attaches every standard HTMLMediaElement event,
@@ -2400,7 +2460,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       );
       reportEvent('media_error', {
         code: e.code, name: ERR(e.code), message: e.message,
-        t: v.currentTime, q: streamQuality,
+        t: v.currentTime, q: streamQualityRef.current,
       });
       if (e.code === 3) {
         recoverFault('decode_error', { msg: e.message });
@@ -2530,35 +2590,24 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return `${m}:${sec}`;
   };
 
+  // Under HLS every mode seeks the same way: currentTime is the position
+  // in the title and hls.js fetches the segments there. (The transcode
+  // branch here used to set a stream offset the URL no longer carried
+  // and send currentTime to 0 - a seek on the transcode ladder went back
+  // to the start.)
   const seekTo = (targetSec: number) => {
     const v = videoRef.current;
     if (!v || !effectiveDuration) return;
-    const clamped = Math.max(0, Math.min(effectiveDuration, targetSec));
-    if (effectiveMode === 'transcode') {
-      // We can't seek arbitrarily inside a fragmented MP4 that's still
-      // being produced. Restart the stream from the new offset — ffmpeg
-      // input-seeks the source file, so this is fast. Show the loading
-      // overlay IMMEDIATELY so the user sees feedback the moment they
-      // release the slider; onWaiting wouldn't fire until the new src
-      // is set + the first chunk arrives.
-      setBuffering(true);
-      setActionLabel(`Seeking to ${fmt(clamped)}…`);
-      setStreamOffsetSec(clamped);
-      v.currentTime = 0;
-    } else {
-      v.currentTime = clamped;
-    }
+    v.currentTime = Math.max(0, Math.min(effectiveDuration, targetSec));
   };
   const onSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!effectiveDuration) return;
     seekTo((parseFloat(e.target.value) / 100) * effectiveDuration);
   };
 
-  // Manual audio-track switch from the audio menu. Same restart-on-change
-  // story as quality: ffmpeg is producing a fragmented MP4 from a single
-  // audio map, so a different audio map needs a fresh process. Reuse the
-  // streamOffset / startSec mechanic so the user resumes at the same
-  // wall-clock time after the swap.
+  // Manual audio-track switch from the audio menu. Each source audio
+  // track is its own rendition in the master playlist, so hls.js
+  // switches in place — no rebuilt source, the position stays.
   const switchAudio = (idx: number) => {
     if (idx === streamAudioIdx) {
       setOpenMenu(null);
@@ -2588,26 +2637,6 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       }
     }
     setStreamAudioIdx(idx);
-    setOpenMenu(null);
-  };
-
-  // Switch back to the server's preferred Direct pipeline (passthrough
-  // or remux). The browser was playing a fragmented MP4 at some wall-
-  // clock offset; changing the src to the direct URL resets
-  // currentTime to 0, so stash the offset in pendingSeekRef and
-  // replay it in onLoadedMetadata. For passthrough, the seek issues a
-  // single Range request to the right byte offset.
-  const switchToDirect = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    const wallTime = (v.currentTime ?? 0) + streamOffsetSec;
-    setBuffering(true);
-    setActionLabel('Switching to Direct…');
-    reportEvent('quality_switch', { from: streamQuality, to: 'direct', manual: true });
-    recordSwitch(`→ Direct (${info?.video_codec?.toUpperCase() ?? '?'})`, 'manual', `at ${fmt(wallTime)}`);
-    pendingSeekRef.current = wallTime;
-    setForceTranscode(false);
-    setStreamOffsetSec(0);
     setOpenMenu(null);
   };
 
@@ -2709,7 +2738,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             let endSec = 0;
             for (let i = 0; i < v.buffered.length; i++) {
               if (v.currentTime >= v.buffered.start(i) && v.currentTime <= v.buffered.end(i)) {
-                endSec = v.buffered.end(i) + streamOffsetSecRef.current;
+                endSec = v.buffered.end(i);
                 break;
               }
             }
@@ -2725,7 +2754,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           let endSec = 0;
           for (let i = 0; i < v.buffered.length; i++) {
             if (v.currentTime >= v.buffered.start(i) && v.currentTime <= v.buffered.end(i)) {
-              endSec = v.buffered.end(i) + streamOffsetSecRef.current;
+              endSec = v.buffered.end(i);
               break;
             }
           }
@@ -2735,14 +2764,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         }}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration);
-          // If we asked the browser to land at a specific wall-clock
-          // time after a Direct-mode switch, replay it now that the
-          // metadata is loaded — for passthrough this issues one
-          // Range request to the right byte offset.
-          const pending = pendingSeekRef.current;
-          if (pending != null && isFinite(pending) && pending > 0) {
-            try { e.currentTarget.currentTime = pending; } catch { /* ignore */ }
-            pendingSeekRef.current = null;
+          // A rebuilt source (a quality or caps switch, a stall, a fault,
+          // a resumed tab) goes back to where the old one was; the first
+          // source to a resume position. hls.js was given the position
+          // as its startPosition and may be there already.
+          const target = restorePosition(pendingSeekRef.current, e.currentTarget.duration);
+          pendingSeekRef.current = null;
+          if (target != null && Math.abs(e.currentTarget.currentTime - target) > 0.5) {
+            try { e.currentTarget.currentTime = target; } catch { /* ignore */ }
           }
           // Re-apply the user-chosen playback rate after a src swap —
           // the browser resets video.playbackRate to 1 whenever the
@@ -2776,7 +2805,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           // truncated duration, and the browser fires `ended`. Defer
           // to recoverFault, which de-dupes with any onError that
           // fired in the same moment.
-          const wall = (v.currentTime || 0) + streamOffsetSec;
+          const wall = v.currentTime || 0;
           if (apiDurationSec > 0 && apiDurationSec - wall > 60) {
             recoverFault('premature_eof', { seen: v.duration, expected: apiDurationSec });
           }
@@ -3303,19 +3332,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                     return (
                       <button
                         key={`ch-${i}`}
-                        onClick={() => {
-                          const v = videoRef.current;
-                          if (!v || !effectiveDuration) return;
-                          const targetSec = s.start_ms / 1000;
-                          if (effectiveMode === 'transcode') {
-                            setBuffering(true);
-                            setActionLabel(`Seeking to chapter…`);
-                            setStreamOffsetSec(targetSec);
-                            v.currentTime = 0;
-                          } else {
-                            v.currentTime = targetSec;
-                          }
-                        }}
+                        onClick={() => seekTo(s.start_ms / 1000)}
                         title={(() => { const lbl = segmentDisplayLabel(s); return (lbl ? `${lbl} · ` : '') + fmt(s.start_ms / 1000); })()}
                         className="absolute top-0 h-full w-[2px] bg-white/80 hover:bg-white hover:w-[3px] transition-all"
                         style={{ left: `${left}%` }}
