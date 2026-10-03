@@ -3,6 +3,7 @@ import * as Icons from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useExtensions, type Extension } from '../hooks/useExtensions';
 import { useAuth } from 'react-oidc-context';
+import { slotLinkHref, substitute } from '../lib/extensions';
 
 interface ExtensionSlotProps {
   slot: string;
@@ -21,26 +22,30 @@ function lucideByName(name: string): LucideIcon {
   return Icons.Puzzle;
 }
 
-// substitute replaces {var} tokens in a url with encoded values.
-function substitute(url: string, vars: Record<string, string>): string {
-  return url.replace(/\{(\w+)\}/g, (_, k: string) =>
-    k in vars ? encodeURIComponent(vars[k]) : '',
-  );
-}
-
 /**
  * ExtensionSlot renders the addon-contributed buttons for a named slot as
- * NATIVE chino buttons. A `link` navigates to its (var-substituted) url; an
- * `action` POSTs to it with the user's bearer. Renders nothing when no addon
- * contributes — the neutral-core property.
+ * NATIVE chino buttons. A `link` navigates to its (var-substituted) url —
+ * only an http(s) page of this instance's own origin; a row pointing
+ * anywhere else renders nothing. An `action` POSTs to it with the user's
+ * bearer. Renders nothing when no addon contributes — the neutral-core
+ * property.
  */
 export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
   const exts = useExtensions(slot);
   const auth = useAuth();
 
   const buttons = useMemo(
-    () => exts.filter((e) => e.enabled && e.label && e.url),
-    [exts],
+    () =>
+      exts
+        .filter((e) => e.enabled && e.label && e.url)
+        .map((e) => ({
+          ext: e,
+          href: e.kind === 'link' ? slotLinkHref(e.url, window.location.href, vars) : null,
+        }))
+        .filter((b) => b.ext.kind !== 'link' || b.href !== null),
+    // vars is a fresh object each render; its values are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [exts, JSON.stringify(vars)],
   );
   if (buttons.length === 0) return null;
 
@@ -57,13 +62,13 @@ export function ExtensionSlot({ slot, vars = {} }: ExtensionSlotProps) {
 
   return (
     <div className="flex flex-wrap gap-2 mt-4">
-      {buttons.map((e) => {
+      {buttons.map(({ ext: e, href }) => {
         const Icon = lucideByName(e.icon);
         const cls =
           'px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2';
-        if (e.kind === 'link') {
+        if (e.kind === 'link' && href) {
           return (
-            <a key={e.key} href={substitute(e.url, vars)} className={cls}>
+            <a key={e.key} href={href} className={cls}>
               <Icon className="w-4 h-4" />
               {e.label}
             </a>
