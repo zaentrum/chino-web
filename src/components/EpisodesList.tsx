@@ -194,29 +194,15 @@ function EpisodeRow({
 
   const open = () => window.location.assign(toApp(`/player/${encodeURIComponent(ep.id)}`));
 
-  // The outer is a div + role=button so we can host real <button>
-  // elements inside (watched toggle). Native <button> nesting is
-  // invalid HTML and React warns about it. Keyboard handler covers
-  // Enter / Space for the same parity as the previous <button>.
+  // The row itself is not interactive: it holds three buttons side by side
+  // and none inside another. Playing is the button around the episode's
+  // code and title, stretched over the whole row by its ::after (so a tap
+  // anywhere on the row still plays); the watched and add-to-list buttons
+  // sit above that layer (z-10), the open picker above them all.
   return (
     <div
       ref={rowRef}
-      role="button"
-      tabIndex={0}
-      aria-current={focused ? 'true' : undefined}
-      onClick={open}
-      onKeyDown={(e) => {
-        // Only when the ROW itself is the focused target — keys inside
-        // nested controls (the add-to-list picker's "New list" input,
-        // the overlay buttons) bubble here and must not hijack Enter /
-        // Space into opening the player.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          open();
-        }
-      }}
-      className={`w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 transition-colors group cursor-pointer focus:outline-none focus:bg-chino-surface-2 ${
+      className={`relative w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 focus-within:bg-chino-surface-2 transition-colors group ${
         focused ? 'bg-chino-surface-2 ring-1 ring-inset ring-chino-accent' : ''
       }`}
     >
@@ -246,18 +232,17 @@ function EpisodeRow({
 
         {/* Watched toggle. Always rendered so a watched episode keeps a
             visible green check; on unwatched rows it stays hidden until
-            hover (or focus, for keyboard users). Click swallows the
-            row's open handler so the user toggles instead of opening
+            hover (or focus, for keyboard users). It sits above the row's
+            stretched play button, so a click toggles instead of opening
             the player. */}
         <button
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
+          onClick={() => {
             const next = !watched;
             setWatchedOverride(next);
             void toggleWatched(ep.id, next);
           }}
-          className={`absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity ${
+          className={`absolute z-10 top-1.5 right-1.5 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity ${
             watched
               ? 'bg-chino-green/95 hover:bg-chino-green opacity-100'
               : 'bg-black/60 hover:bg-black/80 opacity-0 group-hover:opacity-100 focus:opacity-100'
@@ -275,16 +260,13 @@ function EpisodeRow({
 
         {/* Add-to-list. Same overlay idiom as the watched toggle: hidden
             until hover/focus (pinned visible while its picker is open),
-            stopPropagation so the click doesn't open the player. Sits
-            left of the watched toggle. */}
+            above the stretched play button so the click doesn't open the
+            player. Sits left of the watched toggle. */}
         <button
           ref={pickerTriggerRef}
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setPickerOpen((v) => !v);
-          }}
-          className={`absolute top-1.5 right-9 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity bg-black/60 hover:bg-black/80 ${
+          onClick={() => setPickerOpen((v) => !v)}
+          className={`absolute z-10 top-1.5 right-9 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity bg-black/60 hover:bg-black/80 ${
             pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
           }`}
           title="Add to list…"
@@ -322,10 +304,21 @@ function EpisodeRow({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-3">
-          <span className="text-chino-accent text-sm font-medium">{epLabel}</span>
-          <span className={`font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
-            {ep.title}
-          </span>
+          {/* Not positioned itself, so its ::after (absolute, inset-0)
+              covers the row, the nearest positioned ancestor. Its name is
+              "Play S01E01 <title>". */}
+          <button
+            type="button"
+            onClick={open}
+            aria-current={focused ? 'true' : undefined}
+            className="min-w-0 flex items-baseline gap-3 text-left focus:outline-none after:absolute after:inset-0"
+          >
+            <span className="sr-only">Play </span>
+            <span className="text-chino-accent text-sm font-medium shrink-0">{epLabel}</span>{' '}
+            <span className={`font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
+              {ep.title}
+            </span>
+          </button>
           {runtimeMin ? (
             <span className="text-chino-muted text-xs ml-auto shrink-0">{runtimeMin}m</span>
           ) : null}
