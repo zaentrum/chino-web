@@ -138,6 +138,7 @@ export function usePerson(personId: string | undefined, limit = 100) {
   const [error, setError] = useState<Error | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [attempt, setAttempt] = useState(0); // retry() asks again
 
   useEffect(() => {
     if (!personId || auth.isLoading || !auth.isAuthenticated) return;
@@ -189,7 +190,9 @@ export function usePerson(personId: string | undefined, limit = 100) {
       .finally(() => setLoading(false));
     return () => ctrl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [personId, limit, auth.isAuthenticated, auth.isLoading, streamToken]);
+  }, [personId, limit, auth.isAuthenticated, auth.isLoading, streamToken, attempt]);
 
-  return { data, error, notFound, loading };
+  const retry = () => setAttempt((a) => a + 1);
+
+  return { data, error, notFound, loading, retry };
 }

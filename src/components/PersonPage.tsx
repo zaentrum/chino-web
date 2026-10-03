@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { MediaCard } from './MediaCard';
 import { MetaItem } from './MetaItem';
 import { PersonAvatar } from './PersonAvatar';
+import { StatusPage } from './StatusPage';
 import { usePerson, type PersonDetail } from '../hooks/usePeople';
 import { toApp } from '../lib/basepath';
 import { formatRoles } from '../lib/credits';
@@ -25,24 +26,37 @@ interface PersonPageProps {
  * client-side re-ranking.
  */
 export function PersonPage({ personId }: PersonPageProps) {
-  const { data, notFound, loading } = usePerson(personId);
+  const { data, error, notFound, loading, retry } = usePerson(personId);
 
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
       </div>
     );
   }
 
-  if (notFound || !data) {
+  // Not there, or not loaded: a failed request used to read "Person not
+  // found." as well.
+  if (notFound) {
     return (
-      <div className="min-h-screen bg-chino-bg text-white">
-        <BackButton />
-        <div className="max-w-6xl mx-auto px-6 py-24 text-center text-chino-muted">
-          <p className="text-lg">Person not found.</p>
-        </div>
-      </div>
+      <StatusPage
+        title="Person not found"
+        message="There's no one at this address in the library. The link may be wrong, or the person's titles have been removed."
+      />
+    );
+  }
+  if (!data) {
+    return (
+      <StatusPage
+        title="Couldn't load this person"
+        message={
+          error
+            ? "The catalog didn't answer. Check your connection, or try again in a moment."
+            : 'Nothing came back for this person. Try again in a moment.'
+        }
+        onRetry={retry}
+      />
     );
   }
 
