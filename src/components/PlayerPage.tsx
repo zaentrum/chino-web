@@ -1525,6 +1525,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // the effect itself only re-binds on `playing` changes.
   const chromeVisibleRef = useRef(chromeVisible);
   useEffect(() => { chromeVisibleRef.current = chromeVisible; }, [chromeVisible]);
+  // The pointer of the last press on the player: a click on the video
+  // plays or pauses only with a mouse (below).
+  const lastPointerTypeRef = useRef('');
   // openMenu read via ref inside the auto-hide handler so we don't
   // have to re-bind the listeners every time a menu opens. Same anti-
   // loop pattern as chromeVisibleRef.
@@ -1550,6 +1553,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const el = wrapRef.current;
     if (!el) return;
     const onPointer = (e: PointerEvent) => {
+      lastPointerTypeRef.current = e.pointerType;
       // Mouse hover → just reveal (don't toggle).
       if (e.pointerType === 'mouse') { showChrome(); return; }
       // Touch / pen: if chrome already visible AND the tap is on the
@@ -3026,8 +3030,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             e.currentTarget.play().catch(() => undefined);
           }
         }}
+        // A mouse click on the picture plays or pauses, as on any desktop
+        // player. A tap does not: on a phone the tap is how the controls
+        // come up (and go away again) — the pointerdown handler above does
+        // that — and the tap that showed them also paused the film.
         onClick={() => {
-          userTogglePlay();
+          if (lastPointerTypeRef.current === 'mouse') userTogglePlay();
         }}
       >
         {/* Only render ACTIVE subtitles as <track> elements. Chrome
