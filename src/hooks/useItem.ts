@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
 import { useCatalogGen } from './useCatalogEvents';
+import { isNotFoundStatus } from '../lib/reportPolicy';
 
 export interface CastEntry {
   // katalog-api now carries the catalogue person id on each cast/crew
@@ -59,9 +60,18 @@ export interface ItemDetail extends KatalogItem {
 }
 
 /**
+ * What became of the request: still on its way, the item, no such item
+ * (404, 410, or an id that is not one: 400), or a failure — the catalog
+ * did not answer, or answered with an error.
+ */
+export type ItemStatus = 'loading' | 'ok' | 'not-found' | 'error';
+
+/**
  * Fetch a single catalogue entry by id. Used by the detail page —
  * separate from `useItems` so each item lookup is independent and the
- * player page can reuse it.
+ * player page can reuse it. Tells "not there" from "not loaded" in
+ * `status`, so the page can say which instead of spinning forever, and
+ * `retry` asks again.
  */
 export function useItem(itemId: string | undefined) {
   const auth = useAuth();
@@ -72,6 +82,8 @@ export function useItem(itemId: string | undefined) {
   const gen = useCatalogGen();
   const [data, setData] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<ItemStatus>('loading');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!itemId || auth.isLoading || !auth.isAuthenticated) return;
@@ -81,10 +93,15 @@ export function useItem(itemId: string | undefined) {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
     })
-      .then((r) => (r.ok ? (r.json() as Promise<ItemDetail>) : null))
+      .then((r) => {
+        if (r.status === 400 || isNotFoundStatus(r.status)) return null;
+        if (!r.ok) throw new Error(`chino-api ${r.status}`);
+        return r.json() as Promise<ItemDetail>;
+      })
       .then((j) => {
         if (!j) {
           setData(null);
+          setStatus('not-found');
           return;
         }
         // Long-lived stream token in image URLs so silent renews
@@ -95,10 +112,23 @@ export function useItem(itemId: string | undefined) {
           poster_url: j.poster_url && enc ? `${j.poster_url}?stream=${enc}` : j.poster_url,
           backdrop_url: j.backdrop_url && enc ? `${j.backdrop_url}?stream=${enc}` : j.backdrop_url,
         });
+        setStatus('ok');
       })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (ctrl.signal.aborted || (e as Error).name === 'AbortError') return;
+        // A refetch that failed leaves the item on screen as it was.
+        setStatus((s) => (s === 'ok' ? s : 'error'));
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
-  }, [itemId, auth.isAuthenticated, auth.isLoading, streamToken, gen]);
+  }, [itemId, auth.isAuthenticated, auth.isLoading, streamToken, gen, attempt]);
 
-  return { data, loading };
+  const retry = () => {
+    setStatus((s) => (s === 'ok' ? s : 'loading'));
+    setAttempt((a) => a + 1);
+  };
+
+  return { data, loading, status, retry };
 }

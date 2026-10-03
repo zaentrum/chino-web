@@ -18,6 +18,7 @@ import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
 import { MediaRow } from './MediaRow';
+import { StatusPage } from './StatusPage';
 
 interface DetailPageProps {
   itemId: string;
@@ -31,7 +32,7 @@ interface DetailPageProps {
  */
 export function DetailPage({ itemId }: DetailPageProps) {
   const auth = useAuth();
-  const { data, loading } = useItem(itemId);
+  const { data, loading, status, retry } = useItem(itemId);
   // Live refresh generation — bumps on catalog changes and on a bfcache
   // Back restore. Wired into the resume-position effect below so the
   // header Resume button refetches alongside the CW-driven row state
@@ -128,10 +129,30 @@ export function DetailPage({ itemId }: DetailPageProps) {
     }
   }, [redirectEpisodeId, itemId]);
 
+  // Not there, or not loaded: say which, with a way back — not a
+  // spinner that never stops.
+  if (status === 'not-found') {
+    return (
+      <StatusPage
+        title="Title not found"
+        message="There's no title at this address in the library. The link may be wrong, or the title has been removed."
+      />
+    );
+  }
+  if (status === 'error' && !data) {
+    return (
+      <StatusPage
+        title="Couldn't load this title"
+        message="The catalog didn't answer. Check your connection, or try again in a moment."
+        onRetry={retry}
+      />
+    );
+  }
+
   if (loading || !data || redirectEpisodeId) {
     return (
       <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
+        <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
       </div>
     );
   }
