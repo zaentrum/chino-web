@@ -12,7 +12,7 @@ import { useCatalogGen } from '../hooks/useCatalogEvents';
 import { AddToListPicker } from './AddToListPicker';
 import { EpisodesList, type EpisodeProgress } from './EpisodesList';
 import { FadeImage } from './FadeImage';
-import { CastNames } from './Credits';
+import { CastNames, Starring } from './Credits';
 import { MetaItem } from './MetaItem';
 import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
@@ -156,8 +156,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
 
   // The actors, and the rest of the credits by role ("Created by",
   // "Directors", "Music", …) in the order lib/credits.ts lists them.
-  const { actors: allActors, crew } = groupCredits(data.cast);
-  const actors = allActors.slice(0, 5);
+  const { actors, crew } = groupCredits(data.cast);
   const trailer = pickTrailer(data.trailers);
 
   return (
@@ -349,13 +348,11 @@ export function DetailPage({ itemId }: DetailPageProps) {
               <p className="text-chino-muted italic">No description available.</p>
             )}
 
-            {/* Meta strip: cast, the crew by role, subtitles */}
-            <div className="mt-6 grid sm:grid-cols-2 gap-4 max-w-3xl text-sm">
-              {actors.length > 0 ? (
-                <MetaItem label="Starring">
-                  <CastNames people={actors} />
-                </MetaItem>
-              ) : null}
+            {/* Meta strip: cast, the crew by role, subtitles. Two columns
+                on a phone too: a film credits half a dozen roles now, and
+                one block per row made the strip twice as long. */}
+            <div className="mt-6 grid grid-cols-2 gap-4 max-w-3xl text-sm">
+              {actors.length > 0 ? <Starring actors={actors} /> : null}
               {crew.map((group) => (
                 <MetaItem key={group.role} label={group.label}>
                   <CastNames people={group.people} />
