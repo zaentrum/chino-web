@@ -4,6 +4,7 @@ import { PersonAvatar } from './PersonAvatar';
 import { useItems } from '../hooks/useItems';
 import { usePeople, type PersonSummary } from '../hooks/usePeople';
 import { toApp } from '../lib/basepath';
+import { searchHeadline } from '../lib/search';
 import { ExtensionSlot } from './ExtensionSlot';
 
 interface SearchPageProps {
@@ -51,12 +52,15 @@ export function SearchPage({ query }: SearchPageProps) {
   const peopleList: PersonSummary[] = people.data?.people ?? [];
   const total = items.length;
 
-  const headline = useMemo(() => {
-    if (!query) return 'Search the library';
-    if (loading) return `Searching for "${query}"…`;
-    if (catalogError) return `Couldn't search for "${query}"`;
-    return total > 0 ? `${total} result${total === 1 ? '' : 's'} for "${query}"` : `No results for "${query}"`;
-  }, [query, total, loading, catalogError]);
+  // People count as results too, and the headline waits for their search
+  // as well, so it does not say "No results" above a "Cast & crew" card.
+  const headline = searchHeadline({
+    query,
+    titles: total,
+    people: peopleList.length,
+    loading: loading || people.loading,
+    failed: !!catalogError,
+  });
 
   const openPerson = (id: string) => {
     window.location.assign(toApp(`/person/${encodeURIComponent(id)}`));
