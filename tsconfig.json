@@ -19,5 +19,8 @@
     "allowSyntheticDefaultImports": true,
     "useDefineForClassFields": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  // Unit tests run under node --test (Node strips the types), not in the
+  // app's program.
+  "exclude": ["src/**/*.test.ts"]
 }

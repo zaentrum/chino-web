@@ -10,7 +10,18 @@ export interface CastEntry {
   // Absent for un-linked credits — the UI skips the link in that case.
   person_id?: string;
   name: string;
+  // An open token: actor, creator, director, writer, producer, composer,
+  // cinematographer, editor, or any other (lib/credits.ts names them).
+  // katalog-api sends the credits role by role, in that order, and within a
+  // role in billing order.
   role?: string;
+  // The job within the role ("Screenplay"), the part an actor plays, the
+  // billing order within the role (0 first) and how many episodes of a
+  // series the credit covers. Each is omitted when unknown.
+  job?: string;
+  character?: string;
+  order?: number;
+  episode_count?: number;
 }
 
 export interface SubtitleRef {

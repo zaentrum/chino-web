@@ -4,7 +4,7 @@ import { ArrowLeft, Check, ChevronDown, Eye, Heart, House, Loader2, Play, Plus, 
 import { useLikes, useWatchlist } from '../hooks/useUserFlags';
 import { useMemberships } from '../hooks/useWatchlists';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
-import { useItem, type CastEntry } from '../hooks/useItem';
+import { useItem } from '../hooks/useItem';
 import { useSeriesEpisodes } from '../hooks/useSeriesEpisodes';
 import { useSimilarItems } from '../hooks/useSimilarItems';
 import { useContinueWatching } from '../hooks/useContinueWatching';
@@ -12,7 +12,10 @@ import { useCatalogGen } from '../hooks/useCatalogEvents';
 import { AddToListPicker } from './AddToListPicker';
 import { EpisodesList, type EpisodeProgress } from './EpisodesList';
 import { FadeImage } from './FadeImage';
+import { CastNames } from './Credits';
+import { MetaItem } from './MetaItem';
 import { toApp } from '../lib/basepath';
+import { groupCredits } from '../lib/credits';
 import { MediaRow } from './MediaRow';
 
 interface DetailPageProps {
@@ -151,8 +154,10 @@ export function DetailPage({ itemId }: DetailPageProps) {
       : `${runtimeMin}m`
     : null;
 
-  const directors = (data.cast ?? []).filter((c) => c.role === 'director');
-  const actors = (data.cast ?? []).filter((c) => !c.role || c.role === 'actor').slice(0, 5);
+  // The actors, and the rest of the credits by role ("Created by",
+  // "Directors", "Music", …) in the order lib/credits.ts lists them.
+  const { actors: allActors, crew } = groupCredits(data.cast);
+  const actors = allActors.slice(0, 5);
   const trailer = pickTrailer(data.trailers);
 
   return (
@@ -344,37 +349,29 @@ export function DetailPage({ itemId }: DetailPageProps) {
               <p className="text-chino-muted italic">No description available.</p>
             )}
 
-            {/* Meta strip: cast + subtitles */}
+            {/* Meta strip: cast, the crew by role, subtitles */}
             <div className="mt-6 grid sm:grid-cols-2 gap-4 max-w-3xl text-sm">
               {actors.length > 0 ? (
-                <div>
-                  <div className="text-chino-muted mb-1">Starring</div>
-                  <div className="text-chino-text"><CastNames people={actors} /></div>
-                </div>
+                <MetaItem label="Starring">
+                  <CastNames people={actors} />
+                </MetaItem>
               ) : null}
-              {directors.length > 0 ? (
-                <div>
-                  <div className="text-chino-muted mb-1">{directors.length > 1 ? 'Directors' : 'Director'}</div>
-                  <div className="text-chino-text"><CastNames people={directors} /></div>
-                </div>
-              ) : null}
+              {crew.map((group) => (
+                <MetaItem key={group.role} label={group.label}>
+                  <CastNames people={group.people} />
+                </MetaItem>
+              ))}
               {data.subtitles && data.subtitles.length > 0 ? (
-                <div>
-                  <div className="text-chino-muted mb-1">Subtitles</div>
-                  <div className="text-chino-text">
-                    {Array.from(new Set(data.subtitles.map((s) => s.label || s.lang).filter(Boolean))).join(', ')}
-                  </div>
-                </div>
+                <MetaItem label="Subtitles">
+                  {Array.from(new Set(data.subtitles.map((s) => s.label || s.lang).filter(Boolean))).join(', ')}
+                </MetaItem>
               ) : null}
               {data.segments && data.segments.count > 0 ? (
-                <div>
-                  <div className="text-chino-muted mb-1">Analyzed</div>
-                  <div className="text-chino-text">
-                    {[data.segments.has_intro && 'Intro', data.segments.has_credits && 'Credits', data.segments.has_recap && 'Recap']
-                      .filter(Boolean)
-                      .join(' · ') || 'Segments available'}
-                  </div>
-                </div>
+                <MetaItem label="Analyzed">
+                  {[data.segments.has_intro && 'Intro', data.segments.has_credits && 'Credits', data.segments.has_recap && 'Recap']
+                    .filter(Boolean)
+                    .join(' · ') || 'Segments available'}
+                </MetaItem>
               ) : null}
             </div>
           </div>
@@ -408,34 +405,6 @@ export function DetailPage({ itemId }: DetailPageProps) {
         ) : null}
       </div>
     </div>
-  );
-}
-
-/**
- * Comma-separated cast / crew names. Each name that carries a person_id
- * becomes a link to the Person surface (`/person/{id}` under the app's
- * mount, like search's links); names without a person_id render as plain
- * text. The separators stay outside the link so only the name is tappable.
- */
-function CastNames({ people }: { people: CastEntry[] }) {
-  return (
-    <>
-      {people.map((p, i) => (
-        <span key={`${p.person_id ?? p.name}-${i}`}>
-          {i > 0 ? ', ' : ''}
-          {p.person_id ? (
-            <a
-              href={toApp(`/person/${encodeURIComponent(p.person_id)}`)}
-              className="hover:text-chino-accent hover:underline transition-colors"
-            >
-              {p.name}
-            </a>
-          ) : (
-            p.name
-          )}
-        </span>
-      ))}
-    </>
   );
 }
 
