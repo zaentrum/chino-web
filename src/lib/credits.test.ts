@@ -1,8 +1,9 @@
 // node --test (type stripping, Node >= 22.18): the pure helpers behind the
-// detail page's credits. Excluded from the app's tsc program.
+// detail page's credits and the person page's roles. Excluded from the app's
+// tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { creditLabel, groupCredits, roleOf, titleizeRole } from './credits.ts';
+import { creditLabel, formatRoles, groupCredits, roleName, roleOf, titleizeRole } from './credits.ts';
 
 const credit = (name: string, role?: string, extra: Record<string, unknown> = {}) => ({
   person_id: `id-${name}`,
@@ -142,4 +143,17 @@ test('titleizeRole splits on hyphens, underscores and spaces', () => {
 test('roleOf', () => {
   assert.equal(roleOf({}), 'actor');
   assert.equal(roleOf({ role: 'Composer' }), 'composer');
+});
+
+test('a person’s roles on a title are named once each, in the order given', () => {
+  assert.equal(formatRoles(['director']), 'Director');
+  assert.equal(formatRoles(['director', 'writer']), 'Director · Writer');
+  assert.equal(formatRoles(['actor', 'composer', 'sound-designer']), 'Actor · Composer · Sound Designer');
+  assert.equal(formatRoles(['writer', 'WRITER']), 'Writer');
+  assert.equal(formatRoles(['', ' ']), '');
+  assert.equal(formatRoles([]), '');
+  assert.equal(formatRoles(undefined), '');
+  assert.equal(roleName('cinematographer'), 'Cinematographer');
+  assert.equal(roleName('creator'), 'Creator');
+  assert.equal(roleName('constructor'), 'Constructor');
 });

@@ -34,6 +34,10 @@ interface MediaCardProps {
   // linger until the next refetch. Browse / Search / Watchlist leave it
   // undefined so the green watched ✓ badge appears on the card instead.
   dropWhenWatched?: boolean;
+  // A line under the year/rating naming someone's credit on the title —
+  // the person page's filmography sets it ("Director · Writer"). Cards
+  // without it look as they always have.
+  credit?: string;
 }
 
 /**
@@ -49,7 +53,7 @@ interface MediaCardProps {
  * Each button uses stopPropagation so a click on it doesn't also fall
  * through to the body's openDetail handler.
  */
-export function MediaCard({ id, title, image, year, rating, type, episode, progress, watchedAt, onRemoveFromContinueWatching, dropWhenWatched }: MediaCardProps) {
+export function MediaCard({ id, title, image, year, rating, type, episode, progress, watchedAt, onRemoveFromContinueWatching, dropWhenWatched, credit }: MediaCardProps) {
   const watchlist = useWatchlist();
   // "in >=1 list" drives the saved badge + filled icon; the legacy
   // default-list flag drives the single-tap add.
@@ -337,6 +341,11 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
             )}
           </div>
         )}
+        {credit ? (
+          <div className="mt-1 text-xs text-chino-muted line-clamp-2" title={credit}>
+            {credit}
+          </div>
+        ) : null}
       </div>
     </div>
   );

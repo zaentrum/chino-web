@@ -5,6 +5,7 @@ import { MetaItem } from './MetaItem';
 import { PersonAvatar } from './PersonAvatar';
 import { usePerson, type PersonDetail } from '../hooks/usePeople';
 import { toApp } from '../lib/basepath';
+import { formatRoles } from '../lib/credits';
 import { ageInYears, formatCatalogDate, todayCatalogDate } from '../lib/people';
 
 interface PersonPageProps {
@@ -18,7 +19,7 @@ interface PersonPageProps {
  * count, then what the catalog knows about them — known for, born, died —
  * and the biography; body = a grid of the person's titles, rendered with
  * the same MediaCard / grid the Browse and Watchlist surfaces use (watched /
- * saved badges, tap → detail).
+ * saved badges, tap → detail), each naming the person's roles on it.
  *
  * The filmography is rendered in the order katalog-api returns it — no
  * client-side re-ranking.
@@ -116,6 +117,7 @@ export function PersonPage({ personId }: PersonPageProps) {
                 rating={it.rating ? it.rating.toFixed(1) : undefined}
                 type={it.type === 'series' ? 'series' : 'movie'}
                 watchedAt={it.watched_at}
+                credit={formatRoles(it.roles) || undefined}
               />
             ))}
           </div>

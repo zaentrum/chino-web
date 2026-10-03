@@ -73,6 +73,12 @@ export function usePeople(q?: string, limit = 12) {
   return { data, error, loading };
 }
 
+/** A title on a person's filmography: a catalogue item, and the person's
+ *  roles on it in katalog-api's credit order (["director", "writer"]). */
+export interface PersonCredit extends KatalogItem {
+  roles?: string[];
+}
+
 export interface PersonDetail {
   id: string;
   name: string;
@@ -95,7 +101,7 @@ export interface PersonDetail {
   biography_lang?: string;
   tmdb_person_id?: string;
   imdb_id?: string;
-  items: KatalogItem[];
+  items: PersonCredit[];
 }
 
 /**

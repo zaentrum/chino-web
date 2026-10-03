@@ -1,5 +1,6 @@
-// A title's credits as the detail page shows them: the actors, then the crew
-// grouped by role under a label. Pure: credits.test.ts runs it under node --test.
+// A title's credits as the detail page shows them — the actors, then the crew
+// grouped by role under a label — and a person's roles on a title as the
+// person page names them. Pure: credits.test.ts runs it under node --test.
 import type { CastEntry } from '../hooks/useItem';
 
 /**
@@ -28,6 +29,18 @@ const GROUP_LABELS = new Map<string, [string, string]>([
   ['composer', ['Music', 'Music']],
   ['cinematographer', ['Cinematography', 'Cinematography']],
   ['editor', ['Editor', 'Editors']],
+]);
+
+/** A person's role on a title, as a filmography card names it. */
+const ROLE_NAMES = new Map<string, string>([
+  ['actor', 'Actor'],
+  ['creator', 'Creator'],
+  ['director', 'Director'],
+  ['writer', 'Writer'],
+  ['producer', 'Producer'],
+  ['composer', 'Composer'],
+  ['cinematographer', 'Cinematographer'],
+  ['editor', 'Editor'],
 ]);
 
 export interface CreditGroup {
@@ -113,3 +126,18 @@ export function groupCredits(cast: readonly CastEntry[] | undefined): GroupedCre
   return { actors: byRole.get('actor') ?? [], crew };
 }
 
+/** A person's role on one title, for their filmography: "Director", "Composer". */
+export function roleName(role: string): string {
+  const r = role.trim().toLowerCase();
+  return ROLE_NAMES.get(r) ?? titleizeRole(r);
+}
+
+/** A person's roles on a title, each once, in the order given: "Director · Writer". */
+export function formatRoles(roles: readonly string[] | undefined): string {
+  const names: string[] = [];
+  for (const role of roles ?? []) {
+    const name = roleName(role);
+    if (name && !names.includes(name)) names.push(name);
+  }
+  return names.join(' · ');
+}
