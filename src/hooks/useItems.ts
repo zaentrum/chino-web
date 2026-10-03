@@ -2,6 +2,17 @@ import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from './useStreamToken';
 import { useCatalogGen } from './useCatalogEvents';
+import {
+  freshPaging,
+  nextPageOffset,
+  offsetFor,
+  pageFailed,
+  pageLoaded,
+  pageRequested,
+  pagingFor,
+  type PageCursor,
+  type PagingState,
+} from '../lib/paging';
 
 export interface KatalogItem {
   id: string;
@@ -147,9 +158,13 @@ export function useItems(
  * at the grid's tail can call, and tracks `hasMore` so we stop hammering
  * the endpoint once the catalogue is exhausted.
  *
- * Resets the accumulated list whenever the filter or query string
- * changes — page 0 of a different filter should not be glued onto
- * page 5 of the previous one.
+ * Every piece of paging state is kept under the key of the filter it
+ * belongs to (lib/paging.ts), and a filter change fetches its first page
+ * directly. It used to reset the list in one effect and fetch in another,
+ * which read the previous filter's "no more pages" before the reset
+ * landed: after any filter whose results fit on one page, the next change
+ * fetched nothing and the grid said "No movies match" - every other
+ * filter change.
  */
 export function usePagedItems(
   type: 'movie' | 'series' | 'album',
@@ -160,30 +175,18 @@ export function usePagedItems(
   const auth = useAuth();
   const streamToken = useStreamToken();
   const gen = useCatalogGen(); // live refresh: a catalog change restarts at page 0
-  const [items, setItems] = useState<KatalogItem[]>([]);
-  const [error, setError] = useState<Error | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(true);
-  const [offset, setOffset] = useState(0);
+  const [attempt, setAttempt] = useState(0); // retry() asks for the same page again
 
-  // Reset key — any change here drops the accumulated list and starts
-  // fresh at offset 0.
+  // The key: any change here is another list, starting at offset 0.
   const fKey = JSON.stringify({ filter: filter ?? {}, q: q ?? '', type, pageSize, gen });
-
-  useEffect(() => {
-    setItems([]);
-    setOffset(0);
-    setHasMore(true);
-    setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fKey]);
+  const [state, setState] = useState<PagingState<KatalogItem>>(() => freshPaging(fKey));
+  const [cursor, setCursor] = useState<PageCursor>({ key: fKey, offset: 0 });
+  const offset = offsetFor(cursor, fKey);
+  const view = pagingFor(state, fKey);
 
   useEffect(() => {
     if (auth.isLoading || !auth.isAuthenticated) return;
-    if (!hasMore) {
-      setLoading(false);
-      return;
-    }
+    const key = fKey;
     const ctrl = new AbortController();
     const params = new URLSearchParams();
     if (q) params.set('q', q);
@@ -196,7 +199,7 @@ export function usePagedItems(
     if (f.yearMax) params.set('year_max', String(f.yearMax));
     if (f.ratingMin) params.set('rating_min', String(f.ratingMin));
     if (f.sort) params.set('sort', f.sort);
-    setLoading(true);
+    setState((s) => pageRequested(s, key));
     fetch(`/api/v1/items?${params}`, {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
@@ -206,6 +209,7 @@ export function usePagedItems(
         return r.json() as Promise<ItemsResponse>;
       })
       .then((j) => {
+        if (ctrl.signal.aborted) return;
         // Use the long-lived stream token in image URLs so silent
         // renews don't reload every poster on the grid.
         const page = (j.items ?? []).map((it) => {
@@ -219,33 +223,29 @@ export function usePagedItems(
         });
         // A short page = end of stream. Definitive signal regardless
         // of whether the server emits a count.
-        if (page.length < pageSize) setHasMore(false);
-        // Dedupe in case the server re-emits a boundary row (shouldn't,
-        // but cheap guard).
-        setItems((prev) => {
-          const seen = new Set(prev.map((p) => p.id));
-          return [...prev, ...page.filter((p) => !seen.has(p.id))];
-        });
+        setState((s) => pageLoaded(s, key, offset, page, pageSize));
       })
       .catch((e) => {
-        if ((e as Error).name !== 'AbortError') setError(e as Error);
-      })
-      .finally(() => setLoading(false));
+        if (ctrl.signal.aborted || (e as Error).name === 'AbortError') return;
+        setState((s) => pageFailed(s, key, e as Error));
+      });
     return () => ctrl.abort();
     // streamToken in deps so the page lands once the token is ready
     // (first mount races: the items fetch can resolve before the
-    // /me/stream-token mint does). OIDC token is NOT in deps — the
+    // /me/stream-token mint does); the page fetched again replaces its
+    // rows, fresh URLs and all. OIDC token is NOT in deps — the
     // image URLs use stream token, and the bearer header is read at
     // fetch time so a renewal doesn't need a refetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offset, fKey, auth.isAuthenticated, auth.isLoading, streamToken]);
+  }, [offset, fKey, auth.isAuthenticated, auth.isLoading, streamToken, attempt]);
 
   const loadMore = () => {
-    if (loading || !hasMore) return;
-    setOffset((o) => o + pageSize);
+    const next = nextPageOffset(state, fKey);
+    if (next !== null) setCursor({ key: fKey, offset: next });
   };
+  const retry = () => setAttempt((a) => a + 1);
 
-  return { items, error, loading, hasMore, loadMore };
+  return { items: view.items, error: view.error, loading: view.loading, hasMore: view.hasMore, loadMore, retry };
 }
 
 /**
