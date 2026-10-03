@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
@@ -20,7 +20,12 @@ export interface PersonSummary {
   id: string;
   name: string;
   // Number of titles this person is credited on — rendered as "· N titles".
-  credits: number;
+  // chino-api leaves it out when it is 0.
+  credits?: number;
+  // A portrait, as on PersonDetail: usePeople hands profile_url out with
+  // the stream token on it.
+  has_profile?: boolean;
+  profile_url?: string;
 }
 
 interface PeopleResponse {
@@ -35,6 +40,7 @@ interface PeopleResponse {
  */
 export function usePeople(q?: string, limit = 12) {
   const auth = useAuth();
+  const streamToken = useStreamToken();
   const [data, setData] = useState<PeopleResponse | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +76,22 @@ export function usePeople(q?: string, limit = 12) {
     return () => ctrl.abort();
   }, [q, limit, auth.isAuthenticated, auth.isLoading]);
 
-  return { data, error, loading };
+  // Portraits carry the stream token, as posters do. Added on the way out
+  // rather than in the fetch, so a token minted after the results arrived
+  // fixes the URLs without searching again.
+  const withPortraits = useMemo(
+    () =>
+      data && {
+        ...data,
+        people: (data.people ?? []).map((p) => ({
+          ...p,
+          profile_url: p.has_profile ? withStreamToken(p.profile_url, streamToken) : undefined,
+        })),
+      },
+    [data, streamToken],
+  );
+
+  return { data: withPortraits, error, loading };
 }
 
 /** A title on a person's filmography: a catalogue item, and the person's

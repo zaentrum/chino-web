@@ -20,8 +20,8 @@ interface SearchPageProps {
  *
  * Above the title results sits a "Cast & crew" section driven by
  * `/api/v1/people?q=…` (same debounced query as the titles): matching
- * people with an initials-avatar placeholder, their name and a "· N
- * titles" credit count. Tapping a person opens the Person surface.
+ * people with their portrait (initials without one), their name and a
+ * "· N titles" credit count. Tapping a person opens the Person surface.
  */
 export function SearchPage({ query }: SearchPageProps) {
   const movies = useItems(query, 30, 'movie');
@@ -77,21 +77,26 @@ export function SearchPage({ query }: SearchPageProps) {
                 Cast &amp; crew
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {peopleList.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => openPerson(p.id)}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-chino-surface hover:bg-chino-surface-2 transition-colors text-left"
-                  >
-                    <PersonAvatar name={p.name} size={48} />
-                    <div className="min-w-0">
-                      <div className="text-chino-text font-medium truncate">{p.name}</div>
-                      <div className="text-sm text-chino-muted">
-                        · {p.credits} title{p.credits === 1 ? '' : 's'}
+                {peopleList.map((p) => {
+                  const credits = p.credits ?? 0;
+                  const count = `· ${credits} title${credits === 1 ? '' : 's'}`;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => openPerson(p.id)}
+                      // One name for the card: the portrait's alt text is the
+                      // name too, and would otherwise be read twice.
+                      aria-label={`${p.name} ${count}`}
+                      className="flex items-center gap-3 p-3 rounded-lg bg-chino-surface hover:bg-chino-surface-2 transition-colors text-left"
+                    >
+                      <PersonAvatar name={p.name} src={p.profile_url} size={48} />
+                      <div className="min-w-0">
+                        <div className="text-chino-text font-medium truncate">{p.name}</div>
+                        <div className="text-sm text-chino-muted">{count}</div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </section>
           ) : null}
