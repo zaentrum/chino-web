@@ -83,18 +83,6 @@
   }
 }
 
-/* Player video fill. When the container's aspect ratio differs from
-   the source's (typical: portrait-phone viewport vs landscape 16:9
-   video), the React layer toggles .chino-player-fill on the element
-   and we switch from the default object-fit:contain (letterbox)
-   to cover (crops to fill). React drives this via the current
-   viewport orientation + video.videoWidth/Height so we don't have
-   to rely on @media (pointer: coarse) — which doesn't match in
-   every test harness and isn't even right for tablets in portrait. */
-video.chino-player.chino-player-fill {
-  object-fit: cover;
-}
-
 /* Player seek bar — the native <input type="range"> sits at z-30 to
    keep its thumb on top of the segment colour spans. But the input
    also paints its own (UA-default) track at that z, occluding the

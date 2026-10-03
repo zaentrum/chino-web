@@ -450,38 +450,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     };
   }, []);
 
-  // .chino-player-fill toggles object-fit: cover when the viewport
-  // aspect doesn't match the source aspect — typical scenario is
-  // phone-portrait viewport (9:21) playing a landscape source (16:9):
-  // default contain leaves giant letterbox bars top/bottom; cover
-  // crops left/right a little but fills the screen. Re-evaluates on
-  // resize + orientation change + when the video's intrinsic
-  // dimensions become known.
-  const [videoFill, setVideoFill] = useState(false);
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const recompute = () => {
-      const vw = v.videoWidth;
-      const vh = v.videoHeight;
-      if (!vw || !vh) { setVideoFill(false); return; }
-      const sourceAspect = vw / vh;
-      const viewportAspect = window.innerWidth / window.innerHeight;
-      // Container portrait + source landscape → letterbox would
-      // happen, switch to cover. Otherwise keep contain (which is
-      // the right call for matched-aspect or wider-container cases).
-      setVideoFill(viewportAspect < 1 && sourceAspect > 1.1);
-    };
-    recompute();
-    v.addEventListener('loadedmetadata', recompute);
-    window.addEventListener('resize', recompute);
-    window.addEventListener('orientationchange', recompute);
-    return () => {
-      v.removeEventListener('loadedmetadata', recompute);
-      window.removeEventListener('resize', recompute);
-      window.removeEventListener('orientationchange', recompute);
-    };
-  }, []);
+  // The picture is always letterboxed (object-fit: contain, the <video>
+  // default): all of it, with bars where the screen's shape differs from
+  // the film's. Portrait used to switch to cover, which crops to fill - on
+  // a phone held upright, a 2.35:1 film showed a fifth of its width.
 
   // Cache-bust counter mixed into playUrl after a long tab suspension.
   // Bumping it changes the URL → useEffect tears hls down + rebuilds
@@ -1455,15 +1427,15 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // auth middleware also accepts it (the URL the API hands us
     // already has the token appended).
     //
-    // aspectRatio must match the <video>'s object-fit: `cover` when
-    // videoFill (portrait/fill) is on, else `contain` (letterbox).
-    // Otherwise PGS graphics land at the wrong scale/offset.
+    // aspectRatio must match the <video>'s object-fit — `contain`, the
+    // picture is always letterboxed. Otherwise PGS graphics land at the
+    // wrong scale/offset.
     const r = new PgsRenderer({
       video: v,
       canvas,
       subUrl: activePgsSub.url,
       workerUrl: libpgsWorkerUrl,
-      aspectRatio: videoFill ? 'cover' : 'contain',
+      aspectRatio: 'contain',
     });
     pgsRendererRef.current = r;
     return () => {
@@ -1472,19 +1444,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     };
     // Recreate ONLY on a real track change (id/url). The URL now carries the
     // STABLE ?stream= token, so an OIDC renewal no longer changes it — the
-    // renderer is not rebuilt on a transferred canvas. aspectRatio is updated
-    // on the LIVE renderer below (videoFill is intentionally NOT a dep here).
+    // renderer is not rebuilt on a transferred canvas.
   }, [activePgsSub?.id, activePgsSub?.url]);
-
-  // Track the video's object-fit on the LIVE PGS renderer when videoFill flips
-  // (window resize / orientation change). Recreating the renderer for an aspect
-  // change would re-transfer the canvas (InvalidStateError) and re-download the
-  // .sup — libpgs exposes a settable aspectRatio accessor for exactly this.
-  useEffect(() => {
-    if (pgsRendererRef.current) {
-      pgsRendererRef.current.aspectRatio = videoFill ? 'cover' : 'contain';
-    }
-  }, [videoFill]);
 
   // Multi-select toggle. Picking the same id twice removes it; picking
   // a third clears the oldest and slots the new one. Picking `null`
@@ -2901,7 +2862,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         // No `src` attribute — hls.js attaches and drives the source.
         // (On Safari we fall back to native HLS and DO set v.src
         // directly from the useEffect, not via React props.)
-        className={`absolute inset-0 w-full h-full chino-player ${videoFill ? 'chino-player-fill' : ''}`}
+        className="absolute inset-0 w-full h-full chino-player"
         crossOrigin="anonymous"
         // `autoPlay` attribute intentionally omitted: the browser's
         // built-in autoplay fires on EVERY src change (including
@@ -3070,10 +3031,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       {/* Sibling canvas for image subtitle rendering. libpgs-js
           positions itself absolute over the video; we keep it inert
           (pointer-events: none) so clicks pass through to the video
-          for play/pause. objectFit tracks the video's object-fit so
-          subtitles land at the correct fraction of the 1920x1080 PGS
-          graphics plane: `contain` for letterboxed playback, `cover`
-          for portrait/fill (videoFill) so PGS isn't misplaced.
+          for play/pause. objectFit matches the video's — `contain`,
+          letterboxed — so subtitles land at the correct fraction of the
+          1920x1080 PGS graphics plane.
 
           The `key` is tied to the active PGS sub id (or a sentinel
           when none is active). libpgs's default worker mode calls
@@ -3089,7 +3049,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           key={`pgs-${activePgsSub.id}`}
           ref={pgsCanvasRef}
           className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ objectFit: videoFill ? 'cover' : 'contain' }}
+          style={{ objectFit: 'contain' }}
         />
       )}
 
