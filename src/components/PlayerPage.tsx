@@ -19,6 +19,7 @@ import {
   downgradeStep,
   isLadderQuality,
   mediaFallback,
+  onTheFlyQuality,
   restorePosition,
   stallAction,
   type LadderQuality,
@@ -359,8 +360,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // forceTranscode flips on when a passthrough/remux stream stalls badly
   // on a flaky network — a ?q= below High puts it on the server's
   // transcode ladder, and the quality switcher becomes available to step
-  // bandwidth down. Never for a packaged title: the server serves the same
-  // packaged files whatever ?q= says (lib/playback.ts).
+  // bandwidth down. Never for a packaged title: the server serves its
+  // package whatever ?q= says - its ladder, or the rung picked - and never
+  // a transcode (lib/playback.ts).
   const [forceTranscode, setForceTranscode] = useState(false);
   const forceTranscodeRef = useRef(forceTranscode);
   useEffect(() => { forceTranscodeRef.current = forceTranscode; }, [forceTranscode]);
@@ -611,11 +613,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // playlists + segments from there, and stitches the segments into a
   // single seekable timeline on the <video> element.
   //
-  // The server's master.m3u8 emits a SINGLE video variant matching
-  // ?q=. Changing streamQuality flips the URL, which forces hls.js to
-  // tear down + reload. switchQuality stashes the current position in
-  // pendingSeekRef so loadedmetadata can replay it. The URL stays
-  // stable across token refreshes (the stream token has a 6 h TTL).
+  // On the fly, the server's master.m3u8 emits a single video variant
+  // matching ?q=; a packaged title's is its ladder for these caps (q=high
+  // or auto) or the one rung picked (q=<name>). Changing streamQuality
+  // flips the URL, which forces hls.js to tear down + reload.
+  // switchQuality stashes the current position in pendingSeekRef so
+  // loadedmetadata can replay it. The URL stays stable across token
+  // refreshes (the stream token has a 6 h TTL).
   const playUrl = useMemo(() => {
     if (!streamToken || notFound) return '';
     const params = new URLSearchParams({ stream: streamToken, q: streamQuality });
@@ -956,6 +960,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const t = videoRef.current?.currentTime ?? 0;
     if (t > 0.5) pendingSeekRef.current = t;
   };
+
+  // A rung or Auto asked for on a title /play/info no longer says is served
+  // packaged (lib/playback.ts onTheFlyQuality): back to high, at the
+  // position.
+  useEffect(() => {
+    const q = onTheFlyQuality(info?.mode, streamQuality);
+    if (!q) return;
+    keepPosition();
+    setStreamQuality(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info?.mode, streamQuality]);
   // A position for the source playing now (a resume that arrived after
   // it loaded): applied at once when its metadata is in, else at its
   // loadedmetadata.
@@ -2383,10 +2398,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
   // ---- Hard-stall watcher: video says "playing" but currentTime stays put ----
   // Every 2 s; after 8 s without forward progress while playing, recover
-  // as lib/playback.ts stallAction says. A packaged title (one rendition;
-  // the server ignores ?q= for it) is retried in place - nudged where it
-  // stands, or its loading restarted there - and rebuilt only when that
-  // keeps failing, at the same quality, never as a forced transcode. A
+  // as lib/playback.ts stallAction says. A packaged title (served packaged
+  // whatever ?q= says) is retried in place - nudged where it stands, or its
+  // loading restarted there - and rebuilt only when that keeps failing, at
+  // the same quality (Auto, or the rung picked), never as a forced
+  // transcode. A
   // direct stream moves onto the transcode ladder at Medium. Whatever is
   // rebuilt goes back to where it was: the old watcher recorded the
   // position in an offset nothing applied, so a stalled film restarted
@@ -2486,8 +2502,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // Auto-downgrade: if the stream stalls (`waiting` fires) three times
   // within ~30 seconds, step down (lib/playback.ts downgradeStep): the
   // transcode ladder a rung, a direct stream onto the ladder at Medium.
-  // A packaged title has one rendition and nothing to step down to - the
-  // switch only restarted it. The position is kept.
+  // A packaged title is not stepped down here: on Auto hls.js steps down by
+  // itself, and a rung picked stays picked. The position is kept.
   const onStall = () => {
     if (!info) return;
     const now = performance.now();

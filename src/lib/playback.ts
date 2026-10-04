@@ -33,6 +33,18 @@ export function isLadderQuality(q: Quality): q is LadderQuality {
   return (QUALITY_RUNGS as readonly string[]).includes(q);
 }
 
+/**
+ * The q to ask a title for that is served on the fly where a packaged q -
+ * a rung's name, or auto - was asked for (its package gone, the caps
+ * changed under a pick): high, since any q but high makes the server
+ * re-encode a direct stream rather than stream-copy it. null when q is
+ * fine as it is: a packaged title, a transcode rung, the mode not known.
+ */
+export function onTheFlyQuality(mode: PlayMode | null | undefined, q: Quality): Quality | null {
+  if (!mode || mode === 'packaged' || isLadderQuality(q)) return null;
+  return 'high';
+}
+
 /** Tries in place before a stalled stream is rebuilt. */
 export const IN_PLACE_TRIES = 3;
 

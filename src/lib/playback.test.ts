@@ -6,6 +6,7 @@ import {
   downgradeStep,
   isLadderQuality,
   mediaFallback,
+  onTheFlyQuality,
   restorePosition,
   stallAction,
   type StallState,
@@ -111,4 +112,16 @@ test('the transcode rungs are the ladder qualities; auto and a rung name are not
 
 test('media errors on a packaged title asked with an HEVC height cap still ask again without HEVC', () => {
   assert.deepEqual(mediaFallback({ mode: 'packaged', forcedTranscode: false, caps: ['avc', 'hvc:1080', 'aac'] }), { kind: 'drop-hevc' });
+});
+
+test('a packaged q on a title now served on the fly goes back to high; anything else stays', () => {
+  for (const mode of ['transcode', 'remux', 'passthrough'] as const) {
+    assert.equal(onTheFlyQuality(mode, 'v2'), 'high', `${mode} v2`);
+    assert.equal(onTheFlyQuality(mode, 'auto'), 'high', `${mode} auto`);
+    for (const q of ['high', 'medium', 'low']) assert.equal(onTheFlyQuality(mode, q), null, `${mode} ${q}`);
+  }
+  assert.equal(onTheFlyQuality('packaged', 'v2'), null);
+  assert.equal(onTheFlyQuality('packaged', 'auto'), null);
+  assert.equal(onTheFlyQuality(null, 'v2'), null, 'not known yet');
+  assert.equal(onTheFlyQuality(undefined, 'auto'), null);
 });
