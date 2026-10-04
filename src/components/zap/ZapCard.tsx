@@ -349,8 +349,7 @@ export function ZapCard({
     }
 
     const hls = new Hls({
-      // The level capped to the card's size, no HLS subtitles over it
-      // (lib/hlsConfig.ts).
+      // No HLS subtitles over a card (lib/hlsConfig.ts).
       ...HLS_BASE_CONFIG,
       // Tight buffer: a zap card is ~10-30 s of viewing on average.
       // Anything more is wasted transcoder work if the user swipes
@@ -370,7 +369,8 @@ export function ZapCard({
       startPosition: seekSec,
     });
     // On the variant the master lists first: the one chino-stream and the
-    // prefetch (lib/zapPrefetch.ts) warmed.
+    // prefetch (lib/zapPrefetch.ts) warmed; capped to the card's size from
+    // the next fragment on.
     startOnFirstVariant(hls);
     hls.attachMedia(v);
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {

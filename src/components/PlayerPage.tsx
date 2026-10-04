@@ -703,8 +703,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       return;
     }
     const hls = new Hls({
-      // The level capped to the player's size, and no HLS subtitles: the
-      // sidecars are the subtitles (lib/hlsConfig.ts).
+      // No HLS subtitles: the sidecars are the subtitles (lib/hlsConfig.ts).
       ...HLS_BASE_CONFIG,
       // 5-minute buffer ahead of the playhead with a 500 MB memory cap.
       // Generous enough to ride out WiFi roams, brief upstream stalls,
@@ -729,7 +728,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       // resume position), not at 0 - onLoadedMetadata seeks there too.
       startPosition: restorePosition(pendingSeekRef.current) ?? -1,
     });
-    // On the variant the server lists first - the one it warmed.
+    // On the variant the server lists first - the one it warmed - and
+    // capped to the player's size from the next fragment on.
     startOnFirstVariant(hls);
     hls.attachMedia(v);
     let loadCount = 0;
