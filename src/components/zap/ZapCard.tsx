@@ -331,6 +331,16 @@ export function ZapCard({
 
     if (!Hls.isSupported()) {
       // Safari / iOS native HLS path. Far simpler — set src, play().
+      // A master's SUBTITLES renditions come as text tracks here, and the
+      // browser turns a FORCED one on by itself: none shows over a card.
+      const muteText = () => {
+        for (let i = 0; i < v.textTracks.length; i++) {
+          const t = v.textTracks[i];
+          if (t.kind !== 'metadata' && t.mode !== 'disabled') t.mode = 'disabled';
+        }
+      };
+      v.textTracks.addEventListener('addtrack', muteText);
+      v.textTracks.addEventListener('change', muteText);
       v.src = playUrl;
       v.muted = muted;
       v.play().catch(() => {
@@ -343,6 +353,8 @@ export function ZapCard({
       });
       return () => {
         v.removeEventListener('loadedmetadata', seekIfNeeded);
+        v.textTracks.removeEventListener('addtrack', muteText);
+        v.textTracks.removeEventListener('change', muteText);
         v.removeAttribute('src');
         v.load();
       };
