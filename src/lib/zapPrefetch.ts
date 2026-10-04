@@ -14,7 +14,8 @@
 //                →  EXT-X-MAP init segment
 //                →  the media segment(s) whose cumulative EXTINF time
 //                   covers the card's seek window [seekSec, seekSec+~12s]
-//   master.m3u8  →  each #EXT-X-MEDIA:TYPE=AUDIO rendition playlist
+//   master.m3u8  →  the audio rendition the card starts on (the DEFAULT
+//                   one of the first variant's audio group) playlist
 //                →  its EXT-X-MAP init + the audio segments overlapping
 //                   the same seek window (so hls.js doesn't cold-fetch
 //                   audio while the video is warm)
@@ -294,23 +295,22 @@ class ZapPrefetcher {
       toFetch.push(...selectWindowSegments(video.segments, target.seekSec, WINDOW_SEC));
     }
 
-    // 4. AUDIO renditions. With a separate audio group (the usual
-    // multi-rendition layout), hls.js cold-fetches the audio media
-    // playlist + its init + segments unless we warm them too. The
-    // #EXT-X-MEDIA:TYPE=AUDIO URIs live in the MASTER and resolve
-    // relative to it. (Single-rendition passthrough muxes audio into the
-    // video segments, so there are no audio URIs to find here — the loop
-    // simply does nothing.)
-    const audioUris = parseAudioRenditionUris(masterText);
-    for (const uri of audioUris) {
-      if (signal.aborted) break;
-      const audioUrl = resolveUrl(target.masterUrl, uri);
+    // 4. AUDIO. With a separate audio group (the usual layout), hls.js
+    // cold-fetches the audio media playlist + its init + segments unless
+    // we warm them too - the rendition it starts on, as chino-stream warms
+    // it: the DEFAULT one of the first variant's group. Not the others:
+    // other languages, and the 5.1 group a device that decodes E-AC-3 is
+    // served, are bytes no card plays. (A variant whose audio is in the
+    // video segments names no group: nothing more to warm.)
+    const audioUri = pickAudioRenditionUri(masterText);
+    if (audioUri && !signal.aborted) {
+      const audioUrl = resolveUrl(target.masterUrl, audioUri);
       const audioText = await this.fetchText(audioUrl, headers, signal);
-      if (!audioText) continue;
-      const audio = parseVariant(audioText, audioUrl);
-      if (audio.segments.length === 0) continue;
-      if (audio.initUrl) toFetch.push({ url: audio.initUrl, byteRange: audio.initByteRange });
-      toFetch.push(...selectWindowSegments(audio.segments, target.seekSec, WINDOW_SEC));
+      const audio = audioText ? parseVariant(audioText, audioUrl) : null;
+      if (audio && audio.segments.length > 0) {
+        if (audio.initUrl) toFetch.push({ url: audio.initUrl, byteRange: audio.initByteRange });
+        toFetch.push(...selectWindowSegments(audio.segments, target.seekSec, WINDOW_SEC));
+      }
     }
 
     if (toFetch.length === 0) return 0;
@@ -417,14 +417,22 @@ interface ParsedVariant {
 }
 
 /** Resolve a (possibly relative) playlist/segment URI against the
- *  playlist it came from. Uses the URL API so query strings, absolute
- *  paths, and fully-qualified URLs all resolve correctly. */
-function resolveUrl(base: string, ref: string): string {
+ *  playlist it came from, that one against the page: the masters are
+ *  page-relative ("/api/v1/items/…"), and the URL API takes no relative
+ *  base - it threw, and the bare URI fetched against the page's own path
+ *  (the app's HTML): nothing past the masters was ever warmed. Uses the
+ *  URL API so query strings, absolute paths, and fully-qualified URLs all
+ *  resolve correctly. */
+function resolveUrl(base: string, ref: string, page: string = pageUrl()): string {
   try {
-    return new URL(ref, base).toString();
+    return new URL(ref, new URL(base, page)).toString();
   } catch {
     return ref;
   }
+}
+
+function pageUrl(): string {
+  return typeof location !== 'undefined' ? location.href : 'http://localhost/';
 }
 
 /**
@@ -457,33 +465,28 @@ function pickVariantUri(masterText: string): string | null {
 }
 
 /**
- * Extract every audio rendition URI from a master playlist's
- * `#EXT-X-MEDIA:TYPE=AUDIO,...,URI="..."` tags. These live in the MASTER
- * (not the video media playlist) and resolve relative to it. With a
- * separate audio group, hls.js fetches the audio media playlist + its
- * init + segments independently of the video rendition, so without
- * warming them the audio side stays cold even when the video is warm.
- *
- * Tags without a URI (e.g. an audio group whose default rendition is
- * muxed into the video) are skipped — there's nothing separate to warm.
- * Duplicate URIs are de-duplicated so a group with several language
- * renditions pointing at the same playlist isn't fetched twice.
+ * The audio rendition a card starts on, from a master playlist: the
+ * DEFAULT=YES one (else the first) of the audio group the first
+ * `#EXT-X-STREAM-INF` names (AUDIO="..."). hls.js starts there, and it is
+ * what chino-stream warms. Its URI lives in the MASTER and resolves
+ * relative to it. null when that variant names no group (its audio is in
+ * the video segments) or the group has no rendition with a URI.
  */
-function parseAudioRenditionUris(masterText: string): string[] {
-  const lines = masterText.split(/\r?\n/);
-  const uris: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line.startsWith('#EXT-X-MEDIA:')) continue;
-    const type = matchAttr(line, 'TYPE');
-    if (type !== 'AUDIO') continue;
+function pickAudioRenditionUri(masterText: string): string | null {
+  const lines = masterText.split(/\r?\n/).map((l) => l.trim());
+  const inf = lines.find((l) => l.startsWith('#EXT-X-STREAM-INF'));
+  const group = inf ? matchAttr(inf, 'AUDIO') : undefined;
+  if (!group) return null;
+  let first: string | null = null;
+  for (const line of lines) {
+    if (!line.startsWith('#EXT-X-MEDIA:') || matchAttr(line, 'TYPE') !== 'AUDIO') continue;
+    if (matchAttr(line, 'GROUP-ID') !== group) continue;
     const uri = matchAttr(line, 'URI');
-    if (!uri || seen.has(uri)) continue;
-    seen.add(uri);
-    uris.push(uri);
+    if (!uri) continue;
+    if (matchAttr(line, 'DEFAULT') === 'YES') return uri;
+    first ??= uri;
   }
-  return uris;
+  return first;
 }
 
 function parseByteRange(spec: string, prevEnd: number): ByteRange {
@@ -601,7 +604,7 @@ export const zapPrefetcher = new ZapPrefetcher();
 // the whole class.
 export const __test = {
   pickVariantUri,
-  parseAudioRenditionUris,
+  pickAudioRenditionUri,
   parseVariant,
   selectWindowSegments,
   resolveUrl,
