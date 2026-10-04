@@ -24,6 +24,12 @@ export interface KatalogItem {
   duration_ms?: number;
   poster_url?: string;
   backdrop_url?: string;
+  // The title's age rating, as katalog-api sends it (lib/ratings.ts): the
+  // age a viewer must be, and the certification it comes from with its
+  // country. Absent when nothing rates the title.
+  min_age?: number;
+  certification?: string;
+  certification_country?: string;
   // Set by chino-api when the current user has marked this item
   // watched (entered credits OR crossed 95% of duration). The presence
   // of this field is what MediaCard reads to render the "Watched" pill.

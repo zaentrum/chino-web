@@ -17,6 +17,7 @@ import { MetaItem } from './MetaItem';
 import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
+import { ratingBadge } from '../lib/ratings';
 import { MediaRow } from './MediaRow';
 import { StatusPage } from './StatusPage';
 
@@ -180,6 +181,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // "Directors", "Music", …) in the order lib/credits.ts lists them.
   const { actors, crew } = groupCredits(data.cast);
   const trailer = pickTrailer(data.trailers);
+  const rated = ratingBadge(data);
 
   return (
     <div className="min-h-screen bg-chino-bg text-white">
@@ -247,6 +249,14 @@ export function DetailPage({ itemId }: DetailPageProps) {
                     {data.rating.toFixed(1)}
                   </span>
                 </>
+              ) : null}
+              {rated ? (
+                <span
+                  className="px-1.5 py-0.5 border border-chino-muted text-chino-fg text-xs font-semibold tracking-wide"
+                  title={rated.title}
+                >
+                  {rated.text}
+                </span>
               ) : null}
               {data.type ? (
                 <span className="px-2 py-0.5 bg-white/10 text-xs uppercase tracking-wide">
