@@ -562,6 +562,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // posters / backdrops. The 6 h TTL means OIDC silent renewals
   // don't rotate any of those URLs.
   const streamToken = useStreamToken() ?? undefined;
+  // The pagehide beacon's listener is registered per bearer, not per stream
+  // token; it reads the token through this ref so it never sends a stale one.
+  const streamTokenRef = useRef(streamToken);
+  streamTokenRef.current = streamToken;
 
   // Build the capability beacon the server uses to pick a pipeline.
   // Comma-separated tokens; missing token means "not supported".
@@ -1423,9 +1427,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     pgsRendererRef.current?.dispose();
     pgsRendererRef.current = null;
 
-    // The same `?token=…` shape the VTT URLs use — chino-stream's
-    // auth middleware also accepts it (the URL the API hands us
-    // already has the token appended).
+    // The sidecar URL already carries `?stream=` (added where the
+    // subtitle list is built), which the /play/subs route accepts.
     //
     // aspectRatio must match the <video>'s object-fit — `contain`, the
     // picture is always letterboxed. Otherwise PGS graphics land at the
@@ -2160,11 +2163,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const body = JSON.stringify({ sessionId: sessionIdRef.current, events });
     // Use `sendBeacon` on pagehide so the request actually leaves the
     // browser; regular fetch is unreliable during unload. sendBeacon
-    // cannot set custom headers, so we carry the bearer in the query
-    // string — the chino-api auth middleware already accepts ?token=
-    // for <video src> / <img src> requests.
-    if (final && navigator.sendBeacon) {
-      const url = `/api/v1/play/events?token=${encodeURIComponent(token)}`;
+    // cannot set custom headers, so the request carries the stream token
+    // in the query string — never the bearer, which would land in access
+    // logs. Without a stream token, the keepalive fetch below sends the
+    // bearer as a header instead.
+    const beaconToken = streamTokenRef.current;
+    if (final && navigator.sendBeacon && beaconToken) {
+      const url = `/api/v1/play/events?stream=${encodeURIComponent(beaconToken)}`;
       const ok = navigator.sendBeacon(
         url,
         new Blob([body], { type: 'application/json' }),

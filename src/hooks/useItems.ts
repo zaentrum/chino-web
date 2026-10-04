@@ -250,17 +250,3 @@ export function usePagedItems(
 
   return { items: view.items, error: view.error, loading: view.loading, hasMore: view.hasMore, loadMore, retry };
 }
-
-/**
- * Build a one-shot play URL for an item. Browsers cannot attach
- * Authorization headers to `<video src>`, so we encode the bearer in a
- * query string. The chino-api `/api/v1/items/{id}/play` handler accepts
- * either header or `?token=`.
- */
-export function usePlayUrl(itemId?: string) {
-  const auth = useAuth();
-  if (!itemId) return null;
-  const token = auth.user?.access_token;
-  if (!token) return `/api/v1/items/${itemId}/play`;
-  return `/api/v1/items/${itemId}/play?token=${encodeURIComponent(token)}`;
-}
