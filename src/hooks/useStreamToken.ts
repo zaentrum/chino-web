@@ -43,6 +43,11 @@ function writeCache(c: CachedToken) {
   try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(c)); } catch { /* quota */ }
 }
 
+/** Drops the cached token: the account it was minted for is signed out. */
+export function forgetStreamToken(): void {
+  try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* storage off */ }
+}
+
 async function mintStreamToken(bearer: string): Promise<string | null> {
   if (inflight) return inflight;
   inflight = (async () => {

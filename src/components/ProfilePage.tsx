@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { ArrowLeft, EyeOff, LogOut } from 'lucide-react';
+import { ArrowLeft, EyeOff, LogOut, Trash2 } from 'lucide-react';
 import { Avatar } from './Avatar';
+import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { FadeImage } from './FadeImage';
 import { LoadingState } from './LoadingState';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
@@ -9,9 +10,10 @@ import { toApp } from '../lib/basepath';
 
 /**
  * Profile page at /me. Shows the signed-in user's name + email (from
- * the OIDC userinfo claims), a sign-out button, and a compact row list
- * of items they've watched, newest first — the detail page's
- * EpisodeRow idiom, denser (mobile ProfileScreen parity).
+ * the OIDC userinfo claims), Sign out and Delete Account (the account
+ * and what this server keeps of it, asked first: DeleteAccountDialog),
+ * and a compact row list of items they've watched, newest first — the
+ * detail page's EpisodeRow idiom, denser (mobile ProfileScreen parity).
  *
  * The watch history is everything in watched_history — both auto-
  * stamped rows (player crossing 95 % of duration) and manual rows
@@ -100,6 +102,7 @@ export function ProfilePage() {
   const signOut = () => {
     void auth.signoutRedirect();
   };
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const visible = (history ?? []).filter((it) => !removedIds.has(it.id));
 
@@ -120,7 +123,7 @@ export function ProfilePage() {
         {/* Identity card. Keycloak gives us name / email / preferred_username;
             we render whatever's available so the page is meaningful even on
             minimal claim sets. */}
-        <div className="bg-chino-surface border border-chino-border rounded-lg p-6 mb-10 flex items-center gap-4">
+        <div className="bg-chino-surface border border-chino-border rounded-lg p-6 mb-10 flex flex-wrap items-center gap-4">
           <Avatar size={64} className="shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="text-xl font-medium truncate">{name}</div>
@@ -128,15 +131,27 @@ export function ProfilePage() {
               <div className="text-sm text-chino-muted truncate">{email}</div>
             ) : null}
           </div>
-          <button
-            onClick={signOut}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-2"
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-            <span className="text-sm">Sign out</span>
-          </button>
+          {/* On a phone the buttons take a row of their own, below the name. */}
+          <div className="flex gap-2 w-full sm:w-auto">
+            <button
+              onClick={signOut}
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-2"
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm">Sign out</span>
+            </button>
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="px-4 py-2 border border-chino-red/40 text-chino-red hover:bg-chino-red/10 transition-colors flex items-center gap-2"
+              aria-haspopup="dialog"
+            >
+              <Trash2 className="w-4 h-4" aria-hidden="true" />
+              <span className="text-sm">Delete Account</span>
+            </button>
+          </div>
         </div>
+        {deleteOpen ? <DeleteAccountDialog onClose={() => setDeleteOpen(false)} /> : null}
 
         <h2 className="text-2xl font-semibold mb-4">Watch history</h2>
         {history === null ? (
