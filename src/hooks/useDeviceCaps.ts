@@ -34,7 +34,14 @@ export function deviceCaps(): string {
   return refined ?? probe();
 }
 
-/** The caps once decodingInfo has answered - at once where there is nothing to ask. Never rejects. */
+// How long decodingInfo may take before the probe's answer stands.
+const REFINE_TIMEOUT_MS = 1000;
+
+/**
+ * The caps once decodingInfo has answered - at once where there is nothing
+ * to ask, and the probe's answer should it not answer within a second (the
+ * home screen's Zap warm waits for this). Never rejects.
+ */
 export function refinedDeviceCaps(): Promise<string> {
   if (refining) return refining;
   const caps = probe();
@@ -44,22 +51,23 @@ export function refinedDeviceCaps(): Promise<string> {
     refining = Promise.resolve(caps);
     return refining;
   }
-  refining = Promise.resolve()
-    .then(() =>
-      mc.decodingInfo({
-        type: 'media-source',
-        video: {
-          contentType: 'video/mp4; codecs="hvc1.1.6.L120.B0"',
-          width: 1920,
-          height: 1080,
-          bitrate: 5_000_000,
-          framerate: 24,
-        },
-      }),
-    )
-    // Not `smooth`: on real devices HEVC plays fine where it is marked
-    // not smooth (a conservative heuristic).
-    .then((res) => (res.supported ? caps : withoutCodec(caps, 'hvc')), () => caps)
+  const answer = Promise.resolve().then(() =>
+    mc.decodingInfo({
+      type: 'media-source',
+      video: {
+        contentType: 'video/mp4; codecs="hvc1.1.6.L120.B0"',
+        width: 1920,
+        height: 1080,
+        bitrate: 5_000_000,
+        framerate: 24,
+      },
+    }),
+  );
+  const noAnswer = new Promise<null>((resolve) => setTimeout(() => resolve(null), REFINE_TIMEOUT_MS));
+  refining = Promise.race([answer, noAnswer])
+    // Only an explicit no drops hvc - not `smooth`: on real devices HEVC
+    // plays fine where it is marked not smooth (a conservative heuristic).
+    .then((res) => (res && res.supported === false ? withoutCodec(caps, 'hvc') : caps), () => caps)
     .then((c) => {
       refined = c;
       return c;

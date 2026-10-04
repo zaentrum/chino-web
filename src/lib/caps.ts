@@ -35,9 +35,10 @@ export const CODEC_PROBES: readonly CodecProbe[] = [
 
 /**
  * How a browser is asked whether it decodes a type. With MediaSource,
- * isTypeSupported: hls.js plays through it. Without (iPhone Safari, which
- * plays HLS itself) a <video>'s canPlayType, where "maybe" counts too -
- * asking MSE there would say no to everything, send no caps, and the
+ * isTypeSupported: hls.js plays through it. Without - iPhone Safari, which
+ * plays HLS itself (or, from iOS 17.1, hls.js through ManagedMediaSource,
+ * on the same decoders) - a <video>'s canPlayType, where "maybe" counts
+ * too: asking MSE there would say no to everything, send no caps, and the
  * server's default set has no HEVC.
  */
 export function decoderCheck(
