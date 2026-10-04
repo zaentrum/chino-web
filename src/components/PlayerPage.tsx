@@ -22,7 +22,7 @@ import {
   stallAction,
   type Quality,
 } from '../lib/playback';
-import { HLS_BASE_CONFIG } from '../lib/hlsConfig';
+import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { BugReportDialog } from './BugReportDialog';
 import { StatusPage } from './StatusPage';
 
@@ -754,7 +754,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       return;
     }
     const hls = new Hls({
-      // No HLS subtitles: the sidecars are the subtitles (lib/hlsConfig.ts).
+      // The level capped to the player's size, and no HLS subtitles: the
+      // sidecars are the subtitles (lib/hlsConfig.ts).
       ...HLS_BASE_CONFIG,
       // 5-minute buffer ahead of the playhead with a 500 MB memory cap.
       // Generous enough to ride out WiFi roams, brief upstream stalls,
@@ -779,6 +780,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       // resume position), not at 0 - onLoadedMetadata seeks there too.
       startPosition: restorePosition(pendingSeekRef.current) ?? -1,
     });
+    // On the variant the server lists first - the one it warmed.
+    startOnFirstVariant(hls);
     hls.attachMedia(v);
     let loadCount = 0;
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {

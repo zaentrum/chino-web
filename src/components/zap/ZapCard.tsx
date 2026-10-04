@@ -8,7 +8,7 @@ import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { toApp } from '../../lib/basepath';
-import { HLS_BASE_CONFIG } from '../../lib/hlsConfig';
+import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
 import type { KatalogItem } from '../../hooks/useItems';
 
 interface ZapCardProps {
@@ -352,7 +352,8 @@ export function ZapCard({
     }
 
     const hls = new Hls({
-      // No HLS subtitles over a card (lib/hlsConfig.ts).
+      // The level capped to the card's size, no HLS subtitles over it
+      // (lib/hlsConfig.ts).
       ...HLS_BASE_CONFIG,
       // Tight buffer: a zap card is ~10-30 s of viewing on average.
       // Anything more is wasted transcoder work if the user swipes
@@ -371,6 +372,9 @@ export function ZapCard({
       // mid-content scene instead of the opening logo.
       startPosition: seekSec,
     });
+    // On the variant the master lists first: the one chino-stream and the
+    // prefetch (lib/zapPrefetch.ts) warmed.
+    startOnFirstVariant(hls);
     hls.attachMedia(v);
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
       hls.loadSource(playUrl);
