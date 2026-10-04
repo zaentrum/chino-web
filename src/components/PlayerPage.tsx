@@ -756,12 +756,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // With the audio picked: the new source's preference (selectAudio).
     hls.on(Hls.Events.MANIFEST_PARSED, () => selectAudio(streamAudioIdxRef.current, hls));
     hls.attachMedia(v);
+    // The source is loaded on the first attach only. A later one is hls.js
+    // re-attaching the media itself - recoverMediaError, after a media or
+    // buffer error - and it goes on from the playhead by itself; loading
+    // the source again there restarted the film at the instance's start
+    // position: 0:00, or wherever it had opened.
     let loadCount = 0;
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
       loadCount += 1;
       // eslint-disable-next-line no-console
-      console.log('[hls] MEDIA_ATTACHED → loadSource #' + loadCount);
-      hls.loadSource(playUrl);
+      console.log('[hls] MEDIA_ATTACHED #' + loadCount + (loadCount === 1 ? ' → loadSource' : ' (media recovered)'));
+      if (loadCount === 1) hls.loadSource(playUrl);
     });
     hls.on(Hls.Events.MEDIA_DETACHED, () => {
       // eslint-disable-next-line no-console
