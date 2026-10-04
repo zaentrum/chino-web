@@ -4,6 +4,7 @@ import { useCatalogEvents } from '../hooks/useCatalogEvents';
 import { AlertTriangle } from 'lucide-react';
 import { LoadingState } from '../components/LoadingState';
 import { toApp } from '../lib/basepath';
+import { accountWasDeleted, forgetAccountDeleted } from './accountDeleted';
 import chinoIcon from '../imports/chino_icon.svg';
 
 interface AuthGateProps {
@@ -18,12 +19,18 @@ export function AuthGate({ children }: AuthGateProps) {
   // Auto-redirect to the IdP when we're not in flight and not signed
   // in. Same guard as before, plus we skip if there's a pending error
   // — let the user click "Try again" instead of looping back to the
-  // failing redirect.
+  // failing redirect — and right after the person deleted their
+  // account: the start screen says so first (below).
   useEffect(() => {
-    if (!auth.isLoading && !auth.isAuthenticated && !auth.error && !auth.activeNavigator) {
+    if (!auth.isLoading && !auth.isAuthenticated && !auth.error && !auth.activeNavigator && !accountWasDeleted()) {
       auth.signinRedirect();
     }
   }, [auth.isLoading, auth.isAuthenticated, auth.error, auth.activeNavigator]);
+
+  // Signed in again, by whatever way: the notice is done.
+  useEffect(() => {
+    if (auth.isAuthenticated) forgetAccountDeleted();
+  }, [auth.isAuthenticated]);
 
   // When the tab comes back into focus after being backgrounded, the
   // access token may have expired silently. Trigger a silent renew so
@@ -45,6 +52,33 @@ export function AuthGate({ children }: AuthGateProps) {
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [auth]);
+
+  // The person deleted their account (ProfilePage's Delete Account): it is
+  // gone, and they are signed out. Sign In starts over, as anyone.
+  if (!auth.isLoading && !auth.isAuthenticated && accountWasDeleted()) {
+    return (
+      <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
+        <main className="max-w-md w-full text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
+            <img src={chinoIcon} alt="Chino" className="w-10 h-10" />
+          </div>
+          <h1 className="text-2xl font-semibold mb-2 text-white">Account Deleted</h1>
+          <p className="text-sm text-chino-text mb-5">
+            Your account is deleted, with everything this server kept of you, and you're signed out.
+          </p>
+          <button
+            onClick={() => {
+              forgetAccountDeleted();
+              void auth.signinRedirect();
+            }}
+            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
+          >
+            Sign In
+          </button>
+        </main>
+      </div>
+    );
+  }
 
   if (auth.error) {
     return (
