@@ -1,5 +1,6 @@
-// A packaged title's quality menu: what /play/info offers and which entry
-// the player is on. Pure: qualities.test.ts runs it.
+// A packaged title's quality menu: what /play/info offers, which entry the
+// player is on, and the name of the rung that plays - Auto says it ("Auto ·
+// 720p"). Pure: qualities.test.ts runs it.
 //
 // chino-stream serves a packaged title as the ladder of rungs this client
 // decodes (its caps), or one rung of it. /play/info's qualities lists the
@@ -52,4 +53,57 @@ export function packagedQualityMenu(
  */
 export function chosenQuality(menu: readonly PlayQuality[], q: string): PlayQuality {
   return menu.find((e) => e.name !== AUTO && e.name === q) ?? menu.find((e) => e.name === AUTO) ?? menu[0];
+}
+
+/** What is playing: a level of hls.js (its variant's URI and size), or the picture's size where the browser plays HLS itself. */
+export interface PlayingLevel {
+  uri?: string;
+  width?: number;
+  height?: number;
+}
+
+/** The rung a variant playlist belongs to: its directory (".../play/v1/playlist.m3u8?…" → "v1"). */
+export function rungOfUri(uri: string | undefined): string {
+  const parts = (uri ?? '').split(/[?#]/)[0].split('/').filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+// The heights quality labels name, as chino-stream's rungLabel does.
+const SIZE_CLASSES = [240, 360, 480, 540, 576, 720, 1080, 1440, 2160, 4320];
+
+/**
+ * A picture size named as chino-stream names a rung: the smallest class
+ * whose 16:9 box holds the frame, with 10% of the width to spare for DCI
+ * frames - so a 2.39:1 film's 1280x536 is 720p and 4096x2160 is 2160p.
+ * null for no size.
+ */
+export function sizeLabel(width: number | undefined, height: number | undefined): string | null {
+  if (!height || height <= 0) return null;
+  const w = width && width > 0 ? width : 0;
+  for (const c of SIZE_CLASSES) {
+    const boxW = (Math.floor((c * 16) / 9) + 1) & ~1;
+    if (height <= c && w * 10 <= boxW * 11) return `${c}p`;
+  }
+  return `${height}p`;
+}
+
+/**
+ * The name of what is playing: the menu's label of its rung - found by
+ * the rung's id in the variant URI, else by its picture size - else the
+ * size's class. null when nothing is known yet.
+ */
+export function playingLabel(level: PlayingLevel | null | undefined, menu: readonly PlayQuality[] | null | undefined): string | null {
+  if (!level) return null;
+  const rungs = (menu ?? []).filter((e) => e.name !== AUTO);
+  const rung = rungOfUri(level.uri);
+  const byId = rung ? rungs.find((e) => (e.id ?? e.name) === rung) : undefined;
+  if (byId) return byId.label;
+  const bySize = level.width && level.height ? rungs.find((e) => e.width === level.width && e.height === level.height) : undefined;
+  if (bySize) return bySize.label;
+  return sizeLabel(level.width, level.height);
+}
+
+/** Auto with the rung it plays: "Auto · 720p"; plain "Auto" until that is known. */
+export function autoLabel(auto: string, playing: string | null): string {
+  return playing ? `${auto} · ${playing}` : auto;
 }

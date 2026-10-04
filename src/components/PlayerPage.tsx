@@ -24,7 +24,7 @@ import {
   type LadderQuality,
   type Quality,
 } from '../lib/playback';
-import { AUTO, chosenQuality, packagedQualityMenu, type PlayQuality } from '../lib/qualities';
+import { AUTO, autoLabel, chosenQuality, packagedQualityMenu, playingLabel, type PlayQuality, type PlayingLevel } from '../lib/qualities';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { withoutCodec } from '../lib/caps';
 import { useDeviceCaps } from '../hooks/useDeviceCaps';
@@ -663,6 +663,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // master URL → new playlist load). Safari has native HLS so we
   // bypass hls.js there and set v.src directly.
   const hlsRef = useRef<Hls | null>(null);
+  // The level on screen, for Auto to name it ("Auto · 720p"): hls.js's
+  // LEVEL_SWITCHED, which fires when the fragment playing is of another
+  // level than the one before; where the browser plays HLS itself, the
+  // picture's size.
+  const [playingLevel, setPlayingLevel] = useState<PlayingLevel | null>(null);
 
   // Attach hls.js (or Safari's native HLS) to the <video> element when
   // playUrl is ready. Tears down on unmount or playUrl change.
@@ -675,6 +680,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     if (gaveUpRef.current) return;
     // eslint-disable-next-line no-console
     console.log('[hls-effect] SETUP', playUrl.slice(0, 100));
+    // A new source: what it plays is not known until it says.
+    setPlayingLevel(null);
     // Prefer hls.js (MSE-based) over native HLS — Chrome's
     // canPlayType('application/vnd.apple.mpegurl') returns "maybe"
     // but doesn't actually decode the playlist correctly. Only fall
@@ -682,8 +689,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // reports it CAN play HLS (Safari / iOS).
     if (!Hls.isSupported()) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
+        const onResize = () => setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
+        v.addEventListener('resize', onResize);
         v.src = playUrl;
-        return () => { v.removeAttribute('src'); v.load(); };
+        return () => {
+          v.removeEventListener('resize', onResize);
+          v.removeAttribute('src');
+          v.load();
+        };
       }
       // eslint-disable-next-line no-console
       console.error('[player] no HLS support: hls.js unsupported AND no native HLS');
@@ -729,6 +742,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     hls.on(Hls.Events.MEDIA_DETACHED, () => {
       // eslint-disable-next-line no-console
       console.log('[hls] MEDIA_DETACHED');
+    });
+    hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+      const level = hls.levels[data.level];
+      setPlayingLevel(level ? { uri: level.uri, width: level.width, height: level.height } : null);
     });
     // Circuit breaker — without this, a chronic codec / MSE-append
     // error sends recoverMediaError into a hot loop that hammers
@@ -904,7 +921,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     [effectiveMode, info],
   );
   const chosenPackaged = packagedMenu ? chosenQuality(packagedMenu, streamQuality) : null;
-  const qualityName = chosenPackaged ? chosenPackaged.label : labelForQuality(streamQuality);
+  // What plays, by the menu's names; on Auto the menu and the button say
+  // it: "Auto · 720p".
+  const playingName = useMemo(() => playingLabel(playingLevel, packagedMenu), [playingLevel, packagedMenu]);
+  const onAuto = chosenPackaged?.name === AUTO;
+  const qualityName = chosenPackaged
+    ? onAuto ? autoLabel(chosenPackaged.label, playingName) : chosenPackaged.label
+    : labelForQuality(streamQuality);
 
   // Stash the playhead for a source about to be rebuilt (pendingSeekRef).
   // At the very start a resume position may still be waiting there for
@@ -3711,6 +3734,9 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
                           className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${chosenPackaged?.name === entry.name ? 'text-chino-accent' : ''}`}
                         >
                           {entry.label}
+                          {entry.name === AUTO && onAuto && playingName ? (
+                            <span className="text-chino-muted"> · {playingName}</span>
+                          ) : null}
                         </button>
                       ))
                     : QUALITY_RUNGS.map((q) => (
@@ -3887,7 +3913,7 @@ function PlaybackInfoDialog({
   clientCodecs: { label: string; supported: boolean }[];
   effectiveMode: PlayInfo['mode'];
   streamQuality: Quality;
-  /** What a packaged title's quality menu is on ("Auto", "480p"); null without a menu. */
+  /** What a packaged title's quality menu is on ("Auto · 720p", "480p"); null without a menu. */
   packagedQuality: string | null;
   switchHistory: SwitchEntry[];
   videoEl: HTMLVideoElement | null;
