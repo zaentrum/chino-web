@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Zap as ZapIcon } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../../hooks/useStreamToken';
+import { useDeviceCaps } from '../../hooks/useDeviceCaps';
 import { useZapFeed } from '../../hooks/useZapFeed';
 import { useZapPrefetch } from '../../hooks/useZapPrefetch';
 import { useZapPreferences } from '../../hooks/useZapPreferences';
@@ -12,12 +13,6 @@ import { ZapCard } from '../zap/ZapCard';
 import type { KatalogItem } from '../../hooks/useItems';
 import type { ZapFeatures } from '../zap/ZapCard';
 
-/** Caps + quality params to advertise to the prewarm endpoint. Must
- *  match ZapCard's actual play URL so the warm primes the right
- *  pipeline (caps decide passthrough vs transcode, quality picks the
- *  rung). Keeping these in sync is critical — a mismatched warm just
- *  burns ffmpeg cycles on a window the real player will never fetch. */
-const PREWARM_CAPS = 'avc,hvc,aac,opus,mp3';
 const PREWARM_DEBOUNCE_MS = 500;
 
 /** Signal strengths chosen so a single save outweighs ~2 fast skips and
@@ -61,6 +56,11 @@ const DWELL_MS = 8000;
 export function ZapSection() {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  // The caps the prewarm sends: this device's, as ZapCard's play URL
+  // carries them (hooks/useDeviceCaps.ts), so the warm primes the
+  // pipeline - and, for a packaged ladder, the variant - the card will
+  // ask for. A mismatched warm burns work on what the card never fetches.
+  const caps = useDeviceCaps();
   const prefs = useZapPreferences();
   const telemetry = useZapTelemetry();
   const feed = useZapFeed({ scoreItem: (f) => prefs.score(f).normalized });
@@ -135,7 +135,9 @@ export function ZapSection() {
       // NVENC-context side-effects still benefit either rung — the
       // cold-start win mostly comes from those, not from window 0
       // being the exact rung the card will fetch.
-      const url = `/api/v1/items/${encodeURIComponent(id)}/play/prewarm?caps=${encodeURIComponent(PREWARM_CAPS)}&q=medium`;
+      const params = new URLSearchParams({ q: 'medium' });
+      if (caps) params.set('caps', caps);
+      const url = `/api/v1/items/${encodeURIComponent(id)}/play/prewarm?${params.toString()}`;
       fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
@@ -147,7 +149,7 @@ export function ZapSection() {
       });
     }, PREWARM_DEBOUNCE_MS);
     return () => window.clearTimeout(tid);
-  }, [activeId, feed.queue, streamToken, auth.user?.access_token]);
+  }, [activeId, feed.queue, streamToken, auth.user?.access_token, caps]);
 
   // Session-wide mute state. Lifted out of ZapCard so that unmuting
   // once survives every swipe afterwards — the browser autoplay

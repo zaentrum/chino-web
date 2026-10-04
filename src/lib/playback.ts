@@ -10,6 +10,8 @@
 // pre-segmented files with one rendition and ignores ?q= for it, so for a
 // packaged title a quality switch only restarts the same stream.
 
+import { hasCodec } from './caps.ts';
+
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
 export type Quality = 'high' | 'medium' | 'low';
 
@@ -135,7 +137,7 @@ export type MediaFallback =
  * fails has nowhere further to go.
  */
 export function mediaFallback(s: { mode: PlayMode | null; forcedTranscode: boolean; caps: readonly string[] }): MediaFallback {
-  if (s.mode === 'packaged') return s.caps.includes('hvc') ? { kind: 'drop-hevc' } : { kind: 'give-up' };
+  if (s.mode === 'packaged') return hasCodec(s.caps, 'hvc') ? { kind: 'drop-hevc' } : { kind: 'give-up' };
   if (s.mode === 'transcode' || s.forcedTranscode) return { kind: 'give-up' };
   return { kind: 'transcode' };
 }

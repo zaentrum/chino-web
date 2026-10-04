@@ -20,12 +20,14 @@
 //                   audio while the video is warm)
 //
 // KEY IDEA: the format we warm is already the per-device-correct one —
-// not because we pick a rung here, but because the Zap feed is filtered
-// to packaged items (upstream packaged-ids feed filter) which chino-
-// stream serves via single-rendition passthrough. We prefetch the SAME
-// master URL the player builds (same stream token + caps), so we follow
-// the server to exactly the bytes it will hand the player. We never
-// re-rank by bandwidth or hardcode a quality.
+// not because we pick a rung here, but because chino-stream serves the
+// master for the caps the URL carries (this device's, as the card sends
+// them: hooks/useDeviceCaps.ts) - a packaged ladder filtered to the rungs
+// the device decodes, the one it is to start on listed first, which is
+// where the card's hls.js starts (lib/hlsConfig.ts). We prefetch the SAME
+// master URL the player builds (same stream token + q + caps), so we
+// follow the server to exactly the bytes it will hand the player. We
+// never re-rank by bandwidth or hardcode a quality.
 //
 // This is a pure side-effect cache warmer. It owns NO React state and
 // renders nothing. hls.js remains the only thing that *plays* — we just
@@ -268,10 +270,9 @@ class ZapPrefetcher {
     const headers: Record<string, string> = {};
     if (target.bearer) headers.Authorization = `Bearer ${target.bearer}`;
 
-    // 1. master.m3u8 — the upstream packaged-ids feed filter + single-
-    // rendition passthrough already produced the per-device-correct
-    // stream, so we just follow whatever this URL points at; we never
-    // re-rank by bandwidth.
+    // 1. master.m3u8 — served for this device's caps, so it is already
+    // the per-device-correct stream: we just follow whatever this URL
+    // points at; we never re-rank by bandwidth.
     const masterText = await this.fetchText(target.masterUrl, headers, signal);
     if (!masterText) return 0;
 
@@ -430,16 +431,14 @@ function resolveUrl(base: string, ref: string): string {
  * Pick a video variant URI from a master playlist by taking the FIRST
  * `#EXT-X-STREAM-INF` entry.
  *
- * Per-device-correctness does NOT come from this selection. The Zap feed
- * is filtered to packaged items by the upstream packaged-ids feed
- * filter, and chino-stream serves those via single-rendition passthrough
- * — the already-correct format for the device, not a ladder we choose a
- * rung from. So in the common case the "master" is really a single media
- * playlist (EXTINF lines directly) and this returns null, signalling the
- * caller to treat the master URL itself as the media playlist. When a
- * true multi-variant master *is* present we still don't re-rank by
- * bandwidth — taking the first entry just follows whatever ordering the
- * server emitted rather than second-guessing it.
+ * Per-device-correctness does NOT come from this selection: chino-stream
+ * filters the master to the variants the device decodes (the caps in its
+ * URL) and lists first the one a client starts on - where the card's
+ * hls.js starts (lib/hlsConfig.ts) - so taking the first entry follows
+ * the server's ordering rather than second-guessing it; we don't re-rank
+ * by bandwidth. A master that is really a single media playlist (EXTINF
+ * lines directly) returns null, signalling the caller to treat the master
+ * URL itself as the media playlist.
  */
 function pickVariantUri(masterText: string): string | null {
   const lines = masterText.split(/\r?\n/);

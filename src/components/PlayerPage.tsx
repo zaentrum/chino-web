@@ -23,6 +23,8 @@ import {
   type Quality,
 } from '../lib/playback';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
+import { withoutCodec } from '../lib/caps';
+import { useDeviceCaps } from '../hooks/useDeviceCaps';
 import { BugReportDialog } from './BugReportDialog';
 import { StatusPage } from './StatusPage';
 
@@ -568,95 +570,22 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const streamTokenRef = useRef(streamToken);
   streamTokenRef.current = streamToken;
 
-  // Build the capability beacon the server uses to pick a pipeline.
-  // Comma-separated tokens; missing token means "not supported".
-  // Server's ParseCaps recognises the same vocabulary
-  // (chino-stream/internal/play/ffprobe.go::ParseCaps).
-  //
-  // Strategy: optimistic-include synchronously based on
-  // MediaSource.isTypeSupported, then asynchronously refine via
-  // MediaCapabilities. Optimistic-include avoids the race where the
-  // first /info + master.m3u8 fetch goes out without hvc, server
-  // picks the wrong pipeline (remux instead of packaged for HEVC),
-  // and the badge briefly shows the wrong mode before the async
-  // capability check catches up.
-  //
-  // Two intentional omissions:
-  //   * `aacmc` (multi-channel AAC LC) is NEVER advertised. Chrome
-  //     returns true from `isTypeSupported('mp4a.40.2; channels="6"')`
-  //     but its MSE pipeline rejects 5.1/7.1 fmp4 segments with
-  //     bufferAppendError. Always-downmix is the safe default; a
-  //     ~5% audio re-encode tax beats a forced libx264 fallback.
-  //   * For `hvc`: if isTypeSupported says yes (most Android phones,
-  //     Safari, modern Chromebooks) we include it immediately. If the
-  //     async MediaCapabilities probe later says supported=false (the
-  //     Chrome/Windows lie scenario) we strip it and the player
-  //     re-requests with the corrected caps.
-  //
-  // iPhone Safari has NO MediaSource at all (MSE is iPad-only in
-  // Safari), so probing it there marks every codec unsupported and the
-  // player sends EMPTY caps. chino-stream then falls back to
-  // DefaultCaps, which omits hvc — so a 4K HEVC item that the iPhone
-  // decodes natively in HLS gets needlessly transcoded to 720p H.264
-  // (and av1/vp9/opus items hard-fail with SRC_NOT_SUPPORTED). On that
-  // native-HLS path, probe a detached <video> element via canPlayType
-  // instead — for Safari's native pipeline it's the authoritative
-  // answer ("maybe"/"probably" both count as playable).
-  const isCodecSupported = (mime: string) => {
-    if (typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported) {
-      return MediaSource.isTypeSupported(mime);
-    }
-    return document.createElement('video').canPlayType(mime) !== '';
-  };
-  const initialCaps = useMemo(() => {
-    const t: string[] = [];
-    if (isCodecSupported('video/mp4; codecs="avc1.640028"')) t.push('avc');
-    if (isCodecSupported('video/mp4; codecs="hvc1.1.6.L120.B0"')) t.push('hvc');
-    if (isCodecSupported('video/mp4; codecs="av01.0.05M.08"')) t.push('av1');
-    if (isCodecSupported('video/webm; codecs="vp9"')) t.push('vp9');
-    if (isCodecSupported('audio/mp4; codecs="mp4a.40.2"')) t.push('aac');
-    if (isCodecSupported('audio/mpeg')) t.push('mp3');
-    if (isCodecSupported('audio/mp4; codecs="opus"')) t.push('opus');
-    if (isCodecSupported('audio/mp4; codecs="ac-3"')) t.push('ac3');
-    if (isCodecSupported('audio/mp4; codecs="ec-3"')) t.push('eac3');
-    return t;
-  }, []);
-  const [capsParam, setCapsParam] = useState(() => initialCaps.join(','));
+  // What this browser decodes (lib/caps.ts), sent with /play/info and with
+  // every master: the probe Zap and the next-episode warm use too
+  // (hooks/useDeviceCaps.ts). The synchronous answer at first - with HEVC
+  // whenever isTypeSupported says so, so the first requests already get the
+  // HEVC rungs - then without hvc should MediaCapabilities say the MSE
+  // pipeline cannot decode it; the info and the source follow.
+  const deviceCapsParam = useDeviceCaps();
+  // A packaged title whose HEVC this browser claimed and then failed to
+  // decode is asked for again without it (lib/playback.ts mediaFallback).
+  const [hevcRefused, setHevcRefused] = useState(false);
+  const capsParam = useMemo(
+    () => (hevcRefused ? withoutCodec(deviceCapsParam, 'hvc') : deviceCapsParam),
+    [deviceCapsParam, hevcRefused],
+  );
   const capsParamRef = useRef(capsParam);
   useEffect(() => { capsParamRef.current = capsParam; }, [capsParam]);
-  useEffect(() => {
-    if (!initialCaps.includes('hvc')) return;
-    // The probe below asks specifically about the MSE pipeline
-    // (type:'media-source'). On the native-HLS path (iPhone — no
-    // MediaSource) that question is wrong and some Safari versions
-    // answer supported=false instead of rejecting, which would strip
-    // the hvc that canPlayType just confirmed. Skip it there.
-    if (typeof MediaSource === 'undefined') return;
-    const mc = (navigator as Navigator & {
-      mediaCapabilities?: { decodingInfo(cfg: object): Promise<{ supported: boolean; smooth: boolean }> };
-    }).mediaCapabilities;
-    if (!mc?.decodingInfo) return;
-    mc.decodingInfo({
-      type: 'media-source',
-      video: {
-        contentType: 'video/mp4; codecs="hvc1.1.6.L120.B0"',
-        width: 1920,
-        height: 1080,
-        bitrate: 5_000_000,
-        framerate: 24,
-      },
-    })
-      .then((res) => {
-        // Only DOWNGRADE — if the deeper probe says the browser can't
-        // actually decode HEVC, strip the optimistic include. Don't
-        // gate on `smooth`; on real devices HEVC plays fine even when
-        // MediaCapabilities marks it not-smooth (conservative heuristic).
-        if (!res.supported) {
-          setCapsParam(initialCaps.filter((c) => c !== 'hvc').join(','));
-        }
-      })
-      .catch(() => undefined);
-  }, [initialCaps]);
 
   // playUrl points at the HLS master playlist — hls.js fetches the
   // playlists + segments from there, and stitches the segments into a
@@ -908,7 +837,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             });
             if (fallback.kind === 'drop-hevc') {
               keepPosition();
-              setCapsParam((c) => c.split(',').filter((t) => t !== 'hvc').join(','));
+              setHevcRefused(true);
               setActionLabel('This browser can\'t decode HEVC — switching…');
               reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
             } else if (fallback.kind === 'transcode') {
@@ -1798,18 +1727,21 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // time they (or the auto-countdown) actually navigate, the new
   // PlayerPage's first fetch lands on cached files instead of waiting
   // for a fresh ffmpeg run — eliminating the "00:00 loading…" gap the
-  // user reported between episodes.
+  // user reported between episodes. It asks as the next page will: q=high
+  // and this device's caps (not this title's: a refused HEVC is this
+  // title's), so a packaged episode warms the variant that page starts on.
   const prewarmedNextRef = useRef<string | null>(null);
   useEffect(() => {
     if (!inCredits || !nextEp || !token || !streamToken) return;
     if (prewarmedNextRef.current === nextEp.id) return;
     prewarmedNextRef.current = nextEp.id;
-    const enc = encodeURIComponent(streamToken);
-    void fetch(`/api/v1/items/${encodeURIComponent(nextEp.id)}/play/master.m3u8?stream=${enc}&q=high`, {
+    const params = new URLSearchParams({ stream: streamToken, q: 'high' });
+    if (deviceCapsParam) params.set('caps', deviceCapsParam);
+    void fetch(`/api/v1/items/${encodeURIComponent(nextEp.id)}/play/master.m3u8?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => undefined);
     reportEvent('binge_prewarm', { next_item: nextEp.id });
-  }, [inCredits, nextEp, token, streamToken]);
+  }, [inCredits, nextEp, token, streamToken, deviceCapsParam]);
 
   // Mark the item watched once playback hits the credits segment OR
   // crosses 95 % of duration (whichever fires first). Guarded by a ref

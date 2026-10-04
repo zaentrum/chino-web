@@ -3,6 +3,7 @@ import Hls from 'hls.js';
 import { Bookmark, BookmarkCheck, Maximize2, Volume2, VolumeX, Info } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../../hooks/useStreamToken';
+import { useDeviceCaps } from '../../hooks/useDeviceCaps';
 import { useItem } from '../../hooks/useItem';
 import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
@@ -47,11 +48,6 @@ export interface ZapFeatures {
   castNames?: string[];
 }
 
-/** Caps we declare to the server for the preview pipeline. Kept
- *  static + permissive: the server still gates real codec selection on
- *  the source codecs. */
-const ZAP_CAPS = 'avc,hvc,aac,opus,mp3';
-
 /** Below this many milliseconds of accumulated wall-clock dwell we
  *  treat the cleanup as noise (StrictMode double-invoke, fast prop
  *  re-renders) and skip the onDwellEnd callback entirely. Any genuine
@@ -83,6 +79,10 @@ export function ZapCard({
 }: ZapCardProps) {
   const auth = useAuth();
   const streamToken = useStreamToken();
+  // What this device decodes, as the player, the prefetch and the prewarm
+  // send it (hooks/useDeviceCaps.ts): the server filters a packaged ladder
+  // by it, and serves and warms the same rungs for all of them.
+  const caps = useDeviceCaps();
   const watchlist = useWatchlist();
   const detail = useItem(item.id);
 
@@ -251,13 +251,10 @@ export function ZapCard({
     if (!streamToken) return '';
     if (midpoint.source === 'fallback' || midpoint.seekSec <= 0) return '';
     const q = pickQuality();
-    const params = new URLSearchParams({
-      stream: streamToken,
-      q,
-      caps: ZAP_CAPS,
-    });
+    const params = new URLSearchParams({ stream: streamToken, q });
+    if (caps) params.set('caps', caps);
     return `/api/v1/items/${item.id}/play/master.m3u8?${params.toString()}`;
-  }, [streamToken, item.id, midpoint.seekSec, midpoint.source]);
+  }, [streamToken, item.id, midpoint.seekSec, midpoint.source, caps]);
 
   // ---- Impression: parent owns session-wide dedup, so we just fire
   // once per (item.id, became-active) transition. ----

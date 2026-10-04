@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from './useStreamToken';
+import { refinedDeviceCaps, useDeviceCaps } from './useDeviceCaps';
 import { pickZapMidpoint, stampFirstCardSeek } from './useZapMidpoint';
 import { zapPrefetcher, type ZapPrefetchTarget } from '../lib/zapPrefetch';
 import type { KatalogItem } from './useItems';
@@ -19,14 +20,6 @@ import type { KatalogItem } from './useItems';
  *  card costs nothing. */
 const LOOKAHEAD = 3;
 
-/** Caps advertised on the master URL. MUST equal ZapCard's ZAP_CAPS so
- *  the warmed master URL is byte-identical to the one the player builds
- *  (same stream token + q + caps → same cache key). The per-device-
- *  correct format itself comes from the upstream packaged-ids feed
- *  filter + single-rendition passthrough, not from these caps selecting
- *  a rung — matching them just guarantees we hit the same cache entry. */
-const ZAP_CAPS = 'avc,hvc,aac,opus,mp3';
-
 /** Replicates ZapCard.pickQuality() so the warmed rung matches the rung
  *  the card will request. Kept in lockstep by hand — a mismatch just
  *  warms a rung the player won't read (wasted bytes, not a correctness
@@ -42,13 +35,16 @@ function pickQuality(): 'low' | 'medium' {
 }
 
 /** Build the master.m3u8 URL for a queue item exactly as ZapCard does:
- *  same stream token, same q, same caps. Returns null when we can't yet
- *  build a usable URL (no stream token) or when the card has no sane
- *  seek point (too-short content → 'fallback'). */
+ *  same stream token, same q, same caps - this device's
+ *  (hooks/useDeviceCaps.ts), which is what the server filters a packaged
+ *  ladder by, so the variant warmed is the one the card starts on.
+ *  Returns null when we can't yet build a usable URL (no stream token) or
+ *  when the card has no sane seek point (too-short content → 'fallback'). */
 function buildTarget(
   item: KatalogItem,
   streamToken: string,
   bearer: string | undefined,
+  caps: string,
 ): ZapPrefetchTarget | null {
   // Resolve the seek the same way ZapCard's midpoint memo does: prefer
   // a stamped seekSec, else derive from duration. We don't have the
@@ -69,11 +65,8 @@ function buildTarget(
     seekSec = mid.seekSec;
   }
 
-  const params = new URLSearchParams({
-    stream: streamToken,
-    q: pickQuality(),
-    caps: ZAP_CAPS,
-  });
+  const params = new URLSearchParams({ stream: streamToken, q: pickQuality() });
+  if (caps) params.set('caps', caps);
   return {
     id: item.id,
     masterUrl: `/api/v1/items/${item.id}/play/master.m3u8?${params.toString()}`,
@@ -105,15 +98,18 @@ export function useZapPrefetch({ queue, activeId }: UseZapPrefetchOpts): void {
   const auth = useAuth();
   const streamToken = useStreamToken();
   const bearer = auth.user?.access_token;
+  const caps = useDeviceCaps();
 
-  // Read queue/token through refs so the warm callback identity stays
-  // stable and effects don't churn on every queue tick.
+  // Read queue/token/caps through refs so the warm callback identity
+  // stays stable and effects don't churn on every queue tick.
   const queueRef = useRef(queue);
   useEffect(() => { queueRef.current = queue; }, [queue]);
   const streamTokenRef = useRef(streamToken);
   useEffect(() => { streamTokenRef.current = streamToken; }, [streamToken]);
   const bearerRef = useRef(bearer);
   useEffect(() => { bearerRef.current = bearer; }, [bearer]);
+  const capsRef = useRef(caps);
+  useEffect(() => { capsRef.current = caps; }, [caps]);
 
   /** Warm the LOOKAHEAD cards starting AFTER `fromId` (or from the head
    *  when fromId is null/not-found). Dedup is the engine's job — we
@@ -131,7 +127,7 @@ export function useZapPrefetch({ queue, activeId }: UseZapPrefetchOpts): void {
     const slice = q.slice(start, start + LOOKAHEAD);
     for (const item of slice) {
       if (zapPrefetcher.hasWarmed(item.id)) continue;
-      const target = buildTarget(item, token, bearerRef.current);
+      const target = buildTarget(item, token, bearerRef.current, capsRef.current);
       if (!target) continue;
       void zapPrefetcher.prefetch(target);
     }
@@ -182,15 +178,23 @@ export function useZapAppStartWarm(firstCandidate: KatalogItem | null | undefine
 
   useEffect(() => {
     if (!streamToken || !firstCandidate) return;
-    if (!zapPrefetcher.markAppStartWarmed()) return; // already done this session
-    // Stamp the deterministic seek so this warm targets the SAME card[0]
-    // (top-ranked candidate + fixed ratio) the Zap screen will show.
-    const target = buildTarget(stampFirstCardSeek(firstCandidate), streamToken, bearer);
-    if (!target) return;
-    void zapPrefetcher.prefetch(target);
+    let live = true;
+    // With the caps the card will send: by the time Zap opens, the
+    // refined ones (hooks/useDeviceCaps.ts).
+    void refinedDeviceCaps().then((caps) => {
+      if (!live || !zapPrefetcher.markAppStartWarmed()) return; // already done this session
+      // Stamp the deterministic seek so this warm targets the SAME card[0]
+      // (top-ranked candidate + fixed ratio) the Zap screen will show.
+      const target = buildTarget(stampFirstCardSeek(firstCandidate), streamToken, bearer, caps);
+      if (!target) return;
+      void zapPrefetcher.prefetch(target);
+    });
     // Intentionally do NOT cancelAll on unmount here: the whole point is
     // the bytes survive the home→zap transition. The Zap pager owns
     // cancellation of the look-ahead warms.
+    return () => {
+      live = false;
+    };
   }, [streamToken, firstCandidate, bearer]);
 }
 
