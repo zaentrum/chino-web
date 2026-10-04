@@ -17,11 +17,14 @@ import { defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitl
 import {
   QUALITY_RUNGS,
   downgradeStep,
+  isLadderQuality,
   mediaFallback,
   restorePosition,
   stallAction,
+  type LadderQuality,
   type Quality,
 } from '../lib/playback';
+import { AUTO, chosenQuality, packagedQualityMenu, type PlayQuality } from '../lib/qualities';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { withoutCodec } from '../lib/caps';
 import { useDeviceCaps } from '../hooks/useDeviceCaps';
@@ -108,8 +111,12 @@ interface PlayInfo {
   // mode === 'transcode'; passthrough/packaged/remux paths don't
   // re-encode so the source codec stays authoritative.
   encoder?: 'libx264' | 'h264_nvenc' | string;
-  qualities?: { name: 'high' | 'medium' | 'low'; label: string }[];
-  default_quality?: 'high' | 'medium' | 'low';
+  // packaged: Auto and the rungs the client may pick (lib/qualities.ts),
+  // null for one rendition; transcode: high, medium, low. The player starts
+  // on q=high whatever default_quality says - it asks before /play/info has
+  // answered, and on a packaged title high is Auto.
+  qualities?: PlayQuality[] | null;
+  default_quality?: string;
   audio_tracks?: TrackInfo[];
   subtitle_tracks?: TrackInfo[];
 }
@@ -129,7 +136,7 @@ interface SwitchEntry {
 // Per-rung output spec for the transcode ladder, mirrored from the
 // stream service's QualityLadder. Used in the Playback info dialog to
 // show what the user is actually asking ffmpeg for.
-const QUALITY_SPEC: Record<Quality, { vcodec: string; crf: string; abps: string; scale: string }> = {
+const QUALITY_SPEC: Record<LadderQuality, { vcodec: string; crf: string; abps: string; scale: string }> = {
   high:   { vcodec: 'libx264', crf: '23', abps: '192 kbps', scale: 'source' },
   medium: { vcodec: 'libx264', crf: '26', abps: '128 kbps', scale: '720p'   },
   low:    { vcodec: 'libx264', crf: '28', abps: '96 kbps',  scale: '480p'   },
@@ -318,12 +325,12 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const [infoOpen, setInfoOpen] = useState(false);
   const clientCodecs = useMemo(probeClientCodecs, []);
 
-  // Adaptive-bitrate state. streamQuality is the rung we're currently
-  // asking the server's transcode ladder for (a packaged title has one
-  // rendition; the server ignores ?q= for it). Under HLS the media
-  // element's currentTime IS the position in the title, whatever the
-  // rung: a switch rebuilds the source and seeks it back there
-  // (pendingSeekRef below).
+  // Adaptive-bitrate state. streamQuality is the ?q= the player asks with
+  // (lib/playback.ts Quality): on the fly, the transcode ladder's rung; on
+  // a packaged title Auto - the high it starts with, or auto - or the rung
+  // the viewer picked in the menu. Under HLS the media element's
+  // currentTime IS the position in the title, whatever the rung: a switch
+  // rebuilds the source and seeks it back there (pendingSeekRef below).
   const [streamQuality, setStreamQuality] = useState<Quality>('high');
   const streamQualityRef = useRef(streamQuality);
   useEffect(() => { streamQualityRef.current = streamQuality; }, [streamQuality]);
@@ -838,6 +845,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             if (fallback.kind === 'drop-hevc') {
               keepPosition();
               setHevcRefused(true);
+              // Back to the start's q along with it: a rung picked may not
+              // be served without HEVC, and should the title not be
+              // packaged for these caps, the server reads anything but
+              // high as a transcode.
+              if (!isLadderQuality(streamQualityRef.current)) setStreamQuality('high');
               setActionLabel('This browser can\'t decode HEVC — switching…');
               reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
             } else if (fallback.kind === 'transcode') {
@@ -883,6 +895,16 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     if (forceTranscode) return 'transcode';
     return info?.mode ?? 'passthrough';
   }, [info?.mode, forceTranscode]);
+
+  // A packaged title's quality menu - Auto and the rungs this client may
+  // pick (lib/qualities.ts) - and the entry it is on; null for a package of
+  // one rendition, and for a title that is not packaged.
+  const packagedMenu = useMemo(
+    () => (effectiveMode === 'packaged' ? packagedQualityMenu(info) : null),
+    [effectiveMode, info],
+  );
+  const chosenPackaged = packagedMenu ? chosenQuality(packagedMenu, streamQuality) : null;
+  const qualityName = chosenPackaged ? chosenPackaged.label : labelForQuality(streamQuality);
 
   // Stash the playhead for a source about to be rebuilt (pendingSeekRef).
   // At the very start a resume position may still be waiting there for
@@ -961,9 +983,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // side (no hvc), reports mode=transcode for HEVC items, and the
     // race against the with-caps response can stick mode=transcode
     // even though master.m3u8 ends up serving the packaged HEVC
-    // stream correctly.
+    // stream correctly. The q goes along too: for a packaged title the
+    // info describes the rung the master starts on for caps and q.
     if (!capsParam) return () => ctrl.abort();
-    const infoQs = `?caps=${encodeURIComponent(capsParam)}`;
+    const infoQs = `?${new URLSearchParams({ caps: capsParam, q: streamQualityRef.current }).toString()}`;
     fetch(`/api/v1/items/${itemId}/play/info${infoQs}`, {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${token}` },
@@ -2716,25 +2739,35 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     setOpenMenu(null);
   };
 
-  // Manual quality switch from the settings menu. The server's master
-  // playlist now exposes a SINGLE variant matching ?q=, so changing
-  // streamQuality flips playUrl which triggers a hls.js teardown +
-  // reload. Stash currentTime so onLoadedMetadata can replay it once
-  // the new ladder rung's segments arrive.
-  const switchQuality = (q: Quality) => {
+  // Manual quality switch from the quality menu: a transcode rung, or on a
+  // packaged title Auto (q=auto, its ladder) or one of its rungs (q=<name>,
+  // that rung alone). Changing streamQuality flips playUrl, which tears
+  // hls.js down and loads the new master; the playhead is kept for
+  // hls.js's startPosition and onLoadedMetadata to put back.
+  const switchQuality = (q: Quality, label = labelForQuality(q)) => {
     if (q === streamQuality) {
       setOpenMenu(null);
       return;
     }
-    const v = videoRef.current;
-    const wallTime = v?.currentTime ?? 0;
+    const wallTime = videoRef.current?.currentTime ?? 0;
     setBuffering(true);
-    setActionLabel(`Switching to ${labelForQuality(q)}…`);
+    setActionLabel(`Switching to ${label}…`);
     reportEvent('quality_switch', { from: streamQuality, to: q, manual: true });
-    recordSwitch(`→ ${labelForQuality(q)}`, 'manual', `at ${fmt(wallTime)}`);
-    pendingSeekRef.current = wallTime;
+    recordSwitch(`→ ${label}`, 'manual', `at ${fmt(wallTime)}`);
+    keepPosition();
     setStreamQuality(q);
     setOpenMenu(null);
+  };
+
+  // A pick in a packaged title's menu. The entry already on is no switch -
+  // Auto included, which is also what the q=high the player starts with is
+  // served as.
+  const pickPackagedQuality = (entry: PlayQuality) => {
+    if (chosenPackaged?.name === entry.name) {
+      setOpenMenu(null);
+      return;
+    }
+    switchQuality(entry.name, entry.label);
   };
 
   const onVolume = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3653,31 +3686,42 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             )}
           </div>
 
-          {/* Quality switcher only makes sense when the active pipeline
-              is the transcode ladder — the /copy/ and /v0/ paths don't
-              have rungs to pick from, so showing the menu was misleading
-              when nothing happened on click. */}
-          {info && effectiveMode === 'transcode' && (
+          {/* The quality menu: the transcode ladder's rungs, or a packaged
+              title's Auto and rungs when it has two or more to choose
+              from. A direct stream and a package of one rendition have
+              nothing to pick - a menu whose clicks change nothing was
+              misleading. */}
+          {info && (effectiveMode === 'transcode' || packagedMenu) && (
             <div className="relative">
               <button
                 onClick={() => toggleMenu('quality')}
                 className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
-                title={`Quality (${effectiveMode === 'transcode' ? labelForQuality(streamQuality) : 'Direct'})`}
+                title={`Quality (${qualityName})`}
               >
                 <Settings className="w-5 h-5" />
               </button>
               {qualityMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
                   <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Quality</div>
-                  {QUALITY_RUNGS.map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => switchQuality(q)}
-                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamQuality === q ? 'text-chino-accent' : ''}`}
-                    >
-                      {labelForQuality(q)}
-                    </button>
-                  ))}
+                  {packagedMenu
+                    ? packagedMenu.map((entry) => (
+                        <button
+                          key={entry.name}
+                          onClick={() => pickPackagedQuality(entry)}
+                          className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${chosenPackaged?.name === entry.name ? 'text-chino-accent' : ''}`}
+                        >
+                          {entry.label}
+                        </button>
+                      ))
+                    : QUALITY_RUNGS.map((q) => (
+                        <button
+                          key={q}
+                          onClick={() => switchQuality(q)}
+                          className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamQuality === q ? 'text-chino-accent' : ''}`}
+                        >
+                          {labelForQuality(q)}
+                        </button>
+                      ))}
                 </div>
               )}
             </div>
@@ -3764,6 +3808,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           clientCodecs={clientCodecs}
           effectiveMode={effectiveMode}
           streamQuality={streamQuality}
+          packagedQuality={chosenPackaged ? qualityName : null}
           switchHistory={switchHistory}
           videoEl={videoRef.current}
           displayedCurrent={displayedCurrent}
@@ -3832,6 +3877,7 @@ function PlaybackInfoDialog({
   clientCodecs,
   effectiveMode,
   streamQuality,
+  packagedQuality,
   switchHistory,
   videoEl,
   displayedCurrent,
@@ -3841,11 +3887,16 @@ function PlaybackInfoDialog({
   clientCodecs: { label: string; supported: boolean }[];
   effectiveMode: PlayInfo['mode'];
   streamQuality: Quality;
+  /** What a packaged title's quality menu is on ("Auto", "480p"); null without a menu. */
+  packagedQuality: string | null;
   switchHistory: SwitchEntry[];
   videoEl: HTMLVideoElement | null;
   displayedCurrent: number;
   onClose: () => void;
 }) {
+  // The transcode ladder's output, for its rungs only (a packaged rung's
+  // name is no transcode rung).
+  const spec = isLadderQuality(streamQuality) ? QUALITY_SPEC[streamQuality] : null;
   const modeColor: Record<PlayInfo['mode'], string> = {
     passthrough: 'bg-chino-green/20 text-chino-green border-chino-green/40',
     remux:       'bg-chino-amber/20 text-chino-amber border-chino-amber/40',
@@ -3938,15 +3989,19 @@ function PlaybackInfoDialog({
                           ? 'h264_nvenc (NVIDIA NVENC, GPU)'
                           : `${info.encoder || 'libx264'} (CPU)`}
                       </dd>
-                      <dt className="text-chino-muted">Video target</dt>
-                      <dd>H.264 High@4.0 · {QUALITY_SPEC[streamQuality].scale} · {info.encoder === 'h264_nvenc' ? `CQ ${22}` : `CRF ${QUALITY_SPEC[streamQuality].crf}`}</dd>
-                      <dt className="text-chino-muted">Audio target</dt>
-                      <dd>AAC stereo · {QUALITY_SPEC[streamQuality].abps}</dd>
+                      {spec ? (
+                        <>
+                          <dt className="text-chino-muted">Video target</dt>
+                          <dd>H.264 High@4.0 · {spec.scale} · {info.encoder === 'h264_nvenc' ? `CQ ${22}` : `CRF ${spec.crf}`}</dd>
+                          <dt className="text-chino-muted">Audio target</dt>
+                          <dd>AAC stereo · {spec.abps}</dd>
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     <>
                       <dt className="text-chino-muted">Quality</dt>
-                      <dd>Direct ({info.video_codec.toUpperCase()})</dd>
+                      <dd>{packagedQuality ?? `Direct (${info.video_codec.toUpperCase()})`}</dd>
                       <dt className="text-chino-muted">Encoder</dt>
                       <dd>None — source bytes pass through unmodified</dd>
                     </>
@@ -4011,6 +4066,9 @@ function labelForQuality(q: Quality): string {
     case 'high':   return 'High (source)';
     case 'medium': return 'Medium (720p)';
     case 'low':    return 'Low (480p)';
+    case AUTO:     return 'Auto';
+    // A packaged rung's name; the menu has its label.
+    default:       return q;
   }
 }
 

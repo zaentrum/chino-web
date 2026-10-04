@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   IN_PLACE_TRIES,
   downgradeStep,
+  isLadderQuality,
   mediaFallback,
   restorePosition,
   stallAction,
@@ -91,4 +92,23 @@ test('media errors: a packaged title asks again without HEVC, or gives up - neve
   assert.deepEqual(mediaFallback({ mode: null, forcedTranscode: false, caps: [] }), { kind: 'transcode' });
   assert.deepEqual(mediaFallback({ mode: 'remux', forcedTranscode: true, caps: [] }), { kind: 'give-up' });
   assert.deepEqual(mediaFallback({ mode: 'transcode', forcedTranscode: false, caps: [] }), { kind: 'give-up' });
+});
+
+test('a packaged title on a rung the viewer picked, or on Auto, is rebuilt on it - and never stepped down by the player', () => {
+  for (const quality of ['v2', 'auto', 'high']) {
+    const a = stallAction(stall({ quality, bufferedAheadSec: 4, tries: IN_PLACE_TRIES }));
+    assert.deepEqual(a, { kind: 'reload', at: 512.4, quality, forceTranscode: false, notice: null, label: 'reconnecting' }, quality);
+    assert.equal(downgradeStep({ mode: 'packaged', quality, forcedTranscode: false }), null, quality);
+  }
+  // A rung's name is no transcode rung: nothing to step down from.
+  assert.equal(downgradeStep({ mode: 'transcode', quality: 'v1', forcedTranscode: false }), null);
+});
+
+test('the transcode rungs are the ladder qualities; auto and a rung name are not', () => {
+  for (const q of ['high', 'medium', 'low']) assert.equal(isLadderQuality(q), true, q);
+  for (const q of ['auto', 'v0', 'v2', '']) assert.equal(isLadderQuality(q), false, q);
+});
+
+test('media errors on a packaged title asked with an HEVC height cap still ask again without HEVC', () => {
+  assert.deepEqual(mediaFallback({ mode: 'packaged', forcedTranscode: false, caps: ['avc', 'hvc:1080', 'aac'] }), { kind: 'drop-hevc' });
 });

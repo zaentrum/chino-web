@@ -6,16 +6,32 @@
 // nudge the media element where it stands, restart hls.js's loading where it
 // stands, or rebuild the source - a new master.m3u8 URL - and seek the new
 // one back to where the old one was. Which of these makes sense depends on
-// what the server is doing: chino-stream serves a packaged title as fixed,
-// pre-segmented files with one rendition and ignores ?q= for it, so for a
-// packaged title a quality switch only restarts the same stream.
+// what the server is doing. A packaged title is pre-segmented files: its
+// ladder for the client's caps, which hls.js steps through by itself (Auto),
+// or the one rung the viewer picked - never a transcode, and nothing for
+// the player to step down to. A title that is not packaged runs on the fly:
+// a direct stream (passthrough, remux) or the transcode ladder's rungs.
 
 import { hasCodec } from './caps.ts';
 
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
-export type Quality = 'high' | 'medium' | 'low';
 
-export const QUALITY_RUNGS: readonly Quality[] = ['high', 'medium', 'low'];
+/** A rung of the on-the-fly transcode ladder. */
+export type LadderQuality = 'high' | 'medium' | 'low';
+
+/**
+ * What the player asks for (?q=). On the fly: a transcode rung - "high"
+ * also stream-copies a direct stream. Packaged: "auto", the client's
+ * ladder, or the name of one rung from /play/info's qualities ("v2"),
+ * served alone; the transcode rungs mean auto there (lib/qualities.ts).
+ */
+export type Quality = LadderQuality | 'auto' | (string & {});
+
+export const QUALITY_RUNGS: readonly LadderQuality[] = ['high', 'medium', 'low'];
+
+export function isLadderQuality(q: Quality): q is LadderQuality {
+  return (QUALITY_RUNGS as readonly string[]).includes(q);
+}
 
 /** Tries in place before a stalled stream is rebuilt. */
 export const IN_PLACE_TRIES = 3;
@@ -66,10 +82,11 @@ export type StallAction =
  *
  * A packaged title (and a transcode, already on the ladder) is retried in
  * place, keeping its position; only when that has failed IN_PLACE_TRIES
- * times is the source rebuilt - same quality, never a forced transcode,
- * and at the same position. A direct stream (passthrough, remux, or a mode
- * not known yet) moves onto the server's transcode ladder at Medium, which
- * can step the bitrate down - at the same position too.
+ * times is the source rebuilt - same quality (a packaged title's Auto, or
+ * the rung the viewer picked), never a forced transcode, and at the same
+ * position. A direct stream (passthrough, remux, or a mode not known yet)
+ * moves onto the server's transcode ladder at Medium, which can step the
+ * bitrate down - at the same position too.
  */
 export function stallAction(s: StallState): StallAction {
   const at = Math.max(0, s.positionSec || 0);
@@ -103,9 +120,10 @@ export function stallAction(s: StallState): StallAction {
 
 /**
  * The step down after repeated buffer underruns, or null when there is no
- * lower step: a packaged title has one rendition (the server ignores ?q=),
- * and Low is the ladder's last rung. A direct stream moves onto the ladder
- * at Medium.
+ * lower step: a packaged title is not stepped down by the player - on Auto
+ * hls.js steps through its ladder itself, and a rung the viewer picked
+ * stays picked - and Low is the transcode ladder's last rung. A direct
+ * stream moves onto the ladder at Medium.
  */
 export function downgradeStep(s: {
   mode: PlayMode | null;
@@ -114,7 +132,7 @@ export function downgradeStep(s: {
 }): { quality: Quality; forceTranscode: boolean } | null {
   if (s.mode === 'packaged') return null;
   if (s.mode === 'transcode' || s.forcedTranscode) {
-    const i = QUALITY_RUNGS.indexOf(s.quality);
+    const i = isLadderQuality(s.quality) ? QUALITY_RUNGS.indexOf(s.quality) : -1;
     if (i < 0 || i >= QUALITY_RUNGS.length - 1) return null;
     return { quality: QUALITY_RUNGS[i + 1], forceTranscode: s.forcedTranscode };
   }
