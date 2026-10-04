@@ -22,6 +22,7 @@ import {
   stallAction,
   type Quality,
 } from '../lib/playback';
+import { HLS_BASE_CONFIG } from '../lib/hlsConfig';
 import { BugReportDialog } from './BugReportDialog';
 import { StatusPage } from './StatusPage';
 
@@ -753,6 +754,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       return;
     }
     const hls = new Hls({
+      // No HLS subtitles: the sidecars are the subtitles (lib/hlsConfig.ts).
+      ...HLS_BASE_CONFIG,
       // 5-minute buffer ahead of the playhead with a 500 MB memory cap.
       // Generous enough to ride out WiFi roams, brief upstream stalls,
       // or a katalog-stream pod restart without rebuffering — on a fast
@@ -1276,6 +1279,19 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     };
     const primary = activeSubIds[0];
     const secondary = activeSubIds[1];
+    // Where the browser plays HLS itself (Safari without MSE), a master's
+    // SUBTITLES renditions come as text tracks of their own, and it may
+    // show one by itself: they stay off - the sidecars are the subtitles.
+    // (hls.js adds none: lib/hlsConfig.ts.)
+    const muteRenditions = () => {
+      const own = new Set<TextTrack>();
+      v.querySelectorAll('track').forEach((el) => own.add((el as HTMLTrackElement).track));
+      for (let i = 0; i < v.textTracks.length; i++) {
+        const t = v.textTracks[i];
+        if (own.has(t) || (t.kind !== 'subtitles' && t.kind !== 'captions')) continue;
+        if (t.mode !== 'disabled') t.mode = 'disabled';
+      }
+    };
     const apply = () => {
       const trackEls = v.querySelectorAll('track');
       for (let i = 0; i < trackEls.length; i++) {
@@ -1290,6 +1306,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         }
         liftAll(trackEl.track);
       }
+      muteRenditions();
     };
     apply();
     const onAdd = (e: TrackEvent) => {
@@ -1299,7 +1316,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       }
     };
     v.textTracks.addEventListener('addtrack', onAdd);
-    return () => v.textTracks.removeEventListener('addtrack', onAdd);
+    v.textTracks.addEventListener('change', muteRenditions);
+    return () => {
+      v.textTracks.removeEventListener('addtrack', onAdd);
+      v.textTracks.removeEventListener('change', muteRenditions);
+    };
   }, [activeSubIds, mergedSubs]);
 
   // Secondary-track cue mirror. Read `activeCues` from the hidden

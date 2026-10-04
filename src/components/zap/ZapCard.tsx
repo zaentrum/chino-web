@@ -8,6 +8,7 @@ import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { toApp } from '../../lib/basepath';
+import { HLS_BASE_CONFIG } from '../../lib/hlsConfig';
 import type { KatalogItem } from '../../hooks/useItems';
 
 interface ZapCardProps {
@@ -351,6 +352,8 @@ export function ZapCard({
     }
 
     const hls = new Hls({
+      // No HLS subtitles over a card (lib/hlsConfig.ts).
+      ...HLS_BASE_CONFIG,
       // Tight buffer: a zap card is ~10-30 s of viewing on average.
       // Anything more is wasted transcoder work if the user swipes
       // away. backBufferLength stays small for the same reason.
