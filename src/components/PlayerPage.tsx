@@ -708,14 +708,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
         const onResize = () => setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
         v.addEventListener('resize', onResize);
-        // The audio picked, once the browser lists the master's renditions.
+        // The audio picked, once the browser lists the master's renditions -
+        // and again should it enable its DEFAULT beside it afterwards.
         const audioList = (v as NativeAudioVideo).audioTracks;
         const onAudioTrack = () => selectAudio(streamAudioIdxRef.current, null);
         audioList?.addEventListener('addtrack', onAudioTrack);
+        audioList?.addEventListener('change', onAudioTrack);
         v.src = playUrl;
         return () => {
           v.removeEventListener('resize', onResize);
           audioList?.removeEventListener('addtrack', onAudioTrack);
+          audioList?.removeEventListener('change', onAudioTrack);
           v.removeAttribute('src');
           v.load();
         };
@@ -2813,8 +2816,13 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     if (!list || list.length < 2) return;
     const native = Array.from({ length: list.length }, (_, k) => ({ name: list[k].label, lang: list[k].language }));
     const i = audioRenditionFor(tracks[place], place, native);
-    if (i < 0 || list[i].enabled) return;
-    for (let k = 0; k < list.length; k++) list[k].enabled = k === i;
+    if (i < 0) return;
+    // Every one set: the browser enables the master's DEFAULT on a new
+    // source, and the one picked may be on already beside it.
+    for (let k = 0; k < list.length; k++) {
+      const on = k === i;
+      if (list[k].enabled !== on) list[k].enabled = on;
+    }
   };
   // The Settings preference (picked when /play/info answers) and every pick
   // reach the source playing.
