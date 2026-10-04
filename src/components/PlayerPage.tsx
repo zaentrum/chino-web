@@ -13,7 +13,7 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
-import { defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
+import { audioRenditionFor, defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import {
   QUALITY_RUNGS,
   downgradeStep,
@@ -209,6 +209,15 @@ function probeClientCodecs(): { label: string; supported: boolean }[] {
 interface PlayerPageProps {
   itemId: string;
 }
+
+// A <video>'s audio tracks, where the browser plays HLS itself (Safari):
+// one per rendition of the master's audio group.
+type NativeAudioVideo = HTMLVideoElement & {
+  audioTracks?: EventTarget & {
+    readonly length: number;
+    [index: number]: { label: string; language: string; enabled: boolean };
+  };
+};
 
 /**
  * Standalone HTML5 player page. Opens in its own tab from MediaCard via
@@ -482,10 +491,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   useEffect(() => { reconnectingRef.current = reconnecting; }, [reconnecting]);
 
   // ---- Audio track selection ----
-  // streamAudioIdx is the audio-stream ordinal currently being mapped by
-  // ffmpeg (0-based within audio streams). 0 = file's default audio
-  // track. Changing it restarts the stream just like a quality switch.
+  // streamAudioIdx is the source audio track to play - the `index` of an
+  // entry of /play/info's audio_tracks, from the Settings preference or the
+  // audio menu. Each is its own rendition in the master: hls.js (or the
+  // browser, natively) switches to it in place, and a source built afresh
+  // starts on it (selectAudio below).
   const [streamAudioIdx, setStreamAudioIdx] = useState(0);
+  const streamAudioIdxRef = useRef(streamAudioIdx);
+  useEffect(() => { streamAudioIdxRef.current = streamAudioIdx; }, [streamAudioIdx]);
   // (legacy audioMenuOpen/setAudioMenuOpen removed — driven by `openMenu` above.)
 
   // ---- Playback speed ----
@@ -691,9 +704,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
         const onResize = () => setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
         v.addEventListener('resize', onResize);
+        // The audio picked, once the browser lists the master's renditions.
+        const audioList = (v as NativeAudioVideo).audioTracks;
+        const onAudioTrack = () => selectAudio(streamAudioIdxRef.current, null);
+        audioList?.addEventListener('addtrack', onAudioTrack);
         v.src = playUrl;
         return () => {
           v.removeEventListener('resize', onResize);
+          audioList?.removeEventListener('addtrack', onAudioTrack);
           v.removeAttribute('src');
           v.load();
         };
@@ -731,6 +749,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     // On the variant the server lists first - the one it warmed - and
     // capped to the player's size from the next fragment on.
     startOnFirstVariant(hls);
+    // With the audio picked: the new source's preference (selectAudio).
+    hls.on(Hls.Events.MANIFEST_PARSED, () => selectAudio(streamAudioIdxRef.current, hls));
     hls.attachMedia(v);
     let loadCount = 0;
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
@@ -2747,9 +2767,43 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     seekTo((parseFloat(e.target.value) / 100) * effectiveDuration);
   };
 
-  // Manual audio-track switch from the audio menu. Each source audio
-  // track is its own rendition in the master playlist, so hls.js
-  // switches in place — no rebuilt source, the position stays.
+  // Puts the audio picked on what plays (lib/languages.ts
+  // audioRenditionFor): /play/info names a track as the file tags it
+  // ("ger", its title), the master its rendition by NAME and LANGUAGE
+  // ("German", "de" on a packaged title). hls.js gets it as its audio
+  // preference - by language, by name too between two of one language - so
+  // a pick plays at once, in whichever audio group the level carries it,
+  // and a source built afresh (a quality switch, a reload, Try again)
+  // starts on it rather than on the master's DEFAULT. Natively: the video's
+  // audio track of it.
+  const selectAudio = (idx: number, hls: Hls | null) => {
+    const tracks = infoRef.current?.audio_tracks ?? [];
+    const place = tracks.findIndex((t) => t.index === idx);
+    if (place < 0) return;
+    if (hls) {
+      const all = hls.allAudioTracks;
+      const pick = all[audioRenditionFor(tracks[place], place, all)];
+      if (!pick) return;
+      const twins = all.filter((t) => t.groupId === pick.groupId && t.lang === pick.lang).length > 1;
+      hls.setAudioOption(pick.lang ? { lang: pick.lang, ...(twins ? { name: pick.name } : {}) } : { name: pick.name });
+      return;
+    }
+    const list = (videoRef.current as NativeAudioVideo | null)?.audioTracks;
+    if (!list || list.length < 2) return;
+    const native = Array.from({ length: list.length }, (_, k) => ({ name: list[k].label, lang: list[k].language }));
+    const i = audioRenditionFor(tracks[place], place, native);
+    if (i < 0 || list[i].enabled) return;
+    for (let k = 0; k < list.length; k++) list[k].enabled = k === i;
+  };
+  // The Settings preference (picked when /play/info answers) and every pick
+  // reach the source playing.
+  useEffect(() => {
+    selectAudio(streamAudioIdx, hlsRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamAudioIdx, info]);
+
+  // Manual audio-track switch from the audio menu: the track's rendition,
+  // in place - no rebuilt source, the position stays.
   const switchAudio = (idx: number) => {
     if (idx === streamAudioIdx) {
       setOpenMenu(null);
@@ -2757,27 +2811,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     }
     setActionLabel('Switching audio track…');
     reportEvent('audio_switch', { from: streamAudioIdx, to: idx });
-    // hls.js: each audio rendition shows up with a `name` matching
-    // our master playlist's NAME attribute. We mapped each source
-    // audio track to its own rendition; look up by the same source
-    // index we used in the URL pattern.
-    const hls = hlsRef.current;
-    if (hls && hls.audioTracks?.length) {
-      const target = hls.audioTracks.findIndex(t => {
-        // hls.js's AudioTrack `id` defaults to its position in the
-        // audioTracks list; we tagged each rendition with the source
-        // index via the NAME attribute (e.g. "English") but hls.js
-        // doesn't expose it as `id`. Match by `name` falling back to
-        // position parity with info.audio_tracks.
-        const ours = info?.audio_tracks?.[idx];
-        if (!ours) return false;
-        const ourName = ours.title?.trim() || ours.language || `Track ${ours.index}`;
-        return t.name === ourName || t.lang === ours.language;
-      });
-      if (target >= 0) {
-        hls.audioTrack = target;
-      }
-    }
+    streamAudioIdxRef.current = idx;
+    selectAudio(idx, hlsRef.current);
     setStreamAudioIdx(idx);
     setOpenMenu(null);
   };

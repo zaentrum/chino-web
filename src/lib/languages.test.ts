@@ -8,6 +8,7 @@ import {
   languageTag,
   normalizeLang,
   subtitleLabels,
+  audioRenditionFor,
 } from './languages.ts';
 
 test('codes in every spelling the library uses are one language', () => {
@@ -129,4 +130,29 @@ test('the track: one in that language, a full one before a forced one; the file\
   assert.equal(defaultSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng' }), null);
   // No track in the chosen language: off, not some other language.
   assert.equal(defaultSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'ita' }), null);
+});
+
+test('the audio rendition of a track /play/info lists: by language across code spellings, by title among several', () => {
+  // A packaged ladder's master: NAME and 639-1 LANGUAGE; /play/info: the file's 639-2 tags, no title.
+  const master = [{ name: 'English', lang: 'en' }, { name: 'German', lang: 'de' }];
+  assert.equal(audioRenditionFor({ language: 'ger', title: '' }, 1, master), 1);
+  assert.equal(audioRenditionFor({ language: 'eng', title: '' }, 0, master), 0);
+  assert.equal(audioRenditionFor({ language: 'deu' }, 0, master), 1, 'the language wins over the place');
+  // The 5.1 group has its own renditions: the language finds the one there is.
+  assert.equal(audioRenditionFor({ language: 'eng' }, 0, [{ name: 'English 5.1', lang: 'en' }]), 0);
+  // On the fly: NAME the title or the language's name, LANGUAGE the file's tag.
+  const fly = [{ name: 'English', lang: 'eng' }, { name: 'Commentary', lang: 'eng' }, { name: 'French', lang: 'fre' }];
+  assert.equal(audioRenditionFor({ language: 'eng', title: 'Commentary' }, 1, fly), 1);
+  assert.equal(audioRenditionFor({ language: 'eng', title: '' }, 1, fly), 1, 'two of one language, no title: its place');
+  assert.equal(audioRenditionFor({ language: 'eng', title: '' }, 2, fly), 0, 'its place is another language: the first');
+  assert.equal(audioRenditionFor({ language: 'fra' }, 2, fly), 2);
+});
+
+test('the audio rendition of a track without a language: by title, else by place; none for nothing', () => {
+  const renditions = [{ name: 'Track 0', lang: 'und' }, { name: 'Director', lang: 'und' }];
+  assert.equal(audioRenditionFor({ language: 'und', title: 'Director' }, 0, renditions), 1);
+  assert.equal(audioRenditionFor({ language: '' }, 1, renditions), 1);
+  assert.equal(audioRenditionFor({ language: 'eng' }, 5, renditions), -1);
+  assert.equal(audioRenditionFor(undefined, 0, renditions), -1);
+  assert.equal(audioRenditionFor({ language: 'eng' }, 0, []), -1);
 });

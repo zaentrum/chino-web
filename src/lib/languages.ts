@@ -149,3 +149,28 @@ export function defaultSubtitleTrack<T extends { id: string; lang?: string; forc
   const inLang = tracks.filter((t) => normalizeLang(t.lang) === want);
   return (inLang.find((t) => !t.forced) ?? inLang[0])?.id ?? null;
 }
+
+/**
+ * The rendition of a stream's audio that is the track /play/info lists:
+ * hls.js's audioTracks (the master's NAME and LANGUAGE, "German" / "de")
+ * or a <video>'s audioTracks (label, language), for a track as the file
+ * tags it ("ger", its title). The one in its language - by name among
+ * several, else the one at its place among them - else the one at its
+ * place in the list. -1 for none.
+ */
+export function audioRenditionFor(
+  track: { language?: string; title?: string } | undefined,
+  place: number,
+  renditions: readonly { name?: string; lang?: string }[],
+): number {
+  if (!track || renditions.length === 0) return -1;
+  const title = track.title?.trim().toLowerCase() || '';
+  const named = (i: number) => !!title && renditions[i].name?.trim().toLowerCase() === title;
+  const lang = normalizeLang(track.language);
+  const inLang = lang ? renditions.flatMap((r, i) => (normalizeLang(r.lang) === lang ? [i] : [])) : [];
+  if (inLang.length === 1) return inLang[0];
+  if (inLang.length > 1) return inLang.find(named) ?? (inLang.includes(place) ? place : inLang[0]);
+  const byName = renditions.findIndex((_, i) => named(i));
+  if (byName >= 0) return byName;
+  return place >= 0 && place < renditions.length ? place : -1;
+}
