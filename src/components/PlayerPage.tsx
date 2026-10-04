@@ -1257,20 +1257,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     };
     const primary = activeSubIds[0];
     const secondary = activeSubIds[1];
-    // Where the browser plays HLS itself (Safari without MSE), a master's
-    // SUBTITLES renditions come as text tracks of their own, and it may
-    // show one by itself: they stay off - the sidecars are the subtitles.
-    // (hls.js adds none: lib/hlsConfig.ts.)
-    const muteRenditions = () => {
-      const own = new Set<TextTrack>();
-      v.querySelectorAll('track').forEach((el) => own.add((el as HTMLTrackElement).track));
-      for (let i = 0; i < v.textTracks.length; i++) {
-        const t = v.textTracks[i];
-        if (own.has(t) || (t.kind !== 'subtitles' && t.kind !== 'captions')) continue;
-        if (t.mode !== 'disabled') t.mode = 'disabled';
-      }
-    };
-    const apply = () => {
+    const applyOwn = () => {
       const trackEls = v.querySelectorAll('track');
       for (let i = 0; i < trackEls.length; i++) {
         const trackEl = trackEls[i] as HTMLTrackElement;
@@ -1284,6 +1271,36 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         }
         liftAll(trackEl.track);
       }
+    };
+    // Where the browser plays HLS itself (Safari without MSE), a master's
+    // SUBTITLES renditions come as text tracks of their own, and it turns
+    // one on by itself - a FORCED one, which WebKit gives the kind "forced":
+    // they stay off, the sidecars are the subtitles. Only metadata tracks
+    // (timed ID3, nothing on screen) are left be. (hls.js adds none:
+    // lib/hlsConfig.ts.) True when one was on.
+    const muteRenditions = () => {
+      const own = new Set<TextTrack>();
+      v.querySelectorAll('track').forEach((el) => own.add((el as HTMLTrackElement).track));
+      let muted = false;
+      for (let i = 0; i < v.textTracks.length; i++) {
+        const t = v.textTracks[i];
+        if (own.has(t) || t.kind === 'metadata' || t.mode === 'disabled') continue;
+        t.mode = 'disabled';
+        muted = true;
+      }
+      return muted;
+    };
+    // Natively, with a master's renditions there, WebKit also sorts the
+    // text tracks out by itself just after one is added - the sidecar the
+    // viewer picked comes out of it off. So for a moment after a track is
+    // added the sidecars are put back as picked whenever the tracks change,
+    // and at any time a rendition that came on goes off again (a sidecar
+    // turned off later with nothing on instead - the viewer's Off in the
+    // browser's own controls - is left off).
+    let settleUntil = 0;
+    const apply = () => {
+      settleUntil = performance.now() + 1000;
+      applyOwn();
       muteRenditions();
     };
     apply();
@@ -1293,11 +1310,14 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         e.track.addEventListener('cuechange', () => liftAll(e.track!));
       }
     };
+    const onChange = () => {
+      if (muteRenditions() || performance.now() < settleUntil) applyOwn();
+    };
     v.textTracks.addEventListener('addtrack', onAdd);
-    v.textTracks.addEventListener('change', muteRenditions);
+    v.textTracks.addEventListener('change', onChange);
     return () => {
       v.textTracks.removeEventListener('addtrack', onAdd);
-      v.textTracks.removeEventListener('change', muteRenditions);
+      v.textTracks.removeEventListener('change', onChange);
     };
   }, [activeSubIds, mergedSubs]);
 
