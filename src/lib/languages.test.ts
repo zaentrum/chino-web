@@ -8,6 +8,8 @@ import {
   languageTag,
   normalizeLang,
   subtitleLabels,
+  audioChipLabel,
+  audioLabels,
   audioRenditionFor,
 } from './languages.ts';
 
@@ -51,10 +53,17 @@ test('names by Intl.DisplayNames, in the UI language', () => {
   assert.equal(languageName('vie'), 'Vietnamese');
   assert.equal(languageName('pt-BR'), 'Brazilian Portuguese');
   assert.equal(languageName('ger', ['de']), 'Deutsch');
-  assert.equal(languageName('und'), 'Unknown language');
-  assert.equal(languageName(undefined), 'Unknown language');
+  assert.equal(languageName('und'), 'Unknown');
+  assert.equal(languageName(undefined), 'Unknown');
   // A code Intl has no name for is shown as it came.
   assert.equal(languageName('qaa'), 'qaa');
+});
+
+test('zxx, no linguistic content, is a film without dialogue', () => {
+  for (const code of ['zxx', 'ZXX', ' zxx ', 'zxx-Latn']) assert.equal(languageName(code), 'No dialogue', code);
+  // Still no language to follow: no subtitles come on for it.
+  assert.equal(normalizeLang('zxx'), '');
+  assert.equal(defaultSubtitleLang({ audioLang: 'zxx', subtitlePref: 'eng' }), null);
 });
 
 test('the menu of the demo\'s Sintel: every track named, none blank', () => {
@@ -86,8 +95,85 @@ test('a track\'s title when it says more than its language; forced tracks; the s
       'German · Forced',
       'German',
       'German (2)',
-      'Unknown language',
+      'Unknown',
     ],
+  );
+});
+
+test('subtitles without dialogue, or in no known language: "No dialogue", else the title, else "Unknown"', () => {
+  assert.deepEqual(
+    subtitleLabels([
+      { lang: 'zxx' },
+      { lang: 'zxx', title: 'zxx' },
+      { lang: 'zxx', title: 'Signs' },
+      { lang: 'und', title: 'Signs & Songs' },
+      { lang: 'und', title: 'und' },
+      { lang: '', title: 'Forced', forced: true },
+      { lang: 'und' },
+    ]),
+    ['No dialogue', 'No dialogue (2)', 'No dialogue · Signs', 'Signs & Songs', 'Unknown', 'Forced', 'Unknown (2)'],
+  );
+});
+
+test('audio by its language first: "No dialogue" for zxx, "Unknown" for none', () => {
+  assert.deepEqual(
+    audioLabels([{ lang: 'eng' }, { lang: 'zxx' }, { lang: 'und' }, { lang: 'ger', name: 'Deutsch' }, { lang: 'pt-BR' }]),
+    ['English', 'No dialogue', 'Unknown', 'German', 'Brazilian Portuguese'],
+  );
+  // A packager's NAMEs: the language wins, and says the same.
+  assert.deepEqual(
+    audioLabels([{ lang: 'en', name: 'English' }, { lang: 'zxx', name: 'No dialogue' }, { lang: 'und', name: 'Unknown' }]),
+    ['English', 'No dialogue', 'Unknown'],
+  );
+});
+
+test('an old playlist\'s free-text names: a format, a number or a code is no label', () => {
+  assert.deepEqual(
+    audioLabels([
+      { lang: 'eng', name: 'AC3 5.1 @ 640 Kbps' },
+      { lang: 'fre', name: 'DTS-HD Master Audio / 5.1 / 48 kHz / 2618 kbps / 24-bit' },
+      { lang: 'zxx', name: 'zxx' },
+      { lang: 'und', name: 'Track 0' },
+      { lang: 'und', name: 'Dolby Digital 5.1' },
+      { lang: 'und', name: 'und' },
+    ]),
+    ['English', 'French', 'No dialogue', 'Unknown', 'Unknown (2)', 'Unknown (3)'],
+  );
+});
+
+test('a track in no language is called what its name says; a code Intl cannot name, too', () => {
+  assert.deepEqual(
+    audioLabels([
+      { lang: 'und', name: 'Director\'s Commentary' },
+      { lang: '', name: 'Commentary 5.1' },
+      { name: 'Stereo' },
+      { lang: 'qaa', name: 'Klingon' },
+      { lang: 'qaa' },
+    ]),
+    ['Director\'s Commentary', 'Commentary', 'Unknown', 'Klingon', 'qaa'],
+  );
+});
+
+test('two of one language: told apart by their names, else numbered; another detail tells them apart', () => {
+  assert.deepEqual(
+    audioLabels([
+      { lang: 'eng', name: 'English', detail: 'AAC · 2ch' },
+      { lang: 'eng', name: 'Commentary', detail: 'AAC · 2ch' },
+      { lang: 'eng', name: 'English Commentary (SDH)', detail: 'AAC · 2ch' },
+      { lang: 'eng', name: 'AC3 5.1', detail: 'AAC · 2ch' },
+      { lang: 'eng', name: 'English 5.1', detail: 'AC3 · 6ch' },
+    ]),
+    ['English', 'English · Commentary', 'English · Commentary (SDH)', 'English (2)', 'English'],
+  );
+  // chino-stream's unique NAMEs: "English (2)" is numbered, not "English · 2".
+  assert.deepEqual(audioLabels([{ lang: 'eng', name: 'English' }, { lang: 'eng', name: 'English (2)' }]), ['English', 'English (2)']);
+  assert.deepEqual(audioLabels([{ lang: 'zxx' }, { lang: 'zxx', name: 'Music & Effects' }]), ['No dialogue', 'No dialogue · Music & Effects']);
+});
+
+test('the audio chip: three letters, "—" for no dialogue, "Audio" for no language', () => {
+  assert.deepEqual(
+    ['eng', 'ger', 'fre', 'en-US', 'pt-BR', 'zxx', 'ZXX', 'und', '', undefined].map(audioChipLabel),
+    ['ENG', 'GER', 'FRE', 'ENG', 'POR', '—', '—', 'Audio', 'Audio', 'Audio'],
   );
 });
 

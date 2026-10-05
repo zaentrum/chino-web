@@ -13,7 +13,7 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
-import { audioRenditionFor, defaultSubtitleTrack, languageName, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
+import { audioChipLabel, audioLabels, audioRenditionFor, defaultSubtitleTrack, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import {
   QUALITY_RUNGS,
   downgradeStep,
@@ -1228,6 +1228,18 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     const labels = subtitleLabels(out);
     return out.map((s, i) => ({ ...s, label: labels[i] }));
   }, [subs, info?.subtitle_tracks, itemId, streamToken]);
+
+  // The audio menu's rows, one per /play/info track: named by the language
+  // the track is tagged with ("German", "No dialogue" for zxx), by its title
+  // where it has none, and two of one language told apart by their titles
+  // (lib/languages.ts) - not by a title that only names the source's codec.
+  const audioMenu = useMemo(() => {
+    const tracks = info?.audio_tracks ?? [];
+    const details = tracks.map((t) => `${t.codec?.toUpperCase() ?? ''}${t.channels ? ` · ${t.channels}ch` : ''}`);
+    const labels = audioLabels(tracks.map((t, i) => ({ lang: t.language, name: t.title, detail: details[i] })));
+    return tracks.map((t, i) => ({ index: t.index, language: t.language, label: labels[i], detail: details[i] }));
+  }, [info?.audio_tracks]);
+  const playingAudio = audioMenu.find((t) => t.index === streamAudioIdx);
 
   // The default subtitle, decided once per playback when both track
   // lists and the audio language are known: OFF, unless the audio is in
@@ -3679,23 +3691,22 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
               <button
                 onClick={() => toggleMenu('audio')}
                 className="px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors text-xs uppercase tracking-wide"
-                title="Audio language"
+                title={playingAudio ? `Audio: ${playingAudio.label}` : 'Audio language'}
+                aria-label={playingAudio ? `Audio: ${playingAudio.label}` : 'Audio language'}
               >
-                {languageName(info.audio_tracks.find((t) => t.index === streamAudioIdx)?.language ?? 'und').slice(0, 3).toUpperCase()}
+                {audioChipLabel(playingAudio?.language)}
               </button>
               {audioMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
                   <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Audio</div>
-                  {info.audio_tracks.map((t) => (
+                  {audioMenu.map((t) => (
                     <button
                       key={t.index}
                       onClick={() => switchAudio(t.index)}
                       className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamAudioIdx === t.index ? 'text-chino-accent' : ''}`}
                     >
-                      {(t.title?.trim() || languageName(t.language))}
-                      <span className="ml-2 text-xs text-chino-muted">
-                        {t.codec?.toUpperCase()}{t.channels ? ` · ${t.channels}ch` : ''}
-                      </span>
+                      {t.label}
+                      <span className="ml-2 text-xs text-chino-muted">{t.detail}</span>
                     </button>
                   ))}
                 </div>

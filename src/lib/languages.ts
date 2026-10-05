@@ -33,6 +33,18 @@ const OLD_1: Record<string, string> = { iw: 'he', in: 'id', ji: 'yi' };
 // one could read or listen to.
 const NO_LANGUAGE = new Set(['und', 'zxx', 'mul', 'mis']);
 
+/** What a track tagged "zxx" (no linguistic content) is called: the audio of
+ *  a film without dialogue. */
+export const NO_DIALOGUE = 'No dialogue';
+
+/** What a track is called whose language is not known ("und", none). */
+export const UNKNOWN_LANGUAGE = 'Unknown';
+
+/** Whether the code is "zxx": no linguistic content, no dialogue. */
+export function isNoDialogue(code: unknown): boolean {
+  return typeof code === 'string' && code.trim().replace(/_/g, '-').split('-')[0].toLowerCase() === 'zxx';
+}
+
 /**
  * The language a code names, as one comparable key: the 639-1 code where
  * there is one ("ger", "deu", "de", "de-CH" are all "de"), else the 639-2/T
@@ -62,10 +74,12 @@ export function languageTag(code: unknown): string {
 }
 
 /** The language's name in the given UI locales ("ger" → "German"); the code
- *  itself when Intl does not know it; "Unknown language" for none. */
+ *  itself when Intl does not know it; "No dialogue" for "zxx", "Unknown" for
+ *  none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
+  if (isNoDialogue(code)) return NO_DIALOGUE;
   const tag = languageTag(code);
-  if (!tag) return 'Unknown language';
+  if (!tag) return UNKNOWN_LANGUAGE;
   try {
     const name = new Intl.DisplayNames([...locales], { type: 'language', fallback: 'none' }).of(tag);
     if (name) return name;
@@ -85,9 +99,10 @@ export interface SubtitleTrackInfo {
 
 /**
  * The subtitle menu's labels, one per track, in order: the language's name
- * ("German"), the track's title when it says more than that ("English ·
- * SDH"), "(forced)" for a forced track; and where two tracks would still
- * read the same, a number for the second and later ones ("German (2)").
+ * ("German", "No dialogue" for zxx), the track's title when it says more
+ * than that ("English · SDH"), "(forced)" for a forced track; a track tagged
+ * with no language by its title, else "Unknown"; and where two tracks would
+ * still read the same, a number for the second and later ones ("German (2)").
  */
 export function subtitleLabels(tracks: readonly SubtitleTrackInfo[], locales: readonly string[] = ['en']): string[] {
   const labels = tracks.map((t) => {
@@ -95,22 +110,124 @@ export function subtitleLabels(tracks: readonly SubtitleTrackInfo[], locales: re
     const title = (t.title ?? '').trim();
     let label = name;
     if (title && title.toLowerCase() !== name.toLowerCase() && !sameLanguageCode(title, t.lang)) {
-      label = title.toLowerCase().includes(name.toLowerCase()) ? title : `${name} · ${title}`;
+      if (!hasLanguage(t.lang)) label = title;
+      else label = title.toLowerCase().includes(name.toLowerCase()) ? title : `${name} · ${title}`;
     }
     if (t.forced && !/forced/i.test(label)) label += ' (forced)';
     return label;
   });
+  return numbered(labels);
+}
+
+/** The labels, the second and later of the ones that read the same
+ *  numbered ("German (2)"). `key` says which read the same: by default the
+ *  label. */
+function numbered(labels: readonly string[], key: (label: string, i: number) => string = (l) => l): string[] {
   const seen = new Map<string, number>();
-  return labels.map((label) => {
-    const n = (seen.get(label) ?? 0) + 1;
-    seen.set(label, n);
+  return labels.map((label, i) => {
+    const k = key(label, i);
+    const n = (seen.get(k) ?? 0) + 1;
+    seen.set(k, n);
     return n === 1 ? label : `${label} (${n})`;
   });
 }
 
-/** A title that is only the track's language code again ("eng" on English). */
+/** Whether the code says what the track is in: a language, or no dialogue. */
+function hasLanguage(code: unknown): boolean {
+  return normalizeLang(code) !== '' || isNoDialogue(code);
+}
+
+const CODE_LIKE = /^[a-z]{2,3}([-_][a-z0-9]+)*$/i;
+
+/** A title that is only a language code: the track's own again ("eng" on
+ *  English), or one that names no language ("und"). */
 function sameLanguageCode(title: string, lang: string | undefined): boolean {
-  return /^[a-z]{2,3}([-_][a-z0-9]+)*$/i.test(title) && normalizeLang(title) !== '' && normalizeLang(title) === normalizeLang(lang);
+  if (!CODE_LIKE.test(title)) return false;
+  const named = normalizeLang(title);
+  return named === '' || named === normalizeLang(lang);
+}
+
+export interface AudioTrackLabelInput {
+  /** The language code as the track is tagged. */
+  lang?: string;
+  /** What the track is called: the file's title, or the master's NAME. */
+  name?: string;
+  /** What the menu shows beside the label ("AAC · 2ch"). Two tracks that
+   *  differ there are told apart there. */
+  detail?: string;
+}
+
+// A name that describes the source's audio format - a codec, a bitrate, a
+// sample rate or depth ("AC3 5.1 @ 640 Kbps", "DTS-HD MA 5.1") - and so
+// nothing of the track: the stream is AAC whatever the file had.
+const FORMAT_WORDS =
+  /(^|[^a-z0-9])(dts(-hd)?|truehd|atmos|dolby|e?-?ac-?3|ddp?\+?|aac|flac|l?pcm|opus|mp3|vorbis|lossless|master audio|\d+ ?k?hz|\d* ?[km]bps|kb\/s|\d+[- ]?bit)(?![a-z0-9])/i;
+// A channel layout, which goes from a name that names the track
+// ("Commentary 5.1" is "Commentary"): the menu shows the channels beside it.
+const LAYOUT_WORDS = /(^|[^a-z0-9.])(mono|stereo|surround|[1-9]\.[0-2]|\d{1,2} ?ch(annels?)?)(?![a-z0-9.])/gi;
+// A name that only numbers the track ("Track 2", "Audio Track 1", "2").
+const NUMBERED = /^(audio|sound|track|stream|[\s#])*\d*$/i;
+
+/** What a track's name says about it, or '' when it says nothing: none, a
+ *  format, a number, a language code. */
+function trackName(name: string | undefined, lang: string | undefined): string {
+  const raw = (name ?? '').trim();
+  if (!raw || FORMAT_WORDS.test(raw)) return '';
+  const t = raw
+    .replace(LAYOUT_WORDS, '$1')
+    .replace(/\(\s*\)|\[\s*\]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—:·,|/]+|[\s\-–—:·,|/]+$/g, '');
+  if (!t || NUMBERED.test(t) || sameLanguageCode(t, lang)) return '';
+  return t;
+}
+
+/** What a track's name adds to its label ("English Commentary" on an
+ *  English track: "Commentary"); '' when nothing. */
+function nameQualifier(name: string | undefined, label: string, lang: string | undefined): string {
+  let t = trackName(name, lang);
+  if (t.toLowerCase().startsWith(label.toLowerCase()) && /^([\s\-–—:·,|(\[]|$)/.test(t.slice(label.length))) {
+    t = t.slice(label.length).replace(/^[\s\-–—:·,|]+/, '').trim();
+    if (/^\(.*\)$/.test(t) || /^\[.*\]$/.test(t)) t = t.slice(1, -1).trim();
+  }
+  return t && !NUMBERED.test(t) ? t : '';
+}
+
+/**
+ * The audio menu's labels, one per track, in order: the language the track
+ * is tagged with, by name ("German"; "No dialogue" for zxx). A track tagged
+ * with none is called what its name says ("Commentary") - not a format ("AC3
+ * 5.1 @ 640 Kbps"), a number ("Track 1") or a code - else "Unknown". Two
+ * that would read the same, with the same detail, are told apart by their
+ * names ("English · Commentary"), else numbered ("English (2)").
+ */
+export function audioLabels(tracks: readonly AudioTrackLabelInput[], locales: readonly string[] = ['en']): string[] {
+  const bases = tracks.map((t) => {
+    if (hasLanguage(t.lang)) {
+      const name = languageName(t.lang, locales);
+      // Intl has no name for the code: the track's own name before the code.
+      if (name !== String(t.lang).trim()) return name;
+    }
+    return trackName(t.name, t.lang) || (hasLanguage(t.lang) ? String(t.lang).trim() : UNKNOWN_LANGUAGE);
+  });
+  const key = (label: string, i: number) => `${label}\u0000${tracks[i].detail ?? ''}`;
+  const count = new Map<string, number>();
+  bases.forEach((b, i) => count.set(key(b, i), (count.get(key(b, i)) ?? 0) + 1));
+  const labels = bases.map((b, i) => {
+    if ((count.get(key(b, i)) ?? 0) < 2) return b;
+    const q = nameQualifier(tracks[i].name, b, tracks[i].lang);
+    return q && q.toLowerCase() !== b.toLowerCase() ? `${b} · ${q}` : b;
+  });
+  return numbered(labels, key);
+}
+
+/** The audio chip's three letters for the track playing: its language's
+ *  name cut to three ("ENG", "GER"), "—" for no dialogue (zxx), "Audio" for
+ *  a track tagged with no language. */
+export function audioChipLabel(code: unknown): string {
+  if (isNoDialogue(code)) return '—';
+  const lang = normalizeLang(code);
+  return lang ? languageName(lang).slice(0, 3).toUpperCase() : 'Audio';
 }
 
 export interface SubtitleDefaults {
