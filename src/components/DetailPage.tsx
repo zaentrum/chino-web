@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { ArrowLeft, Check, ChevronDown, Eye, Heart, House, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Clapperboard, Eye, Heart, House, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
 import { useLikes, useWatchlist } from '../hooks/useUserFlags';
 import { useMemberships } from '../hooks/useWatchlists';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
@@ -18,6 +18,7 @@ import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
 import { ratingBadge } from '../lib/ratings';
+import { trailerChoice, trailerPath } from '../lib/trailers';
 import { MediaRow } from './MediaRow';
 import { StatusPage } from './StatusPage';
 
@@ -180,7 +181,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // The actors, and the rest of the credits by role ("Created by",
   // "Directors", "Music", …) in the order lib/credits.ts lists them.
   const { actors, crew } = groupCredits(data.cast);
-  const trailer = pickTrailer(data.trailers);
+  // The trailer this server plays, on the trailer page; else the link to
+  // one online (lib/trailers.ts). A movie's or a series'.
+  const trailer = trailerChoice(data);
   const rated = ratingBadge(data);
 
   return (
@@ -304,9 +307,18 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   Play
                 </button>
               ) : null}
-              {trailer ? (
+              {trailer?.local ? (
                 <a
-                  href={trailer.url}
+                  href={toApp(trailerPath(itemId, trailer.extra.id))}
+                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                  title="Play the trailer"
+                >
+                  <Clapperboard className="w-5 h-5" />
+                  Trailer
+                </a>
+              ) : trailer ? (
+                <a
+                  href={trailer.link.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
@@ -444,15 +456,4 @@ function fmtDur(s: number): string {
   const sec = Math.floor(s % 60).toString().padStart(2, '0');
   if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec}`;
   return `${m}:${sec}`;
-}
-
-// pickTrailer prefers YouTube + "Official Trailer"-style titles.
-function pickTrailer(trailers?: { site?: string; url: string; title?: string }[]) {
-  if (!trailers || !trailers.length) return null;
-  const yt = trailers.filter((t) => (t.site || '').toLowerCase().includes('youtube'));
-  const pool = yt.length ? yt : trailers;
-  const official = pool.find((t) => /official/i.test(t.title ?? '') && /trailer/i.test(t.title ?? ''));
-  if (official) return official;
-  const anyTrailer = pool.find((t) => /trailer/i.test(t.title ?? ''));
-  return anyTrailer ?? pool[0];
 }
