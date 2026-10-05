@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from './useStreamToken';
+import type { ExtraRef, TrailerRef } from './useItem';
+import { heroPoolOrder, heroTrailer } from '../lib/heroPool';
 
 export interface HeroEntry {
   id: string;
@@ -13,22 +15,20 @@ export interface HeroEntry {
   backdrop_url?: string;
   poster_url?: string;
   // YouTube video id parsed from the trailer URL. Empty when the entry
-  // is in the pool without a trailer (we don't render those, but the
-  // type stays uniform).
+  // is in the pool with a trailer this server plays and no YouTube link.
   ytKey: string;
-}
-
-const YT_KEY = /[?&]v=([A-Za-z0-9_-]{6,})|youtu\.be\/([A-Za-z0-9_-]{6,})|youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/;
-function ytIdFromUrl(url: string): string {
-  const m = url.match(YT_KEY);
-  if (!m) return '';
-  return m[1] || m[2] || m[3] || '';
+  /** The trailer this server plays, which the hero's Trailer opens on the
+   *  trailer page (lib/heroPool.ts). */
+  extraId?: string;
+  /** Without one: the link to a trailer online its Trailer opens. */
+  trailerUrl?: string;
 }
 
 /**
  * useHeroPool returns a (cached, shuffled) list of catalogue items
- * that have an embeddable YouTube trailer. The hero strip cycles
- * through these every ~12 s. Implementation notes:
+ * that have a trailer: one this server plays, or a YouTube link
+ * (lib/heroPool.ts) - the ones this server plays first. The hero strip
+ * cycles through these every ~20 s. Implementation notes:
  *
  *  - The /v1/items list endpoint doesn't include trailers (kept
  *    lightweight). We fetch a small pool of candidates (top-rated +
@@ -47,8 +47,10 @@ function ytIdFromUrl(url: string): string {
 // produced a 1-entry pool and the rotation never kicked in
 // (rotation requires pool.length >= 2). Mixing both pools fills the
 // 8-slot rotation reliably. v4 records each entry's type: Play on a
-// series plays an episode, not the series' own id.
-const CACHE_KEY = 'chino:hero-pool:v4';
+// series plays an episode, not the series' own id. v5 lets in a title
+// whose trailer this server plays, first, and records what each entry's
+// Trailer opens.
+const CACHE_KEY = 'chino:hero-pool:v5';
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h — fresh enough that newly-added items show up next session
 
 interface PoolCache { at: number; entries: HeroEntry[] }
@@ -102,9 +104,11 @@ export function useHeroPool(): HeroEntry[] {
         for (let i = 0; i < settled.length; i++) {
           const s = settled[i];
           if (s.status !== 'fulfilled' || !s.value) continue;
-          const d = s.value as { trailers?: { url: string; site?: string }[]; description?: string };
-          const yt = (d.trailers ?? []).map((t) => ({ ...t, key: ytIdFromUrl(t.url) })).find((t) => t.key);
-          if (!yt) continue;
+          const d = s.value as { trailers?: TrailerRef[]; extras?: ExtraRef[]; description?: string };
+          // A trailer this server plays, or a YouTube link; else not one
+          // for the hero.
+          const trailer = heroTrailer(d);
+          if (!trailer) continue;
           const c = candidates[i];
           entries.push({
             id: c.id,
@@ -115,15 +119,14 @@ export function useHeroPool(): HeroEntry[] {
             rating: c.rating,
             backdrop_url: c.backdrop_url && enc ? `${c.backdrop_url}?stream=${enc}` : c.backdrop_url,
             poster_url: c.poster_url && enc ? `${c.poster_url}?stream=${enc}` : c.poster_url,
-            ytKey: yt.key,
+            ytKey: trailer.ytKey,
+            extraId: trailer.extraId,
+            trailerUrl: trailer.url,
           });
         }
-        // Fisher-Yates shuffle so the rotation isn't always rating-sorted.
-        for (let i = entries.length - 1; i > 0; i--) {
-          const j2 = Math.floor(Math.random() * (i + 1));
-          [entries[i], entries[j2]] = [entries[j2], entries[i]];
-        }
-        const sliced = entries.slice(0, 8);
+        // Those this server plays first, each group shuffled so the
+        // rotation isn't always rating-sorted; eight of them.
+        const sliced = heroPoolOrder(entries);
         if (sliced.length > 0) {
           writeCache({ at: Date.now(), entries: sliced });
           setPool(sliced);
