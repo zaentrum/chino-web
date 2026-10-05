@@ -1,8 +1,9 @@
-import { Play, Info } from 'lucide-react';
+import { Clapperboard, Play, Info, Youtube } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useHeroPool, type HeroEntry } from '../hooks/useHeroPool';
 import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
+import { trailerPath } from '../lib/trailers';
 import { FadeImage } from './FadeImage';
 
 interface HeroSectionProps {
@@ -84,6 +85,11 @@ export function HeroSection({ title, description, image, rating, year, itemId, i
   const goDetail = () => {
     if (playTargetId) window.location.assign(toApp(`/i/${encodeURIComponent(playTargetId)}`));
   };
+  // The entry's Trailer, in place of a trailer playing on the hero by
+  // itself: the one this server plays, on the trailer page, else its link
+  // online in a new tab - what the title's page opens.
+  const localTrailerHref = entry?.extraId ? toApp(trailerPath(entry.id, entry.extraId)) : null;
+  const trailerHref = localTrailerHref ?? entry?.trailerUrl ?? null;
 
   return (
     <div
@@ -203,6 +209,21 @@ export function HeroSection({ title, description, image, rating, year, itemId, i
               <Info className="w-4 h-4 md:w-5 md:h-5" />
               <span>More Info</span>
             </button>
+            {trailerHref ? (
+              <a
+                href={trailerHref}
+                {...(localTrailerHref ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
+                className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors text-sm md:text-base"
+                title={localTrailerHref ? 'Play the trailer' : 'Watch trailer on YouTube'}
+              >
+                {localTrailerHref ? (
+                  <Clapperboard className="w-4 h-4 md:w-5 md:h-5" />
+                ) : (
+                  <Youtube className="w-4 h-4 md:w-5 md:h-5" />
+                )}
+                <span>Trailer</span>
+              </a>
+            ) : null}
           </div>
 
           {/* Dot indicator: which slot in the carousel we're on.
