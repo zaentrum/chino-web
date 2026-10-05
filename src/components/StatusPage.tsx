@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ArrowLeft, House, RotateCw } from 'lucide-react';
 import { toApp } from '../lib/basepath';
 
@@ -8,6 +9,9 @@ interface StatusPageProps {
   /** Offered when trying again can help — a request that failed, not a
    *  thing that is not there. */
   onRetry?: () => void;
+  /** The same thing elsewhere, offered first and opened in a new tab: a
+   *  title's trailer online, where the one on this server cannot play. */
+  link?: { href: string; label: string; icon?: ReactNode };
 }
 
 /**
@@ -16,7 +20,7 @@ interface StatusPageProps {
  * Back where the viewer came from (home when they came from nowhere),
  * Home, and Try again where it can help.
  */
-export function StatusPage({ title, message, onRetry }: StatusPageProps) {
+export function StatusPage({ title, message, onRetry, link }: StatusPageProps) {
   const back = () => {
     if (window.history.length > 1) window.history.back();
     else window.location.assign(toApp('/'));
@@ -28,6 +32,17 @@ export function StatusPage({ title, message, onRetry }: StatusPageProps) {
         <h1 className="text-2xl md:text-3xl font-semibold mb-3">{title}</h1>
         <p className="text-chino-muted leading-relaxed mb-8">{message}</p>
         <div className="flex flex-wrap justify-center gap-3">
+          {link ? (
+            <a
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${btn} ${onRetry ? 'bg-white/10 hover:bg-white/20' : 'bg-chino-accent hover:bg-chino-accent/80'} text-white`}
+            >
+              {link.icon}
+              {link.label}
+            </a>
+          ) : null}
           {onRetry ? (
             <button type="button" onClick={onRetry} className={`${btn} bg-chino-accent hover:bg-chino-accent/80 text-white`}>
               <RotateCw className="w-4 h-4" aria-hidden />

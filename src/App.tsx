@@ -3,6 +3,7 @@ import { stripBase } from './lib/basepath';
 import { AuthGate } from './auth/AuthGate';
 import { ChinoApp } from './components/chino/ChinoApp';
 import { PlayerPage } from './components/PlayerPage';
+import { TrailerPage } from './components/TrailerPage';
 import { DetailPage } from './components/DetailPage';
 import { PersonPage } from './components/PersonPage';
 import { ProfilePage } from './components/ProfilePage';
@@ -12,6 +13,7 @@ import { UpdateAvailable } from './components/UpdateAvailable';
 // Tiny pathname-based router. A handful of top-level routes plus the SPA
 // root:
 //   /player/:id    full-screen video player
+//   /trailer/:itemId/:extraId  a title's trailer, full screen (no progress)
 //   /i/:id         movie / show detail page
 //   /person/:id    person / filmography surface
 //   /search?q=…    search results
@@ -20,6 +22,11 @@ import { UpdateAvailable } from './components/UpdateAvailable';
 function pickRoute(path: string, search: string) {
   const playerM = path.match(/^\/player\/([^/]+)\/?$/);
   if (playerM) return <PlayerPage itemId={decodeURIComponent(playerM[1])} />;
+
+  const trailerM = path.match(/^\/trailer\/([^/]+)\/([^/]+)\/?$/);
+  if (trailerM) {
+    return <TrailerPage itemId={decodeURIComponent(trailerM[1])} extraId={decodeURIComponent(trailerM[2])} />;
+  }
 
   const detailM = path.match(/^\/i\/([^/]+)\/?$/);
   if (detailM) return <DetailPage itemId={decodeURIComponent(detailM[1])} />;
@@ -71,8 +78,9 @@ export function App() {
 
   // The InstallHint is iOS-only and self-suppresses on the player
   // page (we don't want a banner over the video) by checking the
-  // pathname inside the component? Simpler: skip it for /player/*.
-  const onPlayer = route.path.startsWith('/player/');
+  // pathname inside the component? Simpler: skip it for /player/* (and a
+  // trailer, which plays full screen too).
+  const onPlayer = route.path.startsWith('/player/') || route.path.startsWith('/trailer/');
   // React's key forces a full remount when crossing route boundaries.
   // Without it, the PlayerPage's hls.js + <video> would persist across
   // a Back navigation to /i/X (DetailPage doesn't know to tear them
