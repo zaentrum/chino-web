@@ -1,9 +1,10 @@
-import { Search, Bell, LogOut, UserCircle } from 'lucide-react';
+import { Search, LogOut, UserCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { FadeImage } from './FadeImage';
 import { Avatar } from './Avatar';
+import { NoticesBell } from './NoticesBell';
 import { toApp } from '../lib/basepath';
 
 // Per-suggestion shape from /api/v1/items?q=…. Picks the fields we
@@ -182,9 +183,7 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-4 ml-6">
-        <button className="p-2 text-chino-text hover:bg-chino-surface rounded-lg transition-colors" title="Notifications (coming soon)">
-          <Bell className="w-5 h-5" />
-        </button>
+        <NoticesBell />
         <div ref={accountRef} className="relative">
           <button
             onClick={() => setAccountOpen((v) => !v)}
