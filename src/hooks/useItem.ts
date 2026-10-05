@@ -33,11 +33,38 @@ export interface SubtitleRef {
   default?: boolean;
 }
 
+/** A link to a trailer online. chino-api always sends `url`: a trailer this
+ *  server plays is an ExtraRef in `extras`, never one of these. */
 export interface TrailerRef {
   site?: string;
   external_id?: string;
   url: string;
   title?: string;
+}
+
+/**
+ * One of a title's extras that plays from this server, as GET
+ * /api/v1/items/{id} lists them in `extras` (absent when none plays): a
+ * trailer, a teaser, a featurette, … packaged for streaming apart from the
+ * title, in the order a viewer sees them. `play_path` is its HLS master,
+ * asked for as a title's master is (?stream=<token>&caps=). An extra has no
+ * progress, watched state, segments, trickplay, /play/info or /prewarm.
+ */
+export interface ExtraRef {
+  id: string;
+  /** trailer, teaser, featurette, behind-the-scenes, making-of,
+   *  deleted-scene, interview, gag-reel, short or other. */
+  kind: string;
+  title: string;
+  /** BCP 47 ("en"), when known. */
+  language?: string;
+  duration_ms?: number;
+  /** Set on a series' extra of one season (0 the specials). */
+  season_number?: number;
+  /** Always true: an extra plays from this server. */
+  local: boolean;
+  /** Origin-relative: /api/v1/items/{id}/extras/{extraId}/play/master.m3u8. */
+  play_path: string;
 }
 
 export interface SegmentSummary {
@@ -56,6 +83,7 @@ export interface ItemDetail extends KatalogItem {
   cast?: CastEntry[];
   subtitles?: SubtitleRef[];
   trailers?: TrailerRef[];
+  extras?: ExtraRef[];
   segments?: SegmentSummary;
 }
 
