@@ -170,11 +170,38 @@ test('two of one language: told apart by their names, else numbered; another det
   assert.deepEqual(audioLabels([{ lang: 'zxx' }, { lang: 'zxx', name: 'Music & Effects' }]), ['No dialogue', 'No dialogue · Music & Effects']);
 });
 
-test('the audio chip: three letters, "—" for no dialogue, "Audio" for no language', () => {
+test('the audio chip: the ISO 639-2/T code, "—" for no dialogue, "Audio" for no language', () => {
   assert.deepEqual(
-    ['eng', 'ger', 'fre', 'en-US', 'pt-BR', 'zxx', 'ZXX', 'und', '', undefined].map(audioChipLabel),
-    ['ENG', 'GER', 'FRE', 'ENG', 'POR', '—', '—', 'Audio', 'Audio', 'Audio'],
+    ['eng', 'ger', 'deu', 'de', 'fre', 'dut', 'chi', 'zh-Hant', 'en-US', 'pt-BR', 'iw', 'fil'].map(audioChipLabel),
+    ['ENG', 'DEU', 'DEU', 'DEU', 'FRA', 'NLD', 'ZHO', 'ZHO', 'ENG', 'POR', 'HEB', 'FIL'],
   );
+  assert.deepEqual(['zxx', 'ZXX', 'mul', 'mis', 'und', '', undefined].map(audioChipLabel), ['—', '—', 'MUL', 'MIS', 'Audio', 'Audio', 'Audio']);
+});
+
+test('the audio chip never cuts a name short: Japanese is not "JAP", Malay, Malayalam and Maltese are three', () => {
+  for (const code of ['jpn', 'JPN', 'ja', 'ja-JP']) {
+    assert.equal(audioChipLabel(code), 'JPN', code);
+    assert.notEqual(audioChipLabel(code), 'JAP', code);
+  }
+  const malay = ['msa', 'may', 'ms'].map(audioChipLabel);
+  const malayalam = ['mal', 'ml'].map(audioChipLabel);
+  const maltese = ['mlt', 'mt'].map(audioChipLabel);
+  assert.deepEqual([...malay, ...malayalam, ...maltese], ['MSA', 'MSA', 'MSA', 'MAL', 'MAL', 'MLT', 'MLT']);
+  assert.equal(new Set([...malay, ...malayalam, ...maltese]).size, 3);
+});
+
+test('mul is "Multiple languages", mis "Other language" - and neither a language to follow', () => {
+  assert.equal(languageName('mul'), 'Multiple languages');
+  assert.equal(languageName('MUL'), 'Multiple languages');
+  assert.equal(languageName('mis'), 'Other language');
+  assert.equal(normalizeLang('mul'), '');
+  assert.equal(normalizeLang('mis'), '');
+  assert.equal(defaultSubtitleLang({ audioLang: 'mul', subtitlePref: 'eng' }), null);
+  assert.deepEqual(
+    audioLabels([{ lang: 'mul', name: 'mul' }, { lang: 'mis' }, { lang: 'mul', name: 'Original' }]),
+    ['Multiple languages', 'Other language', 'Multiple languages · Original'],
+  );
+  assert.deepEqual(subtitleLabels([{ lang: 'mul' }, { lang: 'mis', title: 'Signs' }]), ['Multiple languages', 'Other language · Signs']);
 });
 
 test('subtitles default off when the audio is in the viewer\'s language', () => {

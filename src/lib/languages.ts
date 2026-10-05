@@ -12,19 +12,26 @@ const B_TO_T: Record<string, string> = {
   tib: 'bod', wel: 'cym',
 };
 
-// ISO 639-2/T → 639-1, for the languages a library is likely to carry.
-// Anything else is compared as its three letters.
+// ISO 639-2/T → 639-1, for the languages a library is likely to carry (the
+// mobile app's Languages.kt has the same). Anything else is compared as its
+// three letters.
 const T_TO_1: Record<string, string> = {
-  ara: 'ar', ben: 'bn', bod: 'bo', bul: 'bg', cat: 'ca', ces: 'cs', cym: 'cy',
-  dan: 'da', deu: 'de', ell: 'el', eng: 'en', est: 'et', eus: 'eu', fas: 'fa',
-  fin: 'fi', fra: 'fr', gle: 'ga', glg: 'gl', heb: 'he', hin: 'hi', hrv: 'hr',
-  hun: 'hu', hye: 'hy', ind: 'id', isl: 'is', ita: 'it', jpn: 'ja', kat: 'ka',
-  kor: 'ko', lav: 'lv', lit: 'lt', mkd: 'mk', mri: 'mi', msa: 'ms', mya: 'my',
-  nld: 'nl', nob: 'nb', nno: 'nn', nor: 'no', pol: 'pl', por: 'pt', ron: 'ro',
-  rus: 'ru', slk: 'sk', slv: 'sl', spa: 'es', sqi: 'sq', srp: 'sr', swe: 'sv',
-  tam: 'ta', tel: 'te', tgl: 'tl', tha: 'th', tur: 'tr', ukr: 'uk', urd: 'ur',
-  vie: 'vi', zho: 'zh',
+  afr: 'af', amh: 'am', ara: 'ar', aze: 'az', bel: 'be', ben: 'bn', bod: 'bo',
+  bos: 'bs', bul: 'bg', cat: 'ca', ces: 'cs', cym: 'cy', dan: 'da', deu: 'de',
+  ell: 'el', eng: 'en', est: 'et', eus: 'eu', fas: 'fa', fin: 'fi', fra: 'fr',
+  gle: 'ga', glg: 'gl', guj: 'gu', heb: 'he', hin: 'hi', hrv: 'hr', hun: 'hu',
+  hye: 'hy', ind: 'id', isl: 'is', ita: 'it', jpn: 'ja', kan: 'kn', kat: 'ka',
+  kaz: 'kk', khm: 'km', kor: 'ko', lao: 'lo', lat: 'la', lav: 'lv', lit: 'lt',
+  ltz: 'lb', mal: 'ml', mar: 'mr', mkd: 'mk', mlt: 'mt', mon: 'mn', mri: 'mi',
+  msa: 'ms', mya: 'my', nep: 'ne', nld: 'nl', nno: 'nn', nob: 'nb', nor: 'no',
+  pan: 'pa', pol: 'pl', por: 'pt', pus: 'ps', ron: 'ro', rus: 'ru', sin: 'si',
+  slk: 'sk', slv: 'sl', som: 'so', spa: 'es', sqi: 'sq', srp: 'sr', swa: 'sw',
+  swe: 'sv', tam: 'ta', tel: 'te', tgl: 'tl', tha: 'th', tur: 'tr', ukr: 'uk',
+  urd: 'ur', uzb: 'uz', vie: 'vi', yid: 'yi', zho: 'zh', zul: 'zu',
 };
+
+// ISO 639-1 → 639-2/T: the table above the other way round.
+const ONE_TO_T: Record<string, string> = Object.fromEntries(Object.entries(T_TO_1).map(([t, one]) => [one, t]));
 
 // Withdrawn 639-1 codes still found in the wild.
 const OLD_1: Record<string, string> = { iw: 'he', in: 'id', ji: 'yi' };
@@ -40,9 +47,23 @@ export const NO_DIALOGUE = 'No dialogue';
 /** What a track is called whose language is not known ("und", none). */
 export const UNKNOWN_LANGUAGE = 'Unknown';
 
+// The codes for no one language that still say what a track is in, and what
+// such a track is called: no dialogue ("zxx"), several languages ("mul"), a
+// language ISO 639 has no code for ("mis").
+const NOT_ONE_LANGUAGE = new Map([
+  ['zxx', NO_DIALOGUE],
+  ['mul', 'Multiple languages'],
+  ['mis', 'Other language'],
+]);
+
+/** The code's language subtag, lower-cased ("pt" of "PT_br"); '' for none. */
+function primarySubtag(code: unknown): string {
+  return typeof code === 'string' ? code.trim().replace(/_/g, '-').split('-')[0].toLowerCase() : '';
+}
+
 /** Whether the code is "zxx": no linguistic content, no dialogue. */
 export function isNoDialogue(code: unknown): boolean {
-  return typeof code === 'string' && code.trim().replace(/_/g, '-').split('-')[0].toLowerCase() === 'zxx';
+  return primarySubtag(code) === 'zxx';
 }
 
 /**
@@ -74,10 +95,11 @@ export function languageTag(code: unknown): string {
 }
 
 /** The language's name in the given UI locales ("ger" → "German"); the code
- *  itself when Intl does not know it; "No dialogue" for "zxx", "Unknown" for
- *  none. */
+ *  itself when Intl does not know it; "No dialogue" for "zxx", "Multiple
+ *  languages" for "mul", "Other language" for "mis", "Unknown" for none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
-  if (isNoDialogue(code)) return NO_DIALOGUE;
+  const notOne = NOT_ONE_LANGUAGE.get(primarySubtag(code));
+  if (notOne) return notOne;
   const tag = languageTag(code);
   if (!tag) return UNKNOWN_LANGUAGE;
   try {
@@ -132,9 +154,10 @@ function numbered(labels: readonly string[], key: (label: string, i: number) => 
   });
 }
 
-/** Whether the code says what the track is in: a language, or no dialogue. */
+/** Whether the code says what the track is in: a language, no dialogue,
+ *  several languages or one with no code. */
 function hasLanguage(code: unknown): boolean {
-  return normalizeLang(code) !== '' || isNoDialogue(code);
+  return normalizeLang(code) !== '' || NOT_ONE_LANGUAGE.has(primarySubtag(code));
 }
 
 const CODE_LIKE = /^[a-z]{2,3}([-_][a-z0-9]+)*$/i;
@@ -221,13 +244,19 @@ export function audioLabels(tracks: readonly AudioTrackLabelInput[], locales: re
   return numbered(labels, key);
 }
 
-/** The audio chip's three letters for the track playing: its language's
- *  name cut to three ("ENG", "GER"), "—" for no dialogue (zxx), "Audio" for
- *  a track tagged with no language. */
+/** The audio chip for the track playing: its language's ISO 639-2/T code
+ *  ("ENG", "DEU", "JPN"; the code as tagged where the table has none), "MUL"
+ *  for several languages and "MIS" for one with no code, "—" for no
+ *  dialogue (zxx), "Audio" for a track tagged with no language. Never a name
+ *  cut short: Japanese is not "JAP", and Malay, Malayalam and Maltese are
+ *  three. */
 export function audioChipLabel(code: unknown): string {
-  if (isNoDialogue(code)) return '—';
+  const primary = primarySubtag(code);
+  if (primary === 'zxx') return '—';
+  if (NOT_ONE_LANGUAGE.has(primary)) return primary.toUpperCase();
   const lang = normalizeLang(code);
-  return lang ? languageName(lang).slice(0, 3).toUpperCase() : 'Audio';
+  if (!lang) return 'Audio';
+  return (lang.length === 2 ? ONE_TO_T[lang] ?? lang : lang).toUpperCase();
 }
 
 export interface SubtitleDefaults {
