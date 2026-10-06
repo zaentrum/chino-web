@@ -131,6 +131,14 @@ test("an extra's master: the stream token and the caps, as a title's", () => {
   assert.equal(back.searchParams.get('caps'), 'avc,aac');
 });
 
+test("an extra's master in the player: the quality and a rebuilt source's cache-buster, in a title master's order", () => {
+  const path = `/api/v1/items/${ITEM}/extras/x1/play/master.m3u8`;
+  assert.equal(extraMasterUrl(path, { stream: 'tok', q: 'auto', caps: 'avc,aac' }), `${path}?stream=tok&q=auto&caps=avc%2Caac`);
+  assert.equal(extraMasterUrl(path, { stream: 'tok', q: 'v1', caps: 'avc,aac', reload: 2 }), `${path}?stream=tok&q=v1&caps=avc%2Caac&_r=2`);
+  // No reload yet: no cache-buster.
+  assert.equal(extraMasterUrl(path, { stream: 'tok', q: 'auto', reload: 0 }), `${path}?stream=tok&q=auto`);
+});
+
 test('not there (400, 404, 410) is not available; anything else failed', () => {
   for (const s of [400, 404, 410]) assert.equal(trailerFailure(s), 'not-found');
   for (const s of [401, 403, 500, 502, 503, 0, null, undefined]) assert.equal(trailerFailure(s), 'failed');

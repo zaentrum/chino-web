@@ -85,10 +85,14 @@ export function trailerPath(itemId: string, extraId: string): string {
 }
 
 /** An extra's master as the player asks for it: its play_path with the
- *  stream token and this browser's caps, as a title's master is. */
-export function extraMasterUrl(playPath: string, o: { stream: string; caps?: string }): string {
+ *  stream token, the quality (Auto, or the one rung picked) and this
+ *  browser's caps, as a title's master is - and, after a rebuilt source,
+ *  the same cache-buster (_r). */
+export function extraMasterUrl(playPath: string, o: { stream: string; q?: string; caps?: string; reload?: number }): string {
   const params = new URLSearchParams({ stream: o.stream });
+  if (o.q) params.set('q', o.q);
   if (o.caps) params.set('caps', o.caps);
+  if (o.reload && o.reload > 0) params.set('_r', String(o.reload));
   return `${playPath}${playPath.includes('?') ? '&' : '?'}${params.toString()}`;
 }
 
