@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle } from 'lucide-react';
+import { Captions, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
 import Hls from 'hls.js';
 import { PgsRenderer } from 'libpgs';
 // Vite resolves this to an emitted asset URL; the worker file is
@@ -28,7 +28,10 @@ import {
 import { AUTO, autoLabel, chosenQuality, packagedQualityMenu, playingLabel, type PlayQuality, type PlayingLevel } from '../lib/qualities';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { withoutCodec } from '../lib/caps';
+import { extraHeading, extraInfo, playerCalls, type MasterAudio, type MasterVariant } from '../lib/playerMode';
+import { extraMasterUrl, findExtra, pickTrailer, trailerFailure, trailerPlayBatch } from '../lib/trailers';
 import { useDeviceCaps } from '../hooks/useDeviceCaps';
+import { useItem, type ExtraRef, type TrailerRef } from '../hooks/useItem';
 import { BugReportDialog } from './BugReportDialog';
 import { StatusPage } from './StatusPage';
 
@@ -209,6 +212,20 @@ function probeClientCodecs(): { label: string; supported: boolean }[] {
 
 interface PlayerPageProps {
   itemId: string;
+  /** One of the title's extras, played instead of the title (ExtraPlayerPage). */
+  extra?: PlayerExtra;
+}
+
+/** An extra the player plays: one of the title's extras, as the title's
+ *  detail lists it, and what the player says around it. */
+export interface PlayerExtra {
+  /** The extra: its id, its name and its master (play_path). */
+  ref: ExtraRef;
+  /** The title's name, for the heading: "Sintel · Trailer". */
+  titleName: string;
+  /** The title's trailer online, offered where this one is not there or
+   *  does not play. */
+  online: TrailerRef | null;
 }
 
 // A <video>'s audio tracks, where the browser plays HLS itself (Safari):
@@ -226,9 +243,24 @@ type NativeAudioVideo = HTMLVideoElement & {
  *
  * Subtitle list comes from `/api/v1/items/<id>/subtitles` (best-effort —
  * 404 / empty means we just don't show the captions menu).
+ *
+ * With `extra` it plays one of the title's extras instead - its trailer, a
+ * teaser - as it plays a title: the extra's master (play_path) asked for as
+ * the title's is, the same controls, keyboard and menus, the quality and
+ * audio menus from what that master lists (lib/playerMode.ts extraInfo).
+ * None of the title's calls (playerCalls): no /play/info, segments,
+ * subtitles, trickplay, progress, resume or watched, so no Skip Intro, Up
+ * next or next episode either, and nothing in Continue watching; one
+ * trailer_play is all it reports. It starts at 0, and closes at its end,
+ * on Escape and on Back: back where the viewer came from.
  */
-export function PlayerPage({ itemId }: PlayerPageProps) {
+export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const auth = useAuth();
+  // A title, or one of its extras: the same player, without the title's
+  // calls for an extra (lib/playerMode.ts). Fixed for the mount - App keys
+  // the page by its route.
+  const calls = playerCalls(extra ? 'extra' : 'title');
+  const extraPlayPath = extra?.ref.play_path ?? '';
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Canvas overlay for image-based subtitles (currently PGS). libpgs-js
   // owns the rendering loop and syncs to videoRef's currentTime via its
@@ -329,8 +361,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   const apiDurationSecRef = useRef(apiDurationSec);
   useEffect(() => { apiDurationSecRef.current = apiDurationSec; }, [apiDurationSec]);
 
-  const [info, setInfo] = useState<PlayInfo | null>(null);
-  const infoRef = useRef<PlayInfo | null>(null);
+  // An extra has no /play/info: it is packaged, and its master says the
+  // rest once it is in (describeExtra).
+  const [info, setInfo] = useState<PlayInfo | null>(() => (extra ? extraInfo({ durationMs: extra.ref.duration_ms }) : null));
+  const infoRef = useRef<PlayInfo | null>(info);
   useEffect(() => { infoRef.current = info; }, [info]);
   const [infoOpen, setInfoOpen] = useState(false);
   const clientCodecs = useMemo(probeClientCodecs, []);
@@ -341,7 +375,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // the viewer picked in the menu. Under HLS the media element's
   // currentTime IS the position in the title, whatever the rung: a switch
   // rebuilds the source and seeks it back there (pendingSeekRef below).
-  const [streamQuality, setStreamQuality] = useState<Quality>('high');
+  // An extra is packaged: Auto, its ladder, from the start.
+  const [streamQuality, setStreamQuality] = useState<Quality>(extra ? AUTO : 'high');
   const streamQualityRef = useRef(streamQuality);
   useEffect(() => { streamQualityRef.current = streamQuality; }, [streamQuality]);
   // (legacy qualityMenuOpen/setQualityMenuOpen removed — driven by `openMenu` above.)
@@ -410,7 +445,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // One-off label that overrides the cycling LOADING_MESSAGES while the
   // player is reacting to a user action (seek, quality switch) or the
   // initial mount. Cleared by the next `playing` event.
-  const [actionLabel, setActionLabel] = useState<string | null>('Preparing your movie…');
+  const [actionLabel, setActionLabel] = useState<string | null>(extra ? 'Preparing the trailer…' : 'Preparing your movie…');
 
   // Terminal playback failure — set when the player gives up: a title
   // that shows no frame within STARTUP_DEADLINE_MS, a stream the hls
@@ -622,14 +657,20 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // refreshes (the stream token has a 6 h TTL).
   const playUrl = useMemo(() => {
     if (!streamToken || notFound) return '';
-    const params = new URLSearchParams({ stream: streamToken, q: streamQuality });
-    if (capsParam) params.set('caps', capsParam);
-    if (reloadKey > 0) params.set('_r', String(reloadKey));
-    const url = `/api/v1/items/${itemId}/play/master.m3u8?${params.toString()}`;
+    let url: string;
+    if (extraPlayPath) {
+      // An extra's master: its play_path, asked for as the title's master is.
+      url = extraMasterUrl(extraPlayPath, { stream: streamToken, q: streamQuality, caps: capsParam, reload: reloadKey });
+    } else {
+      const params = new URLSearchParams({ stream: streamToken, q: streamQuality });
+      if (capsParam) params.set('caps', capsParam);
+      if (reloadKey > 0) params.set('_r', String(reloadKey));
+      url = `/api/v1/items/${itemId}/play/master.m3u8?${params.toString()}`;
+    }
     // eslint-disable-next-line no-console
     console.log('[playUrl] recomputed', { itemId, q: streamQuality, caps: capsParam, reload: reloadKey, tokenHash: streamToken.slice(0, 8) });
     return url;
-  }, [itemId, streamToken, streamQuality, capsParam, reloadKey, notFound]);
+  }, [itemId, extraPlayPath, streamToken, streamQuality, capsParam, reloadKey, notFound]);
 
   // Trickplay (scrub-preview thumbnails). The analyzer writes a
   // thumbnails.vtt + sprite-NNNN.jpg set for every packaged item; the
@@ -640,7 +681,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // an empty cue list as "no preview available" and render nothing.
   const [trickplayCues, setTrickplayCues] = useState<TrickplayCue[]>([]);
   useEffect(() => {
-    if (!streamToken) return;
+    // An extra has none (lib/playerMode.ts).
+    if (!streamToken || !calls.trickplay) return;
     // Trickplay assets only exist for packaged items (the analyzer
     // emits them alongside the CMAF tree). Skip the fetch entirely
     // for on-demand transcode / passthrough / remux items — otherwise
@@ -714,9 +756,24 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         const onAudioTrack = () => selectAudio(streamAudioIdxRef.current, null);
         audioList?.addEventListener('addtrack', onAudioTrack);
         audioList?.addEventListener('change', onAudioTrack);
+        // An extra's master that is not there is a media error here, with
+        // no status: before the first frame it is asked for once more, to
+        // tell "not there" (Trailer not available) from a failure.
+        let live = true;
+        const onExtraError = () => {
+          if (startedRef.current) return;
+          void fetch(playUrl)
+            .then((r) => r.status, () => null)
+            .then((s) => {
+              if (live && trailerFailure(s) === 'not-found') markNotFound();
+            });
+        };
+        if (extra) v.addEventListener('error', onExtraError);
         v.src = playUrl;
         return () => {
+          live = false;
           v.removeEventListener('resize', onResize);
+          v.removeEventListener('error', onExtraError);
           audioList?.removeEventListener('addtrack', onAudioTrack);
           audioList?.removeEventListener('change', onAudioTrack);
           v.removeAttribute('src');
@@ -758,6 +815,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     startOnFirstVariant(hls);
     // With the audio picked: the new source's preference (selectAudio).
     hls.on(Hls.Events.MANIFEST_PARSED, () => selectAudio(streamAudioIdxRef.current, hls));
+    // An extra: what its master lists is what the menus offer.
+    if (extra) hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => describeExtra(data.levels, data.audioTracks));
     hls.attachMedia(v);
     // The source is loaded on the first attach only. A later one is hls.js
     // re-attaching the media itself - recoverMediaError, after a media or
@@ -994,9 +1053,65 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     pendingSeekRef.current = sec;
   };
 
-  // Fetch item title + subtitles list.
+  // What the player takes from /play/info - or, for an extra, from its
+  // master (describeExtra): the stream's description and duration, the
+  // audio to start on, and the first entry of the switch history.
+  const applyInfo = (j: PlayInfo) => {
+    setInfo(j);
+    if (j.duration_ms) setApiDurationSec(j.duration_ms / 1000);
+    // Pick the initial audio track. Three tiers:
+    //   1. User's Settings preference (Preferred audio language).
+    //      ISO 639-2 codes ('eng' / 'deu' / …). 'orig' = keep the
+    //      file's default flag (source usually marks original lang).
+    //   2. The file's default-disposition track (ffprobe).
+    //   3. Index 0 (React useState default).
+    // Each tier only applies if the prior tier didn't already pin a
+    // non-default index — so a German movie with user pref 'eng'
+    // and an English audio track WILL switch off the source default.
+    const tracks = j.audio_tracks ?? [];
+    let picked: number | null = null;
+    const pref = loadSettings().audio.preferredLang;
+    if (pref && pref !== 'orig') {
+      // Codes compared as languages: a track tagged "ger" is the
+      // "deu" the setting names.
+      const match = tracks.find(
+        (t) => normalizeLang(t.language) !== '' && normalizeLang(t.language) === normalizeLang(pref),
+      );
+      if (match) picked = match.index;
+    }
+    if (picked === null) {
+      const defaultAudio = tracks.find((t) => t.default);
+      if (defaultAudio) picked = defaultAudio.index;
+    }
+    if (picked !== null && picked !== 0) {
+      setStreamAudioIdx(picked);
+    }
+    // Seed the switch history with the initial pipeline so the
+    // Playback info dialog has a baseline entry even before any
+    // user-initiated or auto-recover switch happens.
+    const initialLabel =
+      j.mode === 'transcode' ? `Transcode (${j.video_codec.toUpperCase()} → H.264)` :
+      j.mode === 'remux'     ? `Remux (${j.container} → MP4)` :
+      j.mode === 'packaged'  ? `Packaged (${j.video_codec.toUpperCase()})` :
+                                `Direct (${j.video_codec.toUpperCase()})`;
+    recordSwitch(initialLabel, 'startup', j.reason);
+  };
+
+  // An extra has no /play/info: the variants and the audio renditions of
+  // its master describe it (lib/playerMode.ts extraInfo), the first time
+  // one is parsed - the ladder it starts on, Auto. A master of the one rung
+  // picked from that menu later keeps the menu.
+  const extraDescribedRef = useRef(false);
+  const describeExtra = (variants: readonly MasterVariant[], audio: readonly MasterAudio[]) => {
+    if (!extra || extraDescribedRef.current) return;
+    extraDescribedRef.current = true;
+    applyInfo(extraInfo({ variants, audio, durationMs: extra.ref.duration_ms }));
+  };
+
+  // Fetch item title + subtitles list. Not for an extra: its page read the
+  // title, and it has no segments, /play/info or subtitles.
   useEffect(() => {
-    if (!token) return;
+    if (!token || !calls.title) return;
     const ctrl = new AbortController();
     fetch(`/api/v1/items/${itemId}`, {
       signal: ctrl.signal,
@@ -1059,45 +1174,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     })
       .then((r) => (r.ok ? (r.json() as Promise<PlayInfo>) : null))
       .then((j) => {
-        if (!j) return;
-        setInfo(j);
-        if (j.duration_ms) setApiDurationSec(j.duration_ms / 1000);
-        // Pick the initial audio track. Three tiers:
-        //   1. User's Settings preference (Preferred audio language).
-        //      ISO 639-2 codes ('eng' / 'deu' / …). 'orig' = keep the
-        //      file's default flag (source usually marks original lang).
-        //   2. The file's default-disposition track (ffprobe).
-        //   3. Index 0 (React useState default).
-        // Each tier only applies if the prior tier didn't already pin a
-        // non-default index — so a German movie with user pref 'eng'
-        // and an English audio track WILL switch off the source default.
-        const tracks = j.audio_tracks ?? [];
-        let picked: number | null = null;
-        const pref = loadSettings().audio.preferredLang;
-        if (pref && pref !== 'orig') {
-          // Codes compared as languages: a track tagged "ger" is the
-          // "deu" the setting names.
-          const match = tracks.find(
-            (t) => normalizeLang(t.language) !== '' && normalizeLang(t.language) === normalizeLang(pref),
-          );
-          if (match) picked = match.index;
-        }
-        if (picked === null) {
-          const defaultAudio = tracks.find((t) => t.default);
-          if (defaultAudio) picked = defaultAudio.index;
-        }
-        if (picked !== null && picked !== 0) {
-          setStreamAudioIdx(picked);
-        }
-        // Seed the switch history with the initial pipeline so the
-        // Playback info dialog has a baseline entry even before any
-        // user-initiated or auto-recover switch happens.
-        const initialLabel =
-          j.mode === 'transcode' ? `Transcode (${j.video_codec.toUpperCase()} → H.264)` :
-          j.mode === 'remux'     ? `Remux (${j.container} → MP4)` :
-          j.mode === 'packaged'  ? `Packaged (${j.video_codec.toUpperCase()})` :
-                                    `Direct (${j.video_codec.toUpperCase()})`;
-        recordSwitch(initialLabel, 'startup', j.reason);
+        if (j) applyInfo(j);
       })
       .catch(() => undefined)
       .finally(() => { if (!ctrl.signal.aborted) setInfoSettled(true); });
@@ -1173,15 +1250,17 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
   // Composed chrome title. Movies/non-episodes show the plain title; an
   // episode shows "Series — S01E02 · Episode" (series prefix omitted until
-  // the parent title resolves).
+  // the parent title resolves); an extra "Title · Extra".
+  const extraTitle = extra ? extraHeading(extra.titleName, extra.ref.title) : '';
   const displayTitle = useMemo(() => {
+    if (extraTitle) return extraTitle;
     if (!title) return 'Playing';
     if (!episodeMeta) return title;
     const s = (episodeMeta.season ?? 0).toString().padStart(2, '0');
     const e = (episodeMeta.episode ?? 0).toString().padStart(2, '0');
     const code = `S${s}E${e}`;
     return seriesTitle ? `${seriesTitle} — ${code} · ${title}` : `${code} · ${title}`;
-  }, [title, episodeMeta, seriesTitle]);
+  }, [extraTitle, title, episodeMeta, seriesTitle]);
 
   // Merge sidecar subs (from /subtitles) and embedded subs (from
   // /play/info.subtitle_tracks) into a single list the menu can render.
@@ -1871,7 +1950,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // MediaCard and the next-episode substitution in Continue Watching.
   const markedWatchedRef = useRef(false);
   useEffect(() => {
-    if (markedWatchedRef.current || !token || !itemId) return;
+    // An extra's end is not the title watched (lib/playerMode.ts).
+    if (markedWatchedRef.current || !token || !itemId || !calls.watched) return;
     const dur = effectiveDuration;
     const near95 = dur > 0 && displayedCurrent / dur >= 0.95;
     if (!inCredits && !near95) return;
@@ -2035,8 +2115,25 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // reportEvent is dependency-free (uses refs), so it can be referenced
   // from media-event handlers without re-binding the listeners every
   // render. Each event has client-side timestamp + the item context.
+  // An extra reports none of these - only its trailer_play (reportTrailerPlay).
   const reportEvent = (kind: string, payload?: Record<string, unknown>) => {
+    if (calls.events !== 'session') return;
     telemetryQueueRef.current.push({ ts: Date.now(), kind, itemId, payload });
+  };
+
+  // An extra's one event: trailer_play, when it starts, to the player's
+  // sink with the bearer in the header (lib/trailers.ts trailerPlayBatch).
+  const trailerPlayReportedRef = useRef(false);
+  const reportTrailerPlay = () => {
+    if (!extra || calls.events !== 'trailer_play' || trailerPlayReportedRef.current || !token) return;
+    trailerPlayReportedRef.current = true;
+    const batch = trailerPlayBatch({ sessionId: sessionIdRef.current, itemId, extraId: extra.ref.id, ts: Date.now() });
+    void fetch('/api/v1/play/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(batch),
+      keepalive: true,
+    }).catch(() => undefined);
   };
 
   // Auto bug-report for a playback failure the player gave up on. Goes
@@ -2057,6 +2154,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       description: tech,
       extraContext: {
         itemId,
+        ...(extra ? { extraId: extra.ref.id } : {}),
         mode: forceTranscodeRef.current ? 'transcode' : infoRef.current?.mode ?? 'unknown',
         positionSec: String(positionSec),
         quality: streamQualityRef.current,
@@ -2143,7 +2241,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       ].filter(Boolean).join('\n');
       reportEvent('startup_timeout', { attempt, lastDetails: err?.details ?? null, status: err?.status ?? null });
       giveUp(
-        "This title won't start",
+        extra ? "This trailer won't start" : "This title won't start",
         `Nothing playable arrived from the server within ${STARTUP_DEADLINE_MS / 1000} seconds. Try again in a moment, or report it if it keeps happening.`,
         tech,
         'StartupTimeout',
@@ -2272,6 +2370,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   };
 
   useEffect(() => {
+    if (calls.events !== 'session') return;
     reportEvent('mount', { ua: navigator.userAgent });
     const id = window.setInterval(() => flushTelemetry(false), 30_000);
     const onHide = () => flushTelemetry(true);
@@ -2338,8 +2437,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   // tab resume and slam the saved position back to 0. The replace
   // keeps the same /player/<id> path so React-router state doesn't
   // care.
+  //
+  // An extra starts at 0, always: it has no progress (lib/playerMode.ts).
   useEffect(() => {
-    if (!token || resumeChecked) return;
+    if (!token || resumeChecked || !calls.progress) return;
     const ctrl = new AbortController();
     const qp = new URLSearchParams(window.location.search);
     const startover = qp.get('startover') === '1' || qp.get('binge') === '1';
@@ -2394,9 +2495,10 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   }, [token, itemId, apiDurationSec, resumeChecked]);
 
   // Throttled save every 10s while we're actually playing. Under HLS
-  // currentTime is the position in the title, whatever the rung.
+  // currentTime is the position in the title, whatever the rung. Not for
+  // an extra: nothing of it goes to Continue watching.
   useEffect(() => {
-    if (!token) return;
+    if (!token || !calls.progress) return;
     const id = window.setInterval(() => {
       const v = videoRef.current;
       if (!v || v.paused || v.ended) return;
@@ -2773,6 +2875,20 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Escape closes an extra, as its end does - once nothing is open over it:
+  // a menu (the chrome's Escape closes that first), the Playback info, the
+  // bug report.
+  useEffect(() => {
+    if (!extra) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || openMenu !== null || infoOpen || bugDialogOpen) return;
+      goBack();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openMenu, infoOpen, bugDialogOpen]);
+
   const toggleFullscreen = () => {
     if (!wrapRef.current) return;
     if (document.fullscreenElement) document.exitFullscreen();
@@ -2899,8 +3015,15 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
 
   // Leave the player for its natural parent: the series for an episode,
   // the title's page, home as a last resort. Not history.back(): a binge
-  // session leaves a trail of /player/<id> entries.
+  // session leaves a trail of /player/<id> entries. An extra goes back
+  // where the viewer came from - the title's page, the home screen's hero
+  // - or to the title's page when it opened in a tab of its own.
   const goBack = () => {
+    if (extra) {
+      if (window.history.length > 1) window.history.back();
+      else window.location.assign(toApp(`/i/${encodeURIComponent(itemId)}`));
+      return;
+    }
     const dest = parentSeriesId
       ? `/i/${encodeURIComponent(parentSeriesId)}`
       : itemId
@@ -2917,6 +3040,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       initialDescription={`Playback failed while watching this item.\n\n--- technical details ---\n${fatalError?.tech ?? '(none captured)'}`}
       extraContext={{
         itemId,
+        ...(extra ? { extraId: extra.ref.id } : {}),
         mode: effectiveMode,
         positionSec: String(Math.floor(current)),
         quality: streamQuality,
@@ -2926,6 +3050,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   ) : null;
 
   if (notFound) {
+    if (extra) return <TrailerNotAvailable online={extra.online} />;
     return (
       <StatusPage
         title="Title not found"
@@ -2933,6 +3058,8 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
       />
     );
   }
+  // Where an extra does not play, its title's trailer online.
+  const failureLink = extra ? onlineLink(extra.online) : undefined;
 
   if (!playUrl) {
     // No stream token (yet): nothing to attach. Spins until it comes -
@@ -2947,6 +3074,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             onRetry={retryPlayback}
             onBack={goBack}
             onReport={() => setBugDialogOpen(true)}
+            link={failureLink}
           />
         ) : (
           <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
@@ -3076,6 +3204,11 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
           if (!e.currentTarget.muted) setAutoplayMuted(false);
         }}
         onEnded={(e) => {
+          // An extra ends: back where the viewer came from.
+          if (extra) {
+            goBack();
+            return;
+          }
           const v = e.currentTarget;
           // Fragmented MP4 + empty_moov makes the browser compute
           // duration from "last fragment end_time seen". When ffmpeg
@@ -3091,7 +3224,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
         }}
         onWaiting={() => { setBuffering(true); onStall(); reportEvent('waiting', { t: videoRef.current?.currentTime, q: streamQuality }); }}
         onLoadedData={() => { startedRef.current = true; }}
-        onPlaying={() => { startedRef.current = true; setBuffering(false); setActionLabel(null); }}
+        onPlaying={() => { startedRef.current = true; setBuffering(false); setActionLabel(null); reportTrailerPlay(); }}
         onCanPlay={(e) => {
           startedRef.current = true;
           setBuffering(false);
@@ -3209,6 +3342,7 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
             onRetry={retryPlayback}
             onBack={goBack}
             onReport={() => setBugDialogOpen(true)}
+            link={failureLink}
           />
         </div>
       )}
@@ -3942,7 +4076,82 @@ export function PlayerPage({ itemId }: PlayerPageProps) {
   );
 }
 
-/** What the player says when it gave up, and what the viewer can do. */
+/**
+ * A title's extra in the player: /trailer/<itemId>/<extraId>, what a
+ * title's Trailer opens when this server plays its trailer
+ * (lib/trailers.ts). It reads the title for the extra - its master,
+ * play_path, and its name - and plays it in PlayerPage, as a title plays,
+ * without what is the title's (lib/playerMode.ts).
+ *
+ * A title that is not there, or an extra it does not list, says "Trailer
+ * not available", with the title's trailer online where it has one (as
+ * PlayerPage does for a master that answers 400, 404 or 410); a title that
+ * did not load says so, with Try again.
+ */
+export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: string }) {
+  const { data, status, retry } = useItem(itemId);
+  const found = data ? findExtra(data.extras, extraId) : null;
+  const online = data ? pickTrailer(data.trailers) : null;
+  // The same extra whatever refetch of the title brought it (useItem asks
+  // again when the catalog changes): the player plays on.
+  const extra = useMemo<PlayerExtra | null>(
+    () => (data && found ? { ref: found, titleName: data.title, online } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [found?.id, found?.play_path, found?.title, found?.duration_ms, data?.title, online?.url],
+  );
+
+  if (status === 'not-found' || (status === 'ok' && data && !found)) return <TrailerNotAvailable online={online} />;
+  if (status === 'error' && !data) {
+    return (
+      <StatusPage
+        title="Couldn't load the trailer"
+        message="The catalog didn't answer. Check your connection, or try again in a moment."
+        onRetry={retry}
+      />
+    );
+  }
+  if (!extra) {
+    return (
+      <div className="fixed inset-0 bg-black text-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
+      </div>
+    );
+  }
+  return <PlayerPage itemId={itemId} extra={extra} />;
+}
+
+/** An extra that is not there: its title, an extra the title does not
+ *  list, or a master that answers 400, 404 or 410. */
+function TrailerNotAvailable({ online }: { online: TrailerRef | null }) {
+  return (
+    <StatusPage
+      title="Trailer not available"
+      message="There's no trailer at this address. The link may be wrong, or the trailer has been removed."
+      link={onlineLink(online)}
+    />
+  );
+}
+
+/** The title's trailer online, as the link a page offers where the one on
+ *  this server is not there or does not play. */
+function onlineLink(online: TrailerRef | null | undefined): FailureLink | undefined {
+  if (!online?.url) return undefined;
+  return {
+    href: online.url,
+    label: (online.site || '').toLowerCase().includes('youtube') ? 'Watch on YouTube' : 'Watch Online',
+    icon: <Youtube className="w-4 h-4" aria-hidden />,
+  };
+}
+
+/** The same thing elsewhere, opened in a new tab. */
+interface FailureLink {
+  href: string;
+  label: string;
+  icon?: ReactNode;
+}
+
+/** What the player says when it gave up, and what the viewer can do - for
+ *  an extra, also its title's trailer online (`link`). */
 function PlaybackFailure({
   title,
   label,
@@ -3950,6 +4159,7 @@ function PlaybackFailure({
   onRetry,
   onBack,
   onReport,
+  link,
 }: {
   title: string;
   label: string;
@@ -3957,6 +4167,7 @@ function PlaybackFailure({
   onRetry: () => void;
   onBack: () => void;
   onReport: () => void;
+  link?: FailureLink;
 }) {
   return (
     <div role="alert" className="flex flex-col items-center px-6 text-center">
@@ -3974,6 +4185,17 @@ function PlaybackFailure({
         >
           Try again
         </button>
+        {link ? (
+          <a
+            href={link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-2"
+          >
+            {link.icon}
+            {link.label}
+          </a>
+        ) : null}
         <button
           type="button"
           onClick={onBack}

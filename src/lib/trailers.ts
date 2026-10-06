@@ -1,7 +1,7 @@
 // What a title's Trailer plays. A trailer this server plays - one of the
-// title's extras, chino-api's `extras` - comes first: it opens the trailer
-// page (components/TrailerPage.tsx) on the app's own player. Else a link to
-// a trailer online (`trailers`), opened outside the app as before; else the
+// title's extras, chino-api's `extras` - comes first: it opens in the app's
+// own player (components/PlayerPage.tsx ExtraPlayerPage). Else a link to a
+// trailer online (`trailers`), opened outside the app as before; else the
 // title has no Trailer. Pure: trailers.test.ts runs it under node --test.
 
 import type { ExtraRef, TrailerRef } from '../hooks/useItem';
@@ -10,7 +10,7 @@ import { isNotFoundStatus } from './reportPolicy.ts';
 /** The kinds of extra that are a title's trailer, a trailer before a teaser. */
 export const TRAILER_KINDS: readonly string[] = ['trailer', 'teaser'];
 
-/** An extra the trailer page can play: one this server has (an id,
+/** An extra the player can play: one this server has (an id,
  *  `local: true`), with a master (`play_path`). */
 function playsHere(e: ExtraRef | null | undefined): e is ExtraRef {
   return !!e && e.local === true && typeof e.id === 'string' && e.id !== ''
@@ -103,7 +103,7 @@ export function trailerFailure(status: number | null | undefined): 'not-found' |
   return status === 400 || isNotFoundStatus(status) ? 'not-found' : 'failed';
 }
 
-/** The one event the trailer page reports, once its trailer plays: a batch
+/** The one event the player reports for an extra, once it plays: a batch
  *  for chino-api's POST /api/v1/play/events, the player's sink. */
 export function trailerPlayBatch(o: { sessionId: string; itemId: string; extraId: string; ts: number }) {
   return {
