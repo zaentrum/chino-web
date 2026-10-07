@@ -73,7 +73,7 @@ export function PersonPage({ personId }: PersonPageProps) {
   return (
     <div className="min-h-screen bg-chino-bg text-white">
       <BackButton />
-      <div className="max-w-6xl mx-auto px-6 pt-20 pb-16">
+      <div className="max-w-6xl mx-auto px-6 pt-[calc(5rem+var(--chino-safe-top))] pb-16">
         {/* Header: one grid, so the same elements lay out both ways. On a
             phone the portrait sits beside the name and the facts and the
             biography run full width beneath; from sm up they stand in the
@@ -239,7 +239,7 @@ function BackButton() {
         if (window.history.length > 1) window.history.back();
         else window.location.assign(toApp('/'));
       }}
-      className="absolute top-4 left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors z-10"
+      className="absolute top-[calc(1rem+var(--chino-safe-top))] left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors z-10"
       title="Back"
     >
       <ArrowLeft className="w-5 h-5" />

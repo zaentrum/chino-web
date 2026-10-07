@@ -138,7 +138,11 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 bg-chino-bg border-b border-chino-border flex items-center justify-between px-4">
+    // 64 px under the status bar's inset (--chino-header, index.css): in an
+    // iPhone's home screen app the page is drawn under the translucent
+    // status bar, and the header's background reaches up behind it while
+    // its search and buttons stay under it. Without an inset, 64 px.
+    <header className="h-[var(--chino-header)] pt-[var(--chino-safe-top)] bg-chino-bg border-b border-chino-border flex items-center justify-between px-4">
       <div ref={wrapRef} className="flex-1 max-w-xl relative">
         <form onSubmit={submit}>
           <div className="relative">

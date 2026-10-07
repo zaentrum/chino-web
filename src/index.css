@@ -9,8 +9,14 @@
      --chino-bottom-bar is the phone's bottom bar (ChinoMobileNav, below
      md): its 64 px of tabs over that inset. --chino-bottom-clear is what
      anything else fixed to the foot keeps clear: the inset, and the
-     bottom bar where one shows. */
+     bottom bar where one shows.
+     The top, the same way: --chino-safe-top is the status bar's inset
+     where the page is drawn under it (the home screen app's status bar
+     is translucent, index.html), 0 elsewhere; --chino-header is the
+     shell's header, its 64 px under that inset. */
   :root {
+    --chino-safe-top: env(safe-area-inset-top, 0px);
+    --chino-header: calc(4rem + var(--chino-safe-top));
     --chino-safe-bottom: env(safe-area-inset-bottom, 0px);
     --chino-bottom-bar: calc(4rem + var(--chino-safe-bottom));
     --chino-bottom-clear: var(--chino-safe-bottom);

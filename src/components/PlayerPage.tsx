@@ -3368,8 +3368,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </div>
       )}
 
+      {/* The toasts at the top - this one, reconnecting, Tap to unmute -
+          5rem under the status bar's inset (--chino-safe-top), under the
+          top bar, which pads for it. */}
       {qualityNotice && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-sm text-white shadow-lg">
+        <div className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-sm text-white shadow-lg">
           {qualityNotice}
         </div>
       )}
@@ -3390,7 +3393,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       )}
 
       {reconnecting && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-chino-red/20 text-chino-red text-sm border border-chino-red/40 shadow-lg">
+        <div className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-chino-red/20 text-chino-red text-sm border border-chino-red/40 shadow-lg">
           Stream paused — reconnecting…
         </div>
       )}
@@ -3398,7 +3401,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {autoplayMuted && !needsClickToPlay && (
         <button
           onClick={startUnmuted}
-          className="absolute top-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/70 hover:bg-black/85 text-sm flex items-center gap-2 transition-colors"
+          className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-black/70 hover:bg-black/85 text-sm flex items-center gap-2 transition-colors"
         >
           <VolumeX className="w-4 h-4" />
           <span>Tap to unmute</span>

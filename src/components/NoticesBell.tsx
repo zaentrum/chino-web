@@ -116,7 +116,7 @@ function BellAndList() {
           role="dialog"
           aria-label="Notices"
           tabIndex={-1}
-          className="fixed left-3 right-3 top-16 sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-[360px] max-h-[70vh] flex flex-col bg-chino-surface border border-chino-border shadow-2xl z-50 focus:outline-none"
+          className="fixed left-3 right-3 top-[var(--chino-header)] sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-1 sm:w-[360px] max-h-[70vh] flex flex-col bg-chino-surface border border-chino-border shadow-2xl z-50 focus:outline-none"
         >
           <div className="flex items-center justify-between gap-2 pl-3 pr-1.5 py-1.5 border-b border-chino-border">
             <h2 className="text-sm font-medium text-white py-1">Notices</h2>

@@ -108,7 +108,8 @@ export function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-chino-bg text-white">
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      {/* 2rem under the status bar's inset (--chino-safe-top). */}
+      <div className="max-w-6xl mx-auto px-6 pt-[calc(2rem+var(--chino-safe-top))] pb-8">
         <div className="flex items-center gap-3 mb-8">
           <button
             onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}

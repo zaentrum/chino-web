@@ -204,16 +204,18 @@ export function DetailPage({ itemId }: DetailPageProps) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-chino-bg via-chino-bg/40 to-transparent" />
         </div>
+        {/* Back and Home 1rem under the status bar's inset: the
+            backdrop reaches up behind a translucent one, they don't. */}
         <button
           onClick={() => { if (window.history.length > 1) window.history.back(); else window.location.assign(toApp('/')); }}
-          className="absolute top-4 left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors"
+          className="absolute top-[calc(1rem+var(--chino-safe-top))] left-4 p-2 bg-black/50 hover:bg-black/70 transition-colors"
           title="Back"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
         <button
           onClick={() => window.location.assign(toApp('/'))}
-          className="absolute top-4 left-16 p-2 bg-black/50 hover:bg-black/70 transition-colors"
+          className="absolute top-[calc(1rem+var(--chino-safe-top))] left-16 p-2 bg-black/50 hover:bg-black/70 transition-colors"
           title="Home"
           aria-label="Home"
         >

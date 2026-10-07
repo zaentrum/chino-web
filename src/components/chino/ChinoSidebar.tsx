@@ -25,7 +25,7 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
   // Where the tabs don't fit the rail's height - a phone on its side leaves
   // it some 360 px, and the logo cell, the five tabs and Settings take 432 -
   // their column scrolls: each tab keeps its 48 px, Settings stays pinned at
-  // the foot and the logo cell keeps the header's 64 px, and the open tab is
+  // the foot and the logo cell keeps the header's height, and the open tab is
   // scrolled into view as it opens, and after a layout that leaves the
   // column short (the phone turned, the window made smaller). Scrolled by
   // hand, the column stays where it was left until another tab opens or its
@@ -53,10 +53,11 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
 
   return (
     <aside className="w-20 bg-chino-bg border-r border-chino-border flex-col h-full hidden md:flex">
-      {/* Logo cell mirrors the header's h-16 so the icon and the search
+      {/* Logo cell mirrors the header's height (its 64 px under the
+          status bar's inset, --chino-header) so the icon and the search
           bar sit on the same baseline; border-b separates it from the
           nav, matching the design reference. */}
-      <div className="h-16 shrink-0 flex items-center justify-center border-b border-chino-border">
+      <div className="h-[var(--chino-header)] pt-[var(--chino-safe-top)] shrink-0 flex items-center justify-center border-b border-chino-border">
         <button
           onClick={() => onSectionChange('home')}
           title="Chino — Home"

@@ -319,7 +319,8 @@ function ZapPagerShell({ containerRef, children }: ShellProps) {
   return (
     // The Zap pager bleeds outside ChinoApp's `p-4` content padding —
     // the cards want the full viewport. -m-4 cancels the parent's
-    // padding, h-[calc(100dvh-4rem)] subtracts the Header's h-16.
+    // padding, and the pager leaves the Header its height: its 64 px
+    // and the status bar's inset over it (--chino-header, index.css).
     // dvh handles iOS Safari's address-bar collapse. Below md the
     // phone's bottom bar is fixed over the foot: the cards end above
     // it, as the app's do, its height and the home indicator's inset
@@ -327,7 +328,7 @@ function ZapPagerShell({ containerRef, children }: ShellProps) {
     <div className="-m-4">
       <div
         ref={containerRef}
-        className="h-[calc(100dvh-4rem-var(--chino-bottom-bar))] md:h-[calc(100dvh-4rem)] overflow-y-auto snap-y snap-mandatory bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-[calc(100dvh-var(--chino-header)-var(--chino-bottom-bar))] md:h-[calc(100dvh-var(--chino-header))] overflow-y-auto snap-y snap-mandatory bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {children}
       </div>
