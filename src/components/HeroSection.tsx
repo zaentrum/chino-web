@@ -381,26 +381,37 @@ export function HeroSection(props: HeroSectionProps) {
       {/* Dot indicator: which slot in the carousel we're on.
           Visible only when there's more than one entry. Click to
           jump. Over the slides, where each leaves it room under its
-          buttons, so the dots stay put while the slides move. */}
+          buttons, so the dots stay put while the slides move.
+          Each dot is its 8 px square in a tap area of its own, the
+          areas side by side and the dots spaced by them: 40 px tall -
+          the 16 px over the dot up to the buttons, and the padding
+          under it - and 40 px wide; 32 under 360 px, where eight at 40
+          would not fit, and 44 from sm. The negative margins keep each
+          dot where it was in its row: the first under Play's edge. */}
       {carousel && (
         <div className="absolute left-0 bottom-0 p-4 sm:p-6 md:p-10 lg:p-12 pointer-events-none">
           <div
-            className="flex gap-1.5 pointer-events-auto"
+            className="flex -mb-4 -ml-3 min-[360px]:-ml-4 sm:-ml-[18px] pointer-events-auto"
             title={paused ? 'Auto-rotation paused' : undefined}
           >
             {pool.map((_, i) => (
               <button
                 key={i}
                 onClick={() => goTo(i, i > cur ? 1 : -1)}
-                className={`w-2 h-2 transition-all ${
-                  i === cur
-                    ? paused
-                      ? 'bg-white ring-1 ring-white/60 ring-offset-1 ring-offset-black'
-                      : 'bg-white'
-                    : 'bg-white/30 hover:bg-white/60'
-                }`}
+                className="group w-8 min-[360px]:w-10 sm:w-11 h-10 flex items-center justify-center"
                 title={`Show ${i + 1}/${n}`}
-              />
+              >
+                <span
+                  aria-hidden="true"
+                  className={`w-2 h-2 transition-all ${
+                    i === cur
+                      ? paused
+                        ? 'bg-white ring-1 ring-white/60 ring-offset-1 ring-offset-black'
+                        : 'bg-white'
+                      : 'bg-white/30 group-hover:bg-white/60'
+                  }`}
+                />
+              </button>
             ))}
           </div>
         </div>
