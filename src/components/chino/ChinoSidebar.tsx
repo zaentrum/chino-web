@@ -44,7 +44,9 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
             <button
               key={item.id}
               onClick={() => onSectionChange(item.id)}
+              aria-label={item.label}
               title={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={`${cellBase} ${
                 isActive
                   ? 'bg-chino-surface text-chino-accent'
@@ -60,7 +62,9 @@ export function ChinoSidebar({ activeSection, onSectionChange }: ChinoSidebarPro
       <div className="p-4">
         <button
           onClick={() => onSectionChange('settings')}
+          aria-label="Settings"
           title="Settings"
+          aria-current={activeSection === 'settings' ? 'page' : undefined}
           className={`${cellBase} ${
             activeSection === 'settings'
               ? 'bg-chino-surface text-chino-accent'
