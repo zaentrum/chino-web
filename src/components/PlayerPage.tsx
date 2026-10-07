@@ -676,28 +676,20 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     return url;
   }, [itemId, extraPlayPath, streamToken, streamQuality, capsParam, reloadKey, notFound]);
 
-  // Trickplay (scrub-preview thumbnails). The analyzer writes a
-  // thumbnails.vtt + sprite-NNNN.jpg set for every packaged item; the
-  // player fetches the VTT once and uses the cues to render a small
-  // sprite-cropped thumbnail above the scrub-bar cursor on hover.
-  // Items that haven't been packaged yet (or that the analyzer
-  // skipped, e.g. too-short videos) just return 404 here — we treat
-  // an empty cue list as "no preview available" and render nothing.
+  // Trickplay (scrub-preview thumbnails). A title's package carries a
+  // thumbnails.vtt + sprite-NNNN.jpg set; the player fetches the VTT once
+  // and uses the cues to render a small sprite-cropped thumbnail above the
+  // scrub-bar cursor on hover. Whenever the package has them, however the
+  // title plays: packaged, or on the fly - from its package where the
+  // original is retired, from the original for a browser that decodes
+  // none of the package's rungs - chino-stream serves them from the
+  // package all the same, so /play/info's mode says nothing of them. A
+  // title not packaged yet (or one the analyzer skipped, e.g. a very
+  // short video) answers 404 — an empty cue list, no preview.
   const [trickplayCues, setTrickplayCues] = useState<TrickplayCue[]>([]);
   useEffect(() => {
     // An extra has none (lib/playerMode.ts).
     if (!streamToken || !calls.trickplay) return;
-    // Trickplay assets only exist for packaged items (the analyzer
-    // emits them alongside the CMAF tree). Skip the fetch entirely
-    // for on-demand transcode / passthrough / remux items — otherwise
-    // every play page logs a 404 on /trickplay/thumbnails.vtt for
-    // items that simply don't have it yet. Wait for /play/info to
-    // tell us the mode before deciding.
-    if (info && info.mode !== 'packaged') {
-      setTrickplayCues([]);
-      return;
-    }
-    if (!info) return; // wait for the info probe to resolve
     const enc = encodeURIComponent(streamToken);
     const url = `/api/v1/items/${itemId}/play/trickplay/thumbnails.vtt?stream=${enc}`;
     const ctrl = new AbortController();
@@ -709,7 +701,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       })
       .catch(() => setTrickplayCues([]));
     return () => ctrl.abort();
-  }, [itemId, streamToken, info]);
+  }, [itemId, streamToken]);
   const trickplayBaseUrl = useMemo(() => {
     if (!streamToken) return '';
     return `/api/v1/items/${itemId}/play/trickplay`;
