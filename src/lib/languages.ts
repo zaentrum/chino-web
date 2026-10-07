@@ -324,6 +324,53 @@ export function defaultSubtitleTrack<T extends { id: string; lang?: string; forc
   return (inLang.find((t) => !t.forced) ?? inLang[0])?.id ?? null;
 }
 
+// Subtitle formats drawn as pictures: PGS, and the bitmap kinds the player
+// lists none of. A track that gives no format is text.
+const IMAGE_SUBTITLE_FORMATS = new Set([
+  'pgs', 'hdmv_pgs_subtitle', 'pgssub', 'vobsub', 'dvdsub', 'dvd_subtitle', 'dvb', 'dvbsub', 'dvb_subtitle', 'xsub',
+]);
+
+function isTextSubtitle(t: { format?: string }): boolean {
+  return !IMAGE_SUBTITLE_FORMATS.has((t.format ?? '').trim().toLowerCase());
+}
+
+/** The forced track in the language of the audio playing, or null - the
+ *  one a film carries for what is said or written in another language
+ *  than its audio (a sign, a letter, a call abroad) - a text one before a
+ *  picture one (PGS). None when the audio's language is not known. */
+export function forcedSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean; format?: string }>(
+  tracks: readonly T[],
+  audioLang: string | null | undefined,
+): string | null {
+  const audio = normalizeLang(audioLang);
+  if (!audio) return null;
+  const forced = tracks.filter((t) => t.forced && normalizeLang(t.lang) === audio);
+  return (forced.find(isTextSubtitle) ?? forced[0])?.id ?? null;
+}
+
+export interface AutoSubtitles extends SubtitleDefaults {
+  /** The viewer chose Off in the player: nothing comes on by itself for the
+   *  rest of the session. */
+  off?: boolean;
+}
+
+/**
+ * The subtitle that comes on by itself, or null: the one defaultSubtitleTrack
+ * picks - a full track in the Settings language, for audio in a language
+ * the viewer does not follow - else, where none would come on (the audio is
+ * in the viewer's own language, or subtitles are off in Settings), the
+ * forced track in the audio's language, which is part of the film rather
+ * than subtitles to read along. Asked again whenever the audio's language
+ * changes. Nothing after the viewer's Off in the player.
+ */
+export function autoSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean; format?: string }>(
+  tracks: readonly T[],
+  state: AutoSubtitles,
+): string | null {
+  if (state.off) return null;
+  return defaultSubtitleTrack(tracks, state) ?? forcedSubtitleTrack(tracks, state.audioLang);
+}
+
 /**
  * The rendition of a stream's audio that is the track /play/info lists:
  * hls.js's audioTracks (the master's NAME and LANGUAGE, "German" / "de")

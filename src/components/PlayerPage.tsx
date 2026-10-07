@@ -13,7 +13,7 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
-import { audioChipLabel, audioLabels, audioRenditionFor, defaultSubtitleTrack, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
+import { audioChipLabel, audioLabels, audioRenditionFor, autoSubtitleTrack, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import {
   QUALITY_RUNGS,
   downgradeStep,
@@ -1332,29 +1332,36 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   }, [info?.audio_tracks]);
   const playingAudio = audioMenu.find((t) => t.index === streamAudioIdx);
 
-  // The default subtitle, decided once per playback when both track
-  // lists and the audio language are known: OFF, unless the audio is in
-  // a language the viewer has not said they follow - not the subtitle
-  // language chosen in Settings, not the preferred audio language - and
-  // then the track in the Settings subtitle language (lib/languages.ts).
-  // The file's own default flag does not count: it marked German
-  // subtitles on an English film. Multi-select state, but the default
+  // The subtitles that come on by themselves (lib/languages.ts
+  // autoSubtitleTrack), decided once both track lists and the audio
+  // language are known: OFF, unless the audio is in a language the viewer
+  // has not said they follow - not the subtitle language chosen in
+  // Settings, not the preferred audio language - and then the track in the
+  // Settings subtitle language. Where none would come on, the FORCED track
+  // in the audio's language, if the title has one (a text one before a
+  // PGS one): the lines a film shows in another language than its audio's.
+  // The file's own default flag does not count: it marked German subtitles
+  // on an English film. They follow the audio - a switch to another
+  // language decides again - until the viewer picks in the menu: from then
+  // on the subtitles are theirs for this playback, a track stays on
+  // whatever the audio, and an Off stays off. Multi-select state, but this
   // only ever seeds one track — a second is the viewer's choice.
-  const autoPickedRef = useRef(false);
-  useEffect(() => {
-    if (autoPickedRef.current || !subsSettled || !infoSettled) return;
-    autoPickedRef.current = true;
-    if (activeSubIds.length > 0) return; // already chosen in the menu
+  const subsAutoRef = useRef(true);
+  const playingAudioLang = useMemo(() => {
     const tracks = info?.audio_tracks ?? [];
-    const audio =
-      tracks.find((t) => t.index === streamAudioIdx) ?? tracks.find((t) => t.default) ?? tracks[0];
-    const id = defaultSubtitleTrack(mergedSubs, {
-      audioLang: audio?.language,
+    return (tracks.find((t) => t.index === streamAudioIdx) ?? tracks.find((t) => t.default) ?? tracks[0])?.language;
+  }, [info?.audio_tracks, streamAudioIdx]);
+  useEffect(() => {
+    if (!subsAutoRef.current || !subsSettled || !infoSettled) return;
+    const id = autoSubtitleTrack(mergedSubs, {
+      audioLang: playingAudioLang,
       subtitlePref: settings.subtitles.preferredLang,
       audioPref: settings.audio.preferredLang,
     });
-    if (id) setActiveSubIds([id]);
-  }, [subsSettled, infoSettled, mergedSubs, info, streamAudioIdx, activeSubIds, settings]);
+    // The same choice again is no change: the tracks, the PGS renderer and
+    // the timing offset stay as they are.
+    setActiveSubIds((prev) => (id ? (prev.length === 1 && prev[0] === id ? prev : [id]) : prev.length === 0 ? prev : []));
+  }, [subsSettled, infoSettled, mergedSubs, playingAudioLang, settings.subtitles.preferredLang, settings.audio.preferredLang]);
 
   // The menu's old key is not read any more; drop it.
   useEffect(() => {
@@ -1621,10 +1628,12 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // this playback only, like a switch in the audio menu: the default is
   // what Settings says. (Writing every pick back made one "Off" on a
   // film the viewer understood switch subtitles off for every foreign
-  // one after it.)
+  // one after it.) Any pick ends the subtitles that come on by themselves
+  // for this playback: an Off, or a forced track turned off, stays off
+  // when the audio changes, and a track picked stays on.
   const MAX_ACTIVE_SUBS = 2;
   const chooseSub = (s: Subtitle | null) => {
-    autoPickedRef.current = true;
+    subsAutoRef.current = false;
     if (s === null) {
       setActiveSubIds([]);
       return;

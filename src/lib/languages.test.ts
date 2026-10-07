@@ -2,8 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  autoSubtitleTrack,
   defaultSubtitleLang,
   defaultSubtitleTrack,
+  forcedSubtitleTrack,
   languageName,
   languageTag,
   normalizeLang,
@@ -327,6 +329,68 @@ test('the track: one in that language, a full one before a forced one; the file\
   assert.equal(defaultSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng' }), null);
   // No track in the chosen language: off, not some other language.
   assert.equal(defaultSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'ita' }), null);
+});
+
+test('forced subtitles in the audio\'s language come on where no subtitles would: the audio is the viewer\'s own', () => {
+  const tracks = [
+    { id: 'en', lang: 'eng' },
+    { id: 'en-forced', lang: 'eng', forced: true },
+    { id: 'de', lang: 'ger' },
+    { id: 'de-forced', lang: 'deu', forced: true },
+  ];
+  const viewer = { subtitlePref: 'eng', audioPref: 'eng' };
+  // English audio, an English viewer: no subtitles by the rule - its forced ones.
+  assert.equal(defaultSubtitleTrack(tracks, { ...viewer, audioLang: 'eng' }), null);
+  assert.equal(autoSubtitleTrack(tracks, { ...viewer, audioLang: 'eng' }), 'en-forced');
+  // German dubs preferred, English subtitles: both followed, each with its own forced track -
+  // asked again when the viewer switches the audio.
+  const dubs = { subtitlePref: 'eng', audioPref: 'deu' };
+  assert.equal(autoSubtitleTrack(tracks, { ...dubs, audioLang: 'ger' }), 'de-forced');
+  assert.equal(autoSubtitleTrack(tracks, { ...dubs, audioLang: 'en' }), 'en-forced');
+  // Subtitles off in Settings: the forced track still, part of the film.
+  assert.equal(autoSubtitleTrack(tracks, { subtitlePref: 'off', audioLang: 'eng' }), 'en-forced');
+});
+
+test('full subtitles where the rule picks them, before any forced track', () => {
+  const tracks = [
+    { id: 'fr-forced', lang: 'fre', forced: true },
+    { id: 'en', lang: 'eng' },
+    { id: 'en-forced', lang: 'eng', forced: true },
+  ];
+  // French audio, an English viewer: the full English subtitles, not the French forced ones.
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'eng', audioPref: 'eng' }), 'en');
+  // The viewer switches to the English audio: the forced English ones instead.
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng', audioPref: 'eng' }), 'en-forced');
+  // As before, a forced track in the Settings language where it is the only one in it.
+  assert.equal(autoSubtitleTrack([tracks[0], tracks[2]], { audioLang: 'fre', subtitlePref: 'eng' }), 'en-forced');
+});
+
+test('no forced track in the audio\'s language: none', () => {
+  const tracks = [{ id: 'en', lang: 'eng' }, { id: 'de-forced', lang: 'ger', forced: true }];
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng' }), null);
+  assert.equal(autoSubtitleTrack([], { audioLang: 'eng', subtitlePref: 'eng' }), null);
+  // The audio's language not known: no forced track is in it.
+  for (const audioLang of ['und', 'zxx', '', undefined, null]) {
+    assert.equal(autoSubtitleTrack([{ id: 'und', lang: 'und', forced: true }, ...tracks], { audioLang, subtitlePref: 'eng' }), null, String(audioLang));
+  }
+});
+
+test('the viewer\'s Off in the player: none, forced or full, whatever the audio', () => {
+  const tracks = [{ id: 'en', lang: 'eng' }, { id: 'en-forced', lang: 'eng', forced: true }];
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng', off: true }), null);
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'eng', off: true }), null);
+});
+
+test('a text forced track before a PGS one; a PGS one where there is no other', () => {
+  const tracks = [
+    { id: 'pgs', lang: 'eng', forced: true, format: 'pgs' },
+    { id: 'vtt', lang: 'en', forced: true, format: 'webvtt' },
+    { id: 'emb', lang: 'eng', forced: true },
+  ];
+  assert.equal(forcedSubtitleTrack(tracks, 'eng'), 'vtt');
+  assert.equal(forcedSubtitleTrack([tracks[0], tracks[2]], 'eng'), 'emb', 'no format given: text');
+  assert.equal(forcedSubtitleTrack([tracks[0]], 'en-US'), 'pgs');
+  assert.equal(forcedSubtitleTrack([{ id: 'full', lang: 'eng' }], 'eng'), null, 'a full track is no forced one');
 });
 
 test('the audio rendition of a track /play/info lists: by language across code spellings, by title among several', () => {
