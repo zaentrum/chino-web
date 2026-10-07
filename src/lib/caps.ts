@@ -8,7 +8,11 @@
 // The vocabulary is chino-stream's ParseCaps (internal/play/ffprobe.go):
 // video avc, hvc, av1, vp9, each with an optional ":<height>"; audio aac,
 // mp3, opus, ac3, eac3 (ac3 and eac3 put a package's AC-3 / E-AC-3 groups in
-// the master). A token that is missing means "not decoded here".
+// the master). A token that is missing means "not decoded here". `native`
+// is no codec: it says the browser plays the master with its own HLS
+// player, which picks between audio groups itself - chino-stream then
+// serves each group as Apple's spec has them, alike but for their codecs
+// and channels, instead of the one group hls.js is served.
 //
 // `aacmc` (AAC beyond two channels) is never sent: Chrome answers yes to
 // isTypeSupported('mp4a.40.2; channels="6"') and then rejects 5.1 fMP4
@@ -33,19 +37,38 @@ export const CODEC_PROBES: readonly CodecProbe[] = [
   { token: 'eac3', mime: 'audio/mp4; codecs="ec-3"' },
 ];
 
+/** The caps token of a browser that plays HLS with its own player. */
+export const NATIVE_TOKEN = 'native';
+
+/** What a <video> is asked whether it plays HLS itself. */
+export const HLS_MIME = 'application/vnd.apple.mpegurl';
+
 /**
- * How a browser is asked whether it decodes a type. With MediaSource,
- * isTypeSupported: hls.js plays through it. Without - iPhone Safari, which
- * plays HLS itself (or, from iOS 17.1, hls.js through ManagedMediaSource,
- * on the same decoders) - a <video>'s canPlayType, where "maybe" counts
- * too: asking MSE there would say no to everything, send no caps, and the
- * server's default set has no HEVC.
+ * Whether the browser plays HLS with its own player: hls.js cannot play
+ * here (no MediaSource it can use) and a <video> says it plays HLS - iPhone
+ * Safari before ManagedMediaSource. The test the player and the Zap cards
+ * make before they set a master as the video's src instead.
+ */
+export function playsHlsNatively(hlsSupported: boolean, video: { canPlayType(type: string): string } | null): boolean {
+  return !hlsSupported && !!video && video.canPlayType(HLS_MIME) !== '';
+}
+
+/**
+ * How a browser is asked whether it decodes a type: as what plays decodes.
+ * Where hls.js plays, through MediaSource: its isTypeSupported. Where the
+ * browser plays HLS itself (`native`) - iPhone Safari - a <video>'s
+ * canPlayType, where "maybe" counts too: asking MSE there would ask
+ * decoders its own player does not use, or, with no MSE at all, say no to
+ * everything, send no caps, and the server's default set has no HEVC. The
+ * same without MediaSource (iPhone Safari from iOS 17.1, which plays hls.js
+ * through ManagedMediaSource, on the same decoders).
  */
 export function decoderCheck(
   mse: { isTypeSupported(type: string): boolean } | undefined,
   video: { canPlayType(type: string): string } | null,
+  native = false,
 ): (mime: string) => boolean {
-  if (mse && typeof mse.isTypeSupported === 'function') return (mime) => mse.isTypeSupported(mime);
+  if (!native && mse && typeof mse.isTypeSupported === 'function') return (mime) => mse.isTypeSupported(mime);
   if (video) return (mime) => video.canPlayType(mime) !== '';
   return () => false;
 }
@@ -53,6 +76,18 @@ export function decoderCheck(
 /** The tokens of the codecs `decodes` says yes to, in CODEC_PROBES' order. */
 export function capsTokens(decodes: (mime: string) => boolean): string[] {
   return CODEC_PROBES.filter((p) => decodes(p.mime)).map((p) => p.token);
+}
+
+/**
+ * The caps a browser sends: the codecs `decodes` says yes to, and `native`
+ * after them where it plays HLS itself - on every master, /info and
+ * /prewarm, from the player, Zap and the next-episode warm alike. Never
+ * `native` alone: a browser that decodes nothing it is asked about sends no
+ * caps, and the server's default set applies.
+ */
+export function deviceCapsTokens(decodes: (mime: string) => boolean, native: boolean): string[] {
+  const tokens = capsTokens(decodes);
+  return native && tokens.length > 0 ? [...tokens, NATIVE_TOKEN] : tokens;
 }
 
 /** The codec a token names: "hvc" for "hvc" and for "hvc:1080". */

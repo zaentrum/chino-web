@@ -2939,7 +2939,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // a pick plays at once, in whichever audio group the level carries it,
   // and a source built afresh (a quality switch, a reload, Try again)
   // starts on it rather than on the master's DEFAULT. Natively: the video's
-  // audio track of it.
+  // audio track of it. There the caps say `native` (hooks/useDeviceCaps.ts)
+  // and the master has Apple's shape - a stereo group and, for a browser
+  // that decodes E-AC-3, a 5.1 group of the same members, alike but for
+  // codec and channels - and /play/info lists one track per member, named
+  // as the browser labels its audio tracks. The browser lists a member
+  // once and plays it from the group it picks (WebKit: one "English",
+  // playing the 5.1 companion where it decodes it), so there is no 5.1 of
+  // a track apart to offer: the menu is the members, and the browser
+  // chooses stereo or 5.1.
   const selectAudio = (idx: number, hls: Hls | null) => {
     const tracks = infoRef.current?.audio_tracks ?? [];
     const place = tracks.findIndex((t) => t.index === idx);

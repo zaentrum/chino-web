@@ -1,10 +1,17 @@
 import { useEffect, useState } from 'react';
-import { capsTokens, decoderCheck, hasCodec, withoutCodec } from '../lib/caps';
+import Hls from 'hls.js';
+import { decoderCheck, deviceCapsTokens, hasCodec, playsHlsNatively, withoutCodec } from '../lib/caps';
 
 // This device's caps (lib/caps.ts), probed once per page and shared by
 // everything that asks chino-stream for a title: the player, the Zap cards,
 // the Zap prefetch and prewarm, the next-episode warm. The same string on
 // every request, so the server serves and warms the same thing for each.
+//
+// Asked of what plays: hls.js where it can (MediaSource), else the
+// browser's own HLS - the choice PlayerPage and ZapCard make - whose
+// decoders a <video>'s canPlayType answers for, and which the caps then
+// say with `native`: chino-stream serves that player each audio group as
+// Apple's spec has them, and it picks the group it decodes itself.
 //
 // Optimistic first, then refined. The synchronous probe includes HEVC
 // whenever isTypeSupported says yes (most Android phones, Safari, recent
@@ -12,11 +19,12 @@ import { capsTokens, decoderCheck, hasCodec, withoutCodec } from '../lib/caps';
 // MediaCapabilities.decodingInfo then asks whether the MSE pipeline really
 // decodes it - Chrome on Windows says yes to isTypeSupported and cannot - and
 // when it says no, hvc goes: whoever holds the caps asks again with them.
-// Only ever a downgrade, and not without MediaSource (iPhone Safari): that
-// question is about MSE, and some Safari versions answer no there to what
-// canPlayType just confirmed.
+// Only ever a downgrade, and not without MediaSource (iPhone Safari) nor
+// where the browser plays HLS itself: that question is about MSE, and some
+// Safari versions answer no there to what canPlayType just confirmed.
 
 let probed: string | null = null;
+let native = false;
 let refined: string | null = null;
 let refining: Promise<string> | null = null;
 
@@ -24,7 +32,8 @@ function probe(): string {
   if (probed == null) {
     const mse = typeof MediaSource !== 'undefined' ? MediaSource : undefined;
     const video = typeof document !== 'undefined' ? document.createElement('video') : null;
-    probed = capsTokens(decoderCheck(mse, video)).join(',');
+    native = playsHlsNatively(Hls.isSupported(), video);
+    probed = deviceCapsTokens(decoderCheck(mse, video, native), native).join(',');
   }
   return probed;
 }
@@ -46,7 +55,7 @@ export function refinedDeviceCaps(): Promise<string> {
   if (refining) return refining;
   const caps = probe();
   const mc = typeof navigator !== 'undefined' ? navigator.mediaCapabilities : undefined;
-  if (!hasCodec(caps, 'hvc') || typeof MediaSource === 'undefined' || !mc?.decodingInfo) {
+  if (!hasCodec(caps, 'hvc') || native || typeof MediaSource === 'undefined' || !mc?.decodingInfo) {
     refined = caps;
     refining = Promise.resolve(caps);
     return refining;
