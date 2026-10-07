@@ -62,7 +62,10 @@ export function UpdateAvailable() {
 
   return (
     <div
-      style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}
+      // 1rem over the home indicator's inset, and over the phone's bottom
+      // bar where one shows (--chino-bottom-clear, index.css): the toast
+      // sat on the bar's tabs, a tap on them landing on it.
+      style={{ bottom: 'calc(var(--chino-bottom-clear) + 1rem)' }}
       className="fixed left-3 right-3 md:left-auto md:right-6 md:max-w-sm z-50 rounded-xl bg-chino-surface border border-white/15 shadow-2xl backdrop-blur p-4 flex items-start gap-3"
     >
       <RefreshCw className="w-5 h-5 mt-0.5 text-chino-accent shrink-0" />

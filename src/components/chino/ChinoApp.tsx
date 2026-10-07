@@ -83,8 +83,9 @@ export function ChinoApp({ initialSearchQuery, initialSection }: ChinoAppProps =
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
 
-        {/* pb-16 below md: the room the phone's bottom bar (h-16) covers. */}
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        {/* Below md, the room the phone's bottom bar covers: its 64 px
+            and the home indicator's inset under it (index.css). */}
+        <main className="flex-1 overflow-y-auto pb-[var(--chino-bottom-bar)] md:pb-0">
           {/* p-4 (1rem) on all breakpoints so the section content
               lines up with the search bar's px-4 (1rem) in Header —
               no jog between header content and main content edges. */}

@@ -12,6 +12,12 @@ interface ChinoMobileNavProps {
  * accent, and its aria-current says it is open. Each tab is the bar's height
  * and an equal share of its width - 69 x 63 px on a 412 px phone - so a touch
  * anywhere on the bar lands on a tab.
+ *
+ * Under an iPhone's home indicator (a home screen app, drawn to the screen's
+ * foot: viewport-fit=cover) the bar reaches down behind it, as the app's bar
+ * behind the system's navigation bar, and keeps its tabs above it: it is the
+ * tabs' 64 px over the inset (--chino-bottom-bar, index.css), the inset its
+ * padding. Without an inset - Android, a desktop - that is 64 px.
  */
 export function ChinoMobileNav({ activeSection, onSectionChange }: ChinoMobileNavProps) {
   const menuItems = [
@@ -24,7 +30,7 @@ export function ChinoMobileNav({ activeSection, onSectionChange }: ChinoMobileNa
   ];
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-chino-bg border-t border-chino-border flex z-40">
+    <nav className="chino-bottom-bar md:hidden fixed bottom-0 left-0 right-0 h-[var(--chino-bottom-bar)] pb-[var(--chino-safe-bottom)] bg-chino-bg border-t border-chino-border flex z-40">
       {menuItems.map((item) => {
         const Icon = item.icon;
         const isActive = activeSection === item.id;

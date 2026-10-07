@@ -3,6 +3,24 @@
 @tailwind utilities;
 
 @layer base {
+  /* The foot of the screen. --chino-safe-bottom is the home indicator's
+     inset where the page is drawn under it (viewport-fit=cover, in
+     index.html: an iPhone's home screen app), 0 elsewhere.
+     --chino-bottom-bar is the phone's bottom bar (ChinoMobileNav, below
+     md): its 64 px of tabs over that inset. --chino-bottom-clear is what
+     anything else fixed to the foot keeps clear: the inset, and the
+     bottom bar where one shows. */
+  :root {
+    --chino-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --chino-bottom-bar: calc(4rem + var(--chino-safe-bottom));
+    --chino-bottom-clear: var(--chino-safe-bottom);
+  }
+  @media not all and (min-width: 768px) {
+    :root:has(.chino-bottom-bar) {
+      --chino-bottom-clear: var(--chino-bottom-bar);
+    }
+  }
+
   html, body, #root {
     height: 100%;
     background-color: #0B0F19;
