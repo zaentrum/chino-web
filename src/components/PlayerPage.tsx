@@ -98,6 +98,10 @@ interface TrackInfo {
   default?: boolean;
   forced?: boolean;
   channels?: number;
+  /** For a client served the master's one audio group (caps with eac3:
+   *  the 5.1 companions beside the stereo renditions), its GROUP-ID: a
+   *  rendition of what plays, in its own codec and channels. */
+  group?: string;
 }
 
 interface PlayInfo {
@@ -1312,10 +1316,18 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // the track is tagged with ("German", "No dialogue" for zxx), by its title
   // where it has none, and two of one language told apart by their titles
   // (lib/languages.ts) - not by a title that only names the source's codec.
+  // A browser that decodes E-AC-3 is served the 5.1 companions in the one
+  // audio group, and /play/info lists each just before its stereo twin: it
+  // is a row of its own, "English 5.1" next to "English", and a pick plays
+  // that rendition (selectAudio). Only a rendition's channels are what
+  // plays: a source's track (no group) plays as stereo AAC on the fly,
+  // whatever channels the file has.
   const audioMenu = useMemo(() => {
     const tracks = info?.audio_tracks ?? [];
     const details = tracks.map((t) => `${t.codec?.toUpperCase() ?? ''}${t.channels ? ` · ${t.channels}ch` : ''}`);
-    const labels = audioLabels(tracks.map((t, i) => ({ lang: t.language, name: t.title, detail: details[i] })));
+    const labels = audioLabels(
+      tracks.map((t, i) => ({ lang: t.language, name: t.title, detail: details[i], channels: t.group ? t.channels : undefined })),
+    );
     return tracks.map((t, i) => ({ index: t.index, language: t.language, label: labels[i], detail: details[i] }));
   }, [info?.audio_tracks]);
   const playingAudio = audioMenu.find((t) => t.index === streamAudioIdx);

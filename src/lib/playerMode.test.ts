@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { codecName, extraAudioTracks, extraHeading, extraInfo, extraQualities, playerCalls } from './playerMode.ts';
 import { chosenQuality, packagedQualityMenu, playingLabel } from './qualities.ts';
-import { audioRenditionFor } from './languages.ts';
+import { audioLabels, audioRenditionFor } from './languages.ts';
 
 const ITEM = '9c4e7a12-0000-4000-8000-000000000001';
 const EXTRA = '1b5c2a8e-6f0d-4c3e-9a51-2d7f0c4b8e01';
@@ -78,6 +78,27 @@ test("an extra's audio: one track per language and name, the same sound in two g
   // "en" and "eng" are one language.
   assert.equal(extraAudioTracks([ENG, { ...ENG, lang: 'en' }]).length, 1);
   assert.deepEqual(extraAudioTracks([]), []);
+});
+
+test("an extra's master for an E-AC-3 client: the 5.1 companion a track of its own, labelled by its layout", () => {
+  // The one group chino-stream serves a client with eac3 in its caps.
+  const group = [
+    { name: 'English 5.1', lang: 'en', default: true, channels: '6', audioCodec: 'ec-3', groupId: 'audio-surround' },
+    { name: 'English', lang: 'en', default: false, channels: '2', audioCodec: 'mp4a.40.2', groupId: 'audio-surround' },
+  ];
+  const tracks = extraAudioTracks(group);
+  assert.deepEqual(tracks, [
+    { index: 0, codec: 'eac3', language: 'en', title: 'English 5.1', default: true, channels: 6, group: 'audio-surround' },
+    { index: 1, codec: 'aac', language: 'en', title: 'English', default: undefined, channels: 2, group: 'audio-surround' },
+  ]);
+  // The player's menu labels a group's member by its channels.
+  assert.deepEqual(audioLabels(tracks.map((t) => ({ lang: t.language, name: t.title, channels: t.group ? t.channels : undefined }))), [
+    'English 5.1',
+    'English',
+  ]);
+  // Each picks its own rendition.
+  assert.equal(audioRenditionFor(tracks[0], 0, group), 0);
+  assert.equal(audioRenditionFor(tracks[1], 1, group), 1);
 });
 
 test("an extra's audio without a name, a language or channels", () => {

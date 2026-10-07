@@ -63,6 +63,7 @@ export interface MasterAudio {
   default?: boolean;
   channels?: string;
   audioCodec?: string;
+  groupId?: string;
 }
 
 /** An audio track of an extra, as /play/info lists a title's. */
@@ -73,6 +74,9 @@ export interface ExtraAudioTrack {
   title?: string;
   default?: boolean;
   channels?: number;
+  /** Its GROUP-ID: a rendition the master serves, in its own channels -
+   *  as /play/info's tracks of the one group an E-AC-3 client is served. */
+  group?: string;
 }
 
 /**
@@ -144,7 +148,8 @@ export function extraQualities(variants: readonly MasterVariant[]): PlayQuality[
  * An extra's audio tracks, from its master's audio renditions: one per
  * language and name - the same sound in a stereo group and a surround group
  * is one track to pick, as /play/info lists a title's source tracks - each
- * at its place in the list (its index).
+ * at its place in the list (its index). The one group an E-AC-3 client is
+ * served names its 5.1 companions apart ("English 5.1"): a track each.
  */
 export function extraAudioTracks(renditions: readonly MasterAudio[]): ExtraAudioTrack[] {
   const out: ExtraAudioTrack[] = [];
@@ -156,6 +161,7 @@ export function extraAudioTracks(renditions: readonly MasterAudio[]): ExtraAudio
     if (seen.has(k)) continue;
     seen.add(k);
     const channels = Number.parseInt(r.channels ?? '', 10);
+    const group = r.groupId?.trim();
     out.push({
       index: out.length,
       codec: codecName(r.audioCodec),
@@ -163,6 +169,7 @@ export function extraAudioTracks(renditions: readonly MasterAudio[]): ExtraAudio
       title: r.name?.trim() || undefined,
       default: r.default || undefined,
       channels: channels > 0 ? channels : undefined,
+      ...(group ? { group } : {}),
     });
   }
   return out;

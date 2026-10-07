@@ -178,6 +178,24 @@ export interface AudioTrackLabelInput {
   /** What the menu shows beside the label ("AAC · 2ch"). Two tracks that
    *  differ there are told apart there. */
   detail?: string;
+  /**
+   * The channels the track plays in, for a rendition of the master the
+   * player is served: the 5.1 companion /play/info lists beside its stereo
+   * twin for a client that decodes E-AC-3 has 6. More than two say their
+   * layout after the language ("English 5.1"). Not for a source's track:
+   * on the fly a 5.1 source plays as stereo AAC, whatever the file has.
+   */
+  channels?: number;
+}
+
+// The layout ffmpeg gives a number of channels by default, as a menu names it.
+const LAYOUTS: Record<number, string> = { 3: '2.1', 4: '4.0', 5: '5.0', 6: '5.1', 7: '6.1', 8: '7.1' };
+
+/** The layout of a rendition in that many channels: "5.1" for six, "7.1"
+ *  for eight; '' for stereo, mono or none. */
+export function channelLayout(channels: number | null | undefined): string {
+  if (typeof channels !== 'number' || !Number.isInteger(channels) || channels <= 2) return '';
+  return LAYOUTS[channels] ?? `${channels}ch`;
 }
 
 // A name that describes the source's audio format - a codec, a bitrate, a
@@ -220,9 +238,11 @@ function nameQualifier(name: string | undefined, label: string, lang: string | u
  * The audio menu's labels, one per track, in order: the language the track
  * is tagged with, by name ("German"; "No dialogue" for zxx). A track tagged
  * with none is called what its name says ("Commentary") - not a format ("AC3
- * 5.1 @ 640 Kbps"), a number ("Track 1") or a code - else "Unknown". Two
- * that would read the same, with the same detail, are told apart by their
- * names ("English · Commentary"), else numbered ("English (2)").
+ * 5.1 @ 640 Kbps"), a number ("Track 1") or a code - else "Unknown". A
+ * rendition served in more than two channels says its layout after that:
+ * "English 5.1", beside its stereo twin "English". Two that would read the
+ * same, with the same detail, are told apart by their names ("English ·
+ * Commentary"), else numbered ("English (2)").
  */
 export function audioLabels(tracks: readonly AudioTrackLabelInput[], locales: readonly string[] = ['en']): string[] {
   const bases = tracks.map((t) => {
@@ -233,13 +253,21 @@ export function audioLabels(tracks: readonly AudioTrackLabelInput[], locales: re
     }
     return trackName(t.name, t.lang) || (hasLanguage(t.lang) ? String(t.lang).trim() : UNKNOWN_LANGUAGE);
   });
+  const withLayout = (label: string, i: number) => {
+    const layout = channelLayout(tracks[i].channels);
+    return layout ? `${label} ${layout}` : label;
+  };
   const key = (label: string, i: number) => `${label}\u0000${tracks[i].detail ?? ''}`;
+  const plain = bases.map(withLayout);
   const count = new Map<string, number>();
-  bases.forEach((b, i) => count.set(key(b, i), (count.get(key(b, i)) ?? 0) + 1));
-  const labels = bases.map((b, i) => {
-    if ((count.get(key(b, i)) ?? 0) < 2) return b;
+  plain.forEach((l, i) => count.set(key(l, i), (count.get(key(l, i)) ?? 0) + 1));
+  const labels = plain.map((l, i) => {
+    if ((count.get(key(l, i)) ?? 0) < 2) return l;
+    // Told apart by what the name says besides the language - and besides
+    // the layout, which a name like "English 5.1 (2)" carries too.
+    const b = bases[i];
     const q = nameQualifier(tracks[i].name, b, tracks[i].lang);
-    return q && q.toLowerCase() !== b.toLowerCase() ? `${b} · ${q}` : b;
+    return q && q.toLowerCase() !== b.toLowerCase() ? withLayout(`${b} · ${q}`, i) : l;
   });
   return numbered(labels, key);
 }
