@@ -30,6 +30,7 @@ function cwToCard(it: ContinueWatchingEntry, onRemove?: (id: string) => void) {
         ? {
             season: it.season_number,
             episode: it.episode_number,
+            episodeEnd: it.episodeEnd,
             title: it.title,
           }
         : undefined,

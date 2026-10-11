@@ -9,6 +9,12 @@ export interface EpisodeItem extends KatalogItem {
   episode_number?: number;
   parent_id?: string;
   watched_at?: string | null;
+  // One file that holds several episodes (lib/episodeFiles.ts): on its
+  // holder, the others' ids and the last episode number it holds; on each
+  // of the others, the holder's id.
+  coveredBy?: string;
+  covers?: string[];
+  episodeEnd?: number;
 }
 
 export interface Season {

@@ -9,6 +9,7 @@ import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { toApp } from '../../lib/basepath';
+import { episodeCode } from '../../lib/episodeFiles';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
 import type { KatalogItem } from '../../hooks/useItems';
 
@@ -569,7 +570,7 @@ export function ZapCard({
               the user sees a consistent format across surfaces. */}
           {detail.data?.season_number != null && detail.data.episode_number != null ? (
             <span className="text-chino-accent font-medium tracking-wide">
-              S{String(detail.data.season_number).padStart(2, '0')}E{String(detail.data.episode_number).padStart(2, '0')}
+              {episodeCode(detail.data.season_number, detail.data.episode_number, detail.data.episodeEnd)}
             </span>
           ) : null}
           {item.year ? (

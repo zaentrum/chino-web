@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
+import { oneRowPerFile } from '../lib/episodeFiles';
 
 export interface WatchHistoryEntry extends KatalogItem {
   // ISO timestamp of the most recent watch — chino-api stamps this
@@ -16,6 +17,11 @@ export interface WatchHistoryEntry extends KatalogItem {
   season_number?: number;
   episode_number?: number;
   parent_id?: string;
+  // One file that holds several episodes (lib/episodeFiles.ts): watched as
+  // one, so listed once.
+  coveredBy?: string;
+  covers?: string[];
+  episodeEnd?: number;
 }
 
 /**
@@ -42,7 +48,7 @@ export function useWatchHistory(limit = 60) {
         const list = (j.items ?? []) as WatchHistoryEntry[];
         const enc = streamToken ? encodeURIComponent(streamToken) : '';
         setItems(
-          list.map((it) => ({
+          oneRowPerFile(list).map((it) => ({
             ...it,
             poster_url: it.poster_url && enc ? `${it.poster_url}?stream=${enc}` : it.poster_url,
             backdrop_url: it.backdrop_url && enc ? `${it.backdrop_url}?stream=${enc}` : it.backdrop_url,

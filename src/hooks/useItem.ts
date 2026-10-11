@@ -79,6 +79,10 @@ export interface ItemDetail extends KatalogItem {
   season_number?: number;
   episode_number?: number;
   parent_id?: string;
+  // One file that holds several episodes (lib/episodeFiles.ts).
+  coveredBy?: string;
+  covers?: string[];
+  episodeEnd?: number;
   genres?: string[];
   cast?: CastEntry[];
   subtitles?: SubtitleRef[];

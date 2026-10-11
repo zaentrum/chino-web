@@ -6,6 +6,7 @@ import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { useMemberships } from '../hooks/useWatchlists';
 import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
+import { episodeCode } from '../lib/episodeFiles';
 import { AddToListPicker } from './AddToListPicker';
 
 interface MediaCardProps {
@@ -18,6 +19,8 @@ interface MediaCardProps {
   episode?: {
     season: number;
     episode: number;
+    /** The last episode number of a file that holds several: S03E18–19. */
+    episodeEnd?: number;
     title: string;
   };
   progress?: number;
@@ -333,7 +336,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
           // file-naming convention and is tighter than 'S1 E1'.
           <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted truncate">
             <span className="text-chino-accent shrink-0">
-              S{String(episode.season).padStart(2, '0')}E{String(episode.episode).padStart(2, '0')}
+              {episodeCode(episode.season, episode.episode, episode.episodeEnd)}
             </span>
             {episode.title ? (
               <>

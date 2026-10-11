@@ -13,6 +13,7 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
+import { episodeCode, fileNeighbours, type FileEpisode } from '../lib/episodeFiles';
 import { audioChipLabel, audioLabels, audioRenditionFor, autoSubtitleTrack, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
 import {
   QUALITY_RUNGS,
@@ -305,7 +306,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // Episode coordinates + resolved series title, so the chrome can show
   // "Series — S01E02 · Episode" for episodes. season/episode come from the
   // item payload; the series title is fetched via parent_id (see below).
-  const [episodeMeta, setEpisodeMeta] = useState<{ season?: number; episode?: number } | null>(null);
+  const [episodeMeta, setEpisodeMeta] = useState<{ season?: number; episode?: number; episodeEnd?: number } | null>(null);
   const [seriesTitle, setSeriesTitle] = useState<string>('');
 
   const [playing, setPlaying] = useState(false);
@@ -571,9 +572,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // Sibling episodes within the same series, ordered by season+episode.
   // Populated when the current item has a parent_id; powers the
   // prev/next episode controls in the player chrome and the "previous"
-  // counterpart to the existing auto-play-next.
-  const [siblingEpisodes, setSiblingEpisodes] = useState<{ id: string; season: number; episode: number; title: string }[]>([]);
-  const [nextEp, setNextEp] = useState<{ id: string; title: string; season_number?: number; episode_number?: number } | null>(null);
+  // counterpart to the existing auto-play-next. Each keeps what says which
+  // episodes share one file (lib/episodeFiles.ts): the controls step from
+  // file to file.
+  const [siblingEpisodes, setSiblingEpisodes] = useState<(FileEpisode & { season: number; title: string })[]>([]);
+  const [nextEp, setNextEp] = useState<{ id: string; title: string; season_number?: number; episode_number?: number; episodeEnd?: number } | null>(null);
   const [nextEpFetched, setNextEpFetched] = useState(false);
   // Auto-play-next countdown. Active while we're inside a credits segment
   // AND we have a next episode AND the user hasn't cancelled.
@@ -1126,7 +1129,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // title can render "Series — S01E02 · Title" once the parent
         // series title resolves (fetched from parent_id below).
         if (j?.type === 'episode') {
-          setEpisodeMeta({ season: j.season_number, episode: j.episode_number });
+          setEpisodeMeta({ season: j.season_number, episode: j.episode_number, episodeEnd: j.episodeEnd });
         } else {
           setEpisodeMeta(null);
         }
@@ -1244,19 +1247,31 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     return () => ctrl.abort();
   }, [parentSeriesId, token]);
 
+  // Prev / next derived purely from the sibling list, file by file: from a
+  // file that holds episodes 18 and 19, next is 20 and previous 17. Memoised
+  // so the chrome doesn't re-render every interval tick.
+  const episodeNav = useMemo(() => {
+    const { current, prev, next } = fileNeighbours(siblingEpisodes, itemId);
+    const of = (en: typeof current) =>
+      en ? { id: en.episode.id, title: en.episode.title, code: episodeCode(en.episode.season, en.first, en.last) } : null;
+    return { current: of(current), prev: of(prev), next: of(next) };
+  }, [siblingEpisodes, itemId]);
+
   // Composed chrome title. Movies/non-episodes show the plain title; an
   // episode shows "Series — S01E02 · Episode" (series prefix omitted until
-  // the parent title resolves); an extra "Title · Extra".
+  // the parent title resolves); an extra "Title · Extra". A file that holds
+  // several episodes is named as the file, whichever of them the player was
+  // opened with: "Series — S03E18–19 · <its first episode>".
   const extraTitle = extra ? extraHeading(extra.titleName, extra.ref.title) : '';
   const displayTitle = useMemo(() => {
     if (extraTitle) return extraTitle;
     if (!title) return 'Playing';
     if (!episodeMeta) return title;
-    const s = (episodeMeta.season ?? 0).toString().padStart(2, '0');
-    const e = (episodeMeta.episode ?? 0).toString().padStart(2, '0');
-    const code = `S${s}E${e}`;
-    return seriesTitle ? `${seriesTitle} — ${code} · ${title}` : `${code} · ${title}`;
-  }, [extraTitle, title, episodeMeta, seriesTitle]);
+    const file = episodeNav.current;
+    const code = file?.code ?? episodeCode(episodeMeta.season ?? 0, episodeMeta.episode ?? 0, episodeMeta.episodeEnd);
+    const name = file?.title || title;
+    return seriesTitle ? `${seriesTitle} — ${code} · ${name}` : `${code} · ${name}`;
+  }, [extraTitle, title, episodeMeta, seriesTitle, episodeNav]);
 
   // Merge sidecar subs (from /subtitles) and embedded subs (from
   // /play/info.subtitle_tracks) into a single list the menu can render.
@@ -1895,10 +1910,18 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!j?.seasons) return;
-        const flat: { id: string; season: number; episode: number; title: string }[] = [];
-        for (const s of j.seasons as { season: number; episodes?: { id: string; episode_number?: number; title?: string }[] }[]) {
+        const flat: (FileEpisode & { season: number; title: string })[] = [];
+        for (const s of j.seasons as { season: number; episodes?: (FileEpisode & { title?: string })[] }[]) {
           for (const e of s.episodes ?? []) {
-            flat.push({ id: e.id, season: s.season, episode: e.episode_number ?? 0, title: e.title ?? '' });
+            flat.push({
+              id: e.id,
+              season: s.season,
+              episode_number: e.episode_number ?? 0,
+              title: e.title ?? '',
+              coveredBy: e.coveredBy,
+              covers: e.covers,
+              episodeEnd: e.episodeEnd,
+            });
           }
         }
         setSiblingEpisodes(flat);
@@ -1906,18 +1929,6 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       .catch(() => undefined);
     return () => ctrl.abort();
   }, [parentSeriesId, token]);
-
-  // Prev / next derived purely from the sibling list. Memoised so the
-  // chrome doesn't re-render every interval tick.
-  const episodeNav = useMemo(() => {
-    if (siblingEpisodes.length === 0) return { prev: null, next: null };
-    const idx = siblingEpisodes.findIndex((e) => e.id === itemId);
-    if (idx < 0) return { prev: null, next: null };
-    return {
-      prev: idx > 0 ? siblingEpisodes[idx - 1] : null,
-      next: idx < siblingEpisodes.length - 1 ? siblingEpisodes[idx + 1] : null,
-    };
-  }, [siblingEpisodes, itemId]);
 
   // Id of the next episode to advance to — the dedicated next-episode
   // endpoint result when available, else the sibling-list neighbour.
@@ -3494,8 +3505,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="mt-1 text-white font-medium truncate">{nextEp.title || 'Next episode'}</div>
           {nextEp.season_number != null && nextEp.episode_number != null ? (
             <div className="text-sm text-chino-muted">
-              S{String(nextEp.season_number).padStart(2, '0')}
-              E{String(nextEp.episode_number).padStart(2, '0')}
+              {episodeCode(nextEp.season_number, nextEp.episode_number, nextEp.episodeEnd)}
             </div>
           ) : null}
           <div className="mt-3 flex items-center gap-2">
@@ -3541,8 +3551,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           ) : null}
           {nextEp?.season_number != null && nextEp?.episode_number != null ? (
             <div className="text-sm text-chino-muted">
-              S{String(nextEp.season_number).padStart(2, '0')}
-              E{String(nextEp.episode_number).padStart(2, '0')}
+              {episodeCode(nextEp.season_number, nextEp.episode_number, nextEp.episodeEnd)}
             </div>
           ) : null}
           <div className="mt-3 flex items-center gap-2">
@@ -4048,7 +4057,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.prev!.id)}`))}
               className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
-              title={`Previous episode: S${String(episodeNav.prev.season).padStart(2, '0')}E${String(episodeNav.prev.episode).padStart(2, '0')} — ${episodeNav.prev.title}`}
+              title={`Previous episode: ${episodeNav.prev.code} — ${episodeNav.prev.title}`}
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
@@ -4057,7 +4066,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.next!.id)}?binge=1`))}
               className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
-              title={`Next episode: S${String(episodeNav.next.season).padStart(2, '0')}E${String(episodeNav.next.episode).padStart(2, '0')} — ${episodeNav.next.title}`}
+              title={`Next episode: ${episodeNav.next.code} — ${episodeNav.next.title}`}
             >
               <ChevronRight className="w-5 h-5" />
             </button>

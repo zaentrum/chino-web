@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronRight, Eye, Play, Plus } from 'lucide-react'
 import type { Season } from '../hooks/useSeriesEpisodes';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { toApp } from '../lib/basepath';
+import { entryIds, episodeCode, fileEntries, type FileEntry } from '../lib/episodeFiles';
 import { AddToListPicker } from './AddToListPicker';
 import { FadeImage } from './FadeImage';
 
@@ -30,7 +31,8 @@ interface EpisodesListProps {
  * Series detail page's episodes section. Each season is an accordion with
  * a stills strip; episodes are clickable rows that jump straight to the
  * player. Defaults to season 1 open; subsequent seasons toggle on click
- * so a 30-episode series doesn't render a huge wall of HTML.
+ * so a 30-episode series doesn't render a huge wall of HTML. A file that
+ * holds several episodes is one row (S03E18–19), played and marked as one.
  */
 export function EpisodesList({ seasons, focusEpisodeId, progressById }: EpisodesListProps) {
   // Episodes that have no SxxEyy coordinates land in season 0; hide that
@@ -117,15 +119,19 @@ function SeasonAccordion({
       </button>
       {open ? (
         <div className="divide-y divide-chino-border-2">
-          {season.episodes.map((e) => (
-            <EpisodeRow
-              key={e.id}
-              ep={e}
-              seasonNum={season.season}
-              focused={!!focusEpisodeId && e.id === focusEpisodeId}
-              progress={progressById?.[e.id]}
-            />
-          ))}
+          {fileEntries(season.episodes).map((entry) => {
+            const ids = entryIds(entry);
+            const resumeId = ids.find((id) => progressById?.[id]);
+            return (
+              <EpisodeRow
+                key={entry.episode.id}
+                entry={entry}
+                seasonNum={season.season}
+                focused={!!focusEpisodeId && ids.includes(focusEpisodeId)}
+                progress={resumeId ? progressById?.[resumeId] : undefined}
+              />
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -133,12 +139,14 @@ function SeasonAccordion({
 }
 
 function EpisodeRow({
-  ep,
+  entry,
   seasonNum,
   focused,
   progress,
 }: {
-  ep: Season['episodes'][number];
+  // The file's entry: its holder is the episode played, marked and listed;
+  // the other episodes it holds add their numbers and titles to the row.
+  entry: FileEntry<Season['episodes'][number]>;
   seasonNum: number;
   focused?: boolean;
   progress?: EpisodeProgress;
@@ -156,9 +164,13 @@ function EpisodeRow({
     return () => cancelAnimationFrame(id);
   }, [focused]);
 
+  const ep = entry.episode;
   const runtimeMin = ep.duration_ms ? Math.round(ep.duration_ms / 60_000) : 0;
-  const epNum = ep.episode_number ?? 0;
-  const epLabel = `S${seasonNum.toString().padStart(2, '0')}E${epNum.toString().padStart(2, '0')}`;
+  const epLabel = episodeCode(seasonNum, entry.first, entry.last);
+  // Each episode the file holds has a title of its own: all of them, once.
+  const rowTitle = [...new Set([ep, ...entry.covered].map((e) => e.title).filter(Boolean))].join(' / ');
+  // Watched is the file's: chino-api marks every episode it holds together.
+  const watchedAt = ep.watched_at || entry.covered.find((e) => e.watched_at)?.watched_at;
 
   // Seed from the catalogue stamp; flip locally on toggle so the row
   // reflects the user's click without a refetch. Reset if the ep prop
@@ -174,7 +186,7 @@ function EpisodeRow({
     setWatchedOverride(null);
     setPickerOpen(false);
   }, [ep.id]);
-  const watched = watchedOverride ?? !!ep.watched_at;
+  const watched = watchedOverride ?? !!watchedAt;
 
   // Resume state (from the continue-watching feed via progressById).
   // duration_sec can be 0 on rows that never recorded one — fall back
@@ -306,7 +318,7 @@ function EpisodeRow({
         <div className="flex items-baseline gap-3">
           {/* Not positioned itself, so its ::after (absolute, inset-0)
               covers the row, the nearest positioned ancestor. Its name is
-              "Play S01E01 <title>". */}
+              "Play S01E01 <title>" (S03E18–19 for a file of two). */}
           <button
             type="button"
             onClick={open}
@@ -316,7 +328,7 @@ function EpisodeRow({
             <span className="sr-only">Play </span>
             <span className="text-chino-accent text-sm font-medium shrink-0">{epLabel}</span>{' '}
             <span className={`font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
-              {ep.title}
+              {rowTitle}
             </span>
           </button>
           {runtimeMin ? (

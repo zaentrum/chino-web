@@ -13,6 +13,9 @@ export interface ContinueWatchingEntry extends KatalogItem {
   series_title?: string;
   season_number?: number;
   episode_number?: number;
+  // The last episode number of a file that holds several: the row is the
+  // file's, under its first episode (chino-api).
+  episodeEnd?: number;
   // True when chino-api substituted this row for a *finished* episode
   // — i.e. it's the next episode in the series, not something the
   // user has actually started. The home page renders these in a

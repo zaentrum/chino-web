@@ -7,6 +7,7 @@ import { FadeImage } from './FadeImage';
 import { LoadingState } from './LoadingState';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
 import { toApp } from '../lib/basepath';
+import { episodeCode } from '../lib/episodeFiles';
 
 /**
  * Profile page at /me. Shows the signed-in user's name + email (from
@@ -199,12 +200,15 @@ function HistoryRow({
 }) {
   const isEpisode = entry.type === 'episode';
 
-  const epLabel = isEpisode
-    ? [
-        entry.season_number != null ? `S${String(entry.season_number).padStart(2, '0')}` : '',
-        entry.episode_number != null ? `E${String(entry.episode_number).padStart(2, '0')}` : '',
-      ].join('')
-    : '';
+  // S03E18–19 for a file that holds two episodes.
+  const epLabel = !isEpisode
+    ? ''
+    : entry.season_number != null && entry.episode_number != null
+      ? episodeCode(entry.season_number, entry.episode_number, entry.episodeEnd)
+      : [
+          entry.season_number != null ? `S${String(entry.season_number).padStart(2, '0')}` : '',
+          entry.episode_number != null ? `E${String(entry.episode_number).padStart(2, '0')}` : '',
+        ].join('');
   const dateLabel = watchedDateLabel(entry.watched_at);
   // Episodes use the landscape still (backdrop) like EpisodesList rows;
   // everything else keeps its 2:3 poster.

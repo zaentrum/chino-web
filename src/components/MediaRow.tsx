@@ -12,6 +12,8 @@ interface Media {
   episode?: {
     season: number;
     episode: number;
+    /** The last episode number of a file that holds several: S03E18–19. */
+    episodeEnd?: number;
     title: string;
   };
   progress?: number;
