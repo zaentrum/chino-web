@@ -565,30 +565,34 @@ export function ZapCard({
           the overview on the left; Save over Watch on the right, their
           icons alone; both on the bottom line. */}
       <div className="absolute inset-x-0 bottom-0 z-10 flex items-end gap-4 pl-5 pr-4 pt-12 pb-5 bg-gradient-to-t from-black/85 to-transparent">
-        <div className="flex-1 min-w-0 max-w-[560px] space-y-1.5">
-          <h2 className="text-white text-[22px] leading-7 font-semibold line-clamp-2 drop-shadow">
-            {item.title}
-          </h2>
-          <div className="text-chino-text text-[13px] flex flex-wrap items-center gap-1.5">
-            {/* Episode badge — shown when the catalog detail has season +
-                episode numbers populated (only true for type=episode
-                items). Uses the same SxxExx convention as MediaCard so
-                the user sees a consistent format across surfaces. */}
-            {detail.data?.season_number != null && detail.data.episode_number != null ? (
-              <span className="text-chino-accent font-medium tracking-wide">
-                {episodeCode(detail.data.season_number, detail.data.episode_number, detail.data.episodeEnd)}
-              </span>
-            ) : null}
-            {item.year ? <span>{item.year}</span> : null}
-            {item.rating ? (
-              <span className="text-chino-accent">★ {Number(item.rating).toFixed(1)}</span>
+        {/* The text keeps a readable measure on a wide card; the room
+            beside it is its own, so Save and Watch stay at the edge. */}
+        <div className="flex-1 min-w-0">
+          <div className="max-w-[560px] space-y-1.5">
+            <h2 className="text-white text-[22px] leading-7 font-semibold line-clamp-2 drop-shadow">
+              {item.title}
+            </h2>
+            <div className="text-chino-text text-[13px] flex flex-wrap items-center gap-1.5">
+              {/* Episode badge — shown when the catalog detail has season +
+                  episode numbers populated (only true for type=episode
+                  items). Uses the same SxxExx convention as MediaCard so
+                  the user sees a consistent format across surfaces. */}
+              {detail.data?.season_number != null && detail.data.episode_number != null ? (
+                <span className="text-chino-accent font-medium tracking-wide">
+                  {episodeCode(detail.data.season_number, detail.data.episode_number, detail.data.episodeEnd)}
+                </span>
+              ) : null}
+              {item.year ? <span>{item.year}</span> : null}
+              {item.rating ? (
+                <span className="text-chino-accent">★ {Number(item.rating).toFixed(1)}</span>
+              ) : null}
+            </div>
+            {detail.data?.description ? (
+              <p className="text-chino-text text-[13px] leading-[19px] line-clamp-3">
+                {detail.data.description}
+              </p>
             ) : null}
           </div>
-          {detail.data?.description ? (
-            <p className="text-chino-text text-[13px] leading-[19px] line-clamp-3">
-              {detail.data.description}
-            </p>
-          ) : null}
         </div>
         <div className="shrink-0 flex flex-col gap-3.5">
           <button
