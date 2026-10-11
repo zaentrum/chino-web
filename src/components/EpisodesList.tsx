@@ -165,7 +165,9 @@ function EpisodeRow({
   }, [focused]);
 
   const ep = entry.episode;
-  const runtimeMin = ep.duration_ms ? Math.round(ep.duration_ms / 60_000) : 0;
+  // The row's runtime is the file's: each episode it holds has its own.
+  const durationMs = [ep, ...entry.covered].reduce((ms, e) => ms + (e.duration_ms ?? 0), 0);
+  const runtimeMin = durationMs ? Math.round(durationMs / 60_000) : 0;
   const epLabel = episodeCode(seasonNum, entry.first, entry.last);
   // Each episode the file holds has a title of its own: all of them, once.
   const rowTitle = [...new Set([ep, ...entry.covered].map((e) => e.title).filter(Boolean))].join(' / ');
@@ -194,9 +196,7 @@ function EpisodeRow({
   const durSec =
     progress && progress.duration_sec > 0
       ? progress.duration_sec
-      : ep.duration_ms
-        ? ep.duration_ms / 1000
-        : 0;
+      : durationMs / 1000;
   const progressPct =
     progress && durSec > 0 ? Math.min(100, (progress.position_sec / durSec) * 100) : 0;
   // CEIL per the cross-client resume spec: 30 s left reads "1m left",
