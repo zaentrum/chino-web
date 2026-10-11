@@ -64,8 +64,11 @@ server {
   }
 
   # SPA fallback: any unknown path serves the app's index.html under the
-  # base so client-side routing works.
+  # base so client-side routing works. The page and the service worker are
+  # asked for anew each time (a 304 where nothing changed), so a release
+  # shows on the next load; what is hashed is under assets/ above, and kept.
   location / {
+    add_header Cache-Control "no-cache";
     try_files \$uri \$uri/ ${BASE_PATH}index.html;
   }
 

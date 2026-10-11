@@ -1,10 +1,16 @@
 /* Chino service worker — minimal PWA shell + artwork cache.
  *
  * Design:
+ *   - The page itself (a navigation) is asked of the network first, and
+ *     the cached one is only what a failed or slow network falls back
+ *     to: a release shows on the next load. (Served from the cache and
+ *     refreshed behind it, every release showed one load late - on a
+ *     home screen app, which is seldom loaded anew, for days.)
  *   - The Vite build emits content-hashed bundles; we don't try to
  *     manually pre-cache them. Instead we use a runtime "stale-while-
- *     revalidate" cache for navigations + a long-lived cache for
- *     artwork (posters/backdrops) which are immutable per item id.
+ *     revalidate" cache for them (a name never changes its content) + a
+ *     long-lived cache for artwork (posters/backdrops) which are
+ *     immutable per item id.
  *   - API calls are NOT cached. Auth tokens expire and a stale
  *     /me/continue-watching would mislead the user. Pass through.
  *   - Streaming endpoints (/play, /play/info, /play/subtitles) are
@@ -14,7 +20,7 @@
  * Versioning: bumping CACHE_VERSION invalidates old caches on next
  * activate. Required when this file's shape changes meaningfully.
  */
-const CACHE_VERSION = 'chino-v3';
+const CACHE_VERSION = 'chino-v4';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const ART_CACHE = `${CACHE_VERSION}-artwork`;
 
@@ -70,17 +76,52 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Navigations + assets — stale-while-revalidate so the shell
-  // loads instantly on a flaky connection but updates in the
-  // background when the network responds.
-  if (req.destination === 'document' ||
-      req.destination === 'script' ||
+  // The page: the network's, so it names the release's bundles; the
+  // cached one where the network fails or keeps the person waiting.
+  if (req.mode === 'navigate' || req.destination === 'document') {
+    event.respondWith(networkFirst(req, SHELL_CACHE, NAVIGATION_WAIT_MS));
+    return;
+  }
+
+  // Hashed assets — stale-while-revalidate: a name's content never
+  // changes, so the cached one is the one, at once.
+  if (req.destination === 'script' ||
       req.destination === 'style' ||
       req.destination === 'font') {
     event.respondWith(staleWhileRevalidate(req, SHELL_CACHE));
     return;
   }
 });
+
+// How long a navigation waits for the network before the cached page
+// answers it (a flaky connection); the network's answer still refreshes
+// the cache behind it.
+const NAVIGATION_WAIT_MS = 4000;
+
+async function networkFirst(req, cacheName, waitMs) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(req);
+  const fromNetwork = fetch(req).then((res) => {
+    if (res.ok) {
+      cache.put(req, res.clone());
+      return res;
+    }
+    // An answer that is not the page (a gateway's 502 during a rollout):
+    // the cached page, where there is one.
+    return cached || res;
+  });
+  if (!cached) return fromNetwork;
+  let timer;
+  const late = new Promise((resolve) => { timer = setTimeout(() => resolve(cached), waitMs); });
+  try {
+    return await Promise.race([fromNetwork, late]);
+  } catch (e) {
+    return cached;
+  } finally {
+    clearTimeout(timer);
+    fromNetwork.catch(() => undefined);
+  }
+}
 
 async function cacheFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
