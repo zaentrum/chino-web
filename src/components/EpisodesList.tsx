@@ -220,9 +220,11 @@ function EpisodeRow({
     >
       {/* overflow lifts to visible while the add-to-list picker is open
           so the popover isn't clipped to the thumbnail (160 px, 128 on a
-          phone, as the app's row) — same idiom as MediaCard. */}
+          phone, as the app's row) — same idiom as MediaCard. The still
+          keeps its 16:9 at the row's top where the text beside it is the
+          taller (a title on two lines): stretched to it, it was cropped. */}
       <div
-        className={`relative w-32 sm:w-40 aspect-video rounded bg-chino-bg shrink-0 ${
+        className={`relative w-32 sm:w-40 aspect-video self-start rounded bg-chino-bg shrink-0 ${
           pickerOpen ? 'overflow-visible z-40' : 'overflow-hidden'
         }`}
       >
