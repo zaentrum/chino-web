@@ -203,6 +203,9 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
         if (allByID.has(it.id)) continue;
         if (watched.has(it.id)) continue;
         if (it.watched_at) continue;
+        // One file that holds several episodes is one clip, its first
+        // episode's: the others would show the same file again.
+        if (it.coveredBy) continue;
         // Filter to packaged items only when the listing is
         // available. Until packaged coverage expands, this trades
         // pool size for a snappier UX — packaged items serve in

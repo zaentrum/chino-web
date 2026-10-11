@@ -30,6 +30,10 @@ export interface KatalogItem {
   min_age?: number;
   certification?: string;
   certification_country?: string;
+  // On an episode held in another episode's file (one file, several
+  // episodes; lib/episodeFiles.ts): the id of that episode, whose file it
+  // plays.
+  coveredBy?: string;
   // Set by chino-api when the current user has marked this item
   // watched (entered credits OR crossed 95% of duration). The presence
   // of this field is what MediaCard reads to render the "Watched" pill.
