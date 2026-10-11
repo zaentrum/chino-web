@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Bookmark, BookmarkCheck, Maximize2, Volume2, VolumeX, Info } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Maximize } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../../hooks/useStreamToken';
 import { useDeviceCaps } from '../../hooks/useDeviceCaps';
@@ -8,9 +8,9 @@ import { useItem } from '../../hooks/useItem';
 import { useWatchlist } from '../../hooks/useUserFlags';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
-import { toApp } from '../../lib/basepath';
 import { episodeCode } from '../../lib/episodeFiles';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
+import { AMBIENT_COLUMNS, AMBIENT_ROWS, followClip } from '../../lib/zapAmbient';
 import type { KatalogItem } from '../../hooks/useItems';
 
 interface ZapCardProps {
@@ -22,8 +22,9 @@ interface ZapCardProps {
    *  truth across all cards so unmuting once doesn't have to be
    *  repeated on every swipe. */
   muted: boolean;
-  /** Setter for the session mute state — wired to the per-card mute
-   *  button and to the autoplay-blocked fallback. */
+  /** Setter for the session mute state — wired to the autoplay-blocked
+   *  fallback and its "Tap to unmute" (the card has no mute button: Zap
+   *  plays with sound, and the device's volume is the mute). */
   setMuted: (m: boolean) => void;
   /** Fires once per item-becomes-active transition, deduped against
    *  the session-wide set the parent maintains. Used to log a
@@ -36,8 +37,8 @@ interface ZapCardProps {
    *  zap (we start mid-content) but it's how we know "saw the whole
    *  scene". */
   onComplete: (info: { itemId: string; features: ZapFeatures }) => void;
-  /** User pressed the expand button — open full PlayerPage at the
-   *  current playhead. Parent does the navigation. */
+  /** User pressed Watch, or the card anywhere — open full PlayerPage at
+   *  the current playhead. Parent does the navigation. */
   onExpand: (info: { itemId: string; resumeSec: number; features: ZapFeatures }) => void;
   /** User pressed save/unsave. */
   onSaveToggle: (info: { itemId: string; saved: boolean; features: ZapFeatures }) => void;
@@ -452,6 +453,19 @@ export function ZapCard({
     };
   }, [item.id]);
 
+  // ---- The ambient light: the clip's own colours behind it, followed
+  // slowly (lib/zapAmbient.ts). Until the clip's light is in, the title's
+  // backdrop is the light. ----
+  const ambientRef = useRef<HTMLCanvasElement>(null);
+  const [ambientLit, setAmbientLit] = useState(false);
+  useEffect(() => {
+    setAmbientLit(false);
+    const v = videoRef.current;
+    const c = ambientRef.current;
+    if (!active || !v || !c) return;
+    return followClip(v, c, () => setAmbientLit(true));
+  }, [item.id, active]);
+
   const inWatchlist = watchlist.has(item.id);
   const toggleSave = () => {
     void watchlist.toggle(item.id, !inWatchlist);
@@ -471,44 +485,71 @@ export function ZapCard({
   };
 
   return (
-    <div className="relative w-full h-full bg-black snap-start overflow-hidden">
-      {/* Neutral gradient: ALWAYS rendered so even a totally
-          imageless item has a colour wash behind the title instead
-          of pure black. Sits under the FadeImage so the image
-          covers it whenever it loads successfully. */}
+    // The card as the app draws it: the clip whole in the middle over its
+    // own light; at the foot, what the title is on the left, Save over
+    // Watch on the right. A tap anywhere on it watches, as Watch does.
+    <div
+      className="relative w-full h-full bg-black snap-start overflow-hidden cursor-pointer"
+      style={{ containerType: 'size' }}
+      onClick={expand}
+    >
+      {/* The light. Opaque layers, so a fade never lets the black behind
+          them through: a neutral wash for a title without any image, over
+          it the title's backdrop, over that the clip's colours once it
+          plays, all blown up and blurred; then one veil, so the clip stays
+          the brightest thing on the card. */}
       <div className="absolute inset-0 bg-gradient-to-br from-chino-surface via-chino-bg to-black" />
-
-      {/* Backdrop / poster: rendered only if we have a candidate URL
-          and it hasn't failed. Stays fully visible until the video
-          produces its first frame, then crossfades out under the
-          video. alt="" prevents the broken-image fallback from
-          leaking the title text when the URL 404s. */}
       {bgSrc && !bgFailed ? (
         <FadeImage
           src={bgSrc}
           alt=""
           onError={onBgError}
-          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${
-            active && hasFirstFrame ? 'opacity-30' : 'opacity-100'
-          }`}
+          className="absolute inset-0 w-full h-full object-cover scale-150 blur-3xl"
           loading="eager"
           decoding="async"
         />
       ) : null}
-
-      {/* Video element. Always in the DOM (hls.attachMedia needs a
-          target) but only fed when active. Stays at opacity-0 until
-          the first frame paints — without this, the user stares at a
-          black rectangle for the 1-3 s ffmpeg -ss cold start. */}
-      <video
-        ref={videoRef}
-        playsInline
-        muted={muted}
-        autoPlay={false}
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
-          active && hasFirstFrame ? 'opacity-100' : 'opacity-0'
+      <canvas
+        ref={ambientRef}
+        width={AMBIENT_COLUMNS}
+        height={AMBIENT_ROWS}
+        aria-hidden="true"
+        className={`absolute inset-0 w-full h-full object-cover scale-150 blur-3xl transition-opacity duration-700 ${
+          active && ambientLit ? 'opacity-100' : 'opacity-0'
         }`}
       />
+      <div className="absolute inset-0 bg-black/40" />
+
+      {/* The clip, whole, in the middle: full width where the card is
+          taller than 16:9 (a phone), full height where it is wider. Over
+          it until its first frame paints, the backdrop, so the 1-3 s cold
+          start is not a black rectangle. The video is always in the DOM
+          (hls.attachMedia needs a target) but only fed when active. */}
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full aspect-video"
+        style={{ width: 'min(100cqw, calc(100cqh * 16 / 9))' }}
+      >
+        <video
+          ref={videoRef}
+          playsInline
+          muted={muted}
+          autoPlay={false}
+          className={`absolute inset-0 w-full h-full object-contain transition-opacity duration-300 ${
+            active && hasFirstFrame ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        {bgSrc && !bgFailed ? (
+          <img
+            src={bgSrc}
+            alt=""
+            aria-hidden="true"
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${
+              active && hasFirstFrame ? 'opacity-0' : 'opacity-100'
+            }`}
+            decoding="async"
+          />
+        ) : null}
+      </div>
 
       {/* Cold-start spinner so the user knows tuning is happening
           instead of wondering whether the card is broken. Hidden once
@@ -519,100 +560,74 @@ export function ZapCard({
         </div>
       ) : null}
 
-      {/* Top-right floating controls: mute, save, expand, info */}
-      <div className="absolute top-4 right-4 z-10 flex flex-col gap-3">
-        <button
-          onClick={() => setMuted(!muted)}
-          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
-          title={muted ? 'Unmute' : 'Mute'}
-          aria-label={muted ? 'Unmute' : 'Mute'}
-        >
-          {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-        </button>
-        <button
-          onClick={toggleSave}
-          className={`w-10 h-10 backdrop-blur flex items-center justify-center text-white ${
-            inWatchlist ? 'bg-chino-green/80 hover:bg-chino-green' : 'bg-black/60 hover:bg-black/80'
-          }`}
-          title={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
-          aria-label={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
-        >
-          {inWatchlist ? <BookmarkCheck className="w-5 h-5" /> : <Bookmark className="w-5 h-5" />}
-        </button>
-        <button
-          onClick={expand}
-          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
-          title="Open full player"
-          aria-label="Open full player"
-        >
-          <Maximize2 className="w-5 h-5" />
-        </button>
-        <button
-          onClick={() => window.location.assign(toApp(`/i/${encodeURIComponent(item.id)}`))}
-          className="w-10 h-10 bg-black/60 backdrop-blur hover:bg-black/80 flex items-center justify-center text-white"
-          title="Details"
-          aria-label="Details"
-        >
-          <Info className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Bottom-left title block — the channel-flip moment-of-arrival
-          tells the user "you're in $title, episode S01E04, mid-scene". */}
-      <div className="absolute left-0 right-0 bottom-0 z-10 p-6 pb-10 bg-gradient-to-t from-black via-black/70 to-transparent">
-        <h2 className="text-white text-2xl font-semibold mb-1 drop-shadow">
-          {item.title}
-        </h2>
-        <div className="text-chino-text text-sm flex flex-wrap items-center gap-2">
-          {/* Episode badge — shown when the catalog detail has season +
-              episode numbers populated (only true for type=episode
-              items). Uses the same SxxExx convention as MediaCard so
-              the user sees a consistent format across surfaces. */}
-          {detail.data?.season_number != null && detail.data.episode_number != null ? (
-            <span className="text-chino-accent font-medium tracking-wide">
-              {episodeCode(detail.data.season_number, detail.data.episode_number, detail.data.episodeEnd)}
-            </span>
-          ) : null}
-          {item.year ? (
-            <>
-              {detail.data?.season_number != null && detail.data.episode_number != null ? (
-                <span className="text-chino-muted">·</span>
-              ) : null}
-              <span>{item.year}</span>
-            </>
-          ) : null}
-          {item.rating ? (
-            <>
-              <span className="text-chino-muted">·</span>
-              <span className="text-chino-accent">{Number(item.rating).toFixed(1)}</span>
-            </>
-          ) : null}
-          {item.type ? (
-            <>
-              <span className="text-chino-muted">·</span>
-              <span className="uppercase tracking-wide text-xs">{item.type}</span>
-            </>
-          ) : null}
-          {midpoint.source === 'segments' ? (
-            <>
-              <span className="text-chino-muted">·</span>
-              <span className="text-xs text-chino-muted">mid-scene</span>
-            </>
+      {/* The foot, over a scrim that keeps it legible on the light: the
+          title, its year and rating close together and three lines of
+          the overview on the left; Save over Watch on the right, their
+          icons alone; both on the bottom line. */}
+      <div className="absolute inset-x-0 bottom-0 z-10 flex items-end gap-4 pl-5 pr-4 pt-12 pb-5 bg-gradient-to-t from-black/85 to-transparent">
+        <div className="flex-1 min-w-0 max-w-[560px] space-y-1.5">
+          <h2 className="text-white text-[22px] leading-7 font-semibold line-clamp-2 drop-shadow">
+            {item.title}
+          </h2>
+          <div className="text-chino-text text-[13px] flex flex-wrap items-center gap-1.5">
+            {/* Episode badge — shown when the catalog detail has season +
+                episode numbers populated (only true for type=episode
+                items). Uses the same SxxExx convention as MediaCard so
+                the user sees a consistent format across surfaces. */}
+            {detail.data?.season_number != null && detail.data.episode_number != null ? (
+              <span className="text-chino-accent font-medium tracking-wide">
+                {episodeCode(detail.data.season_number, detail.data.episode_number, detail.data.episodeEnd)}
+              </span>
+            ) : null}
+            {item.year ? <span>{item.year}</span> : null}
+            {item.rating ? (
+              <span className="text-chino-accent">★ {Number(item.rating).toFixed(1)}</span>
+            ) : null}
+          </div>
+          {detail.data?.description ? (
+            <p className="text-chino-text text-[13px] leading-[19px] line-clamp-3">
+              {detail.data.description}
+            </p>
           ) : null}
         </div>
-        {detail.data?.description ? (
-          <p className="mt-3 text-chino-text text-sm line-clamp-2 max-w-2xl">
-            {detail.data.description}
-          </p>
-        ) : null}
+        <div className="shrink-0 flex flex-col gap-3.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSave();
+            }}
+            className={`w-12 h-12 bg-white/[0.12] hover:bg-white/20 flex items-center justify-center ${
+              inWatchlist ? 'text-chino-accent' : 'text-white'
+            }`}
+            title={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+            aria-label={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
+            aria-pressed={inWatchlist}
+          >
+            {inWatchlist ? <BookmarkCheck className="w-6 h-6" /> : <Bookmark className="w-6 h-6" />}
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              expand();
+            }}
+            className="w-12 h-12 bg-white/[0.12] hover:bg-white/20 flex items-center justify-center text-white"
+            title="Watch"
+            aria-label="Watch"
+          >
+            <Maximize className="w-6 h-6" />
+          </button>
+        </div>
       </div>
 
       {/* Tap-to-unmute banner — only when the browser blocked the
-          autoplay-with-sound and we had to mute. Tapping anywhere on
-          the banner unmutes via the existing toggle. */}
+          autoplay-with-sound and we had to mute: a browser's muting is
+          not the device's volume, so this is the one way back to sound. */}
       {active && unmuteBlocked ? (
         <button
-          onClick={() => setMuted(false)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setMuted(false);
+          }}
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 bg-white/90 text-black text-sm font-medium shadow-lg"
         >
           Tap to unmute
