@@ -219,10 +219,10 @@ function EpisodeRow({
       }`}
     >
       {/* overflow lifts to visible while the add-to-list picker is open
-          so the popover isn't clipped to the 160px thumbnail — same
-          idiom as MediaCard. */}
+          so the popover isn't clipped to the thumbnail (160 px, 128 on a
+          phone, as the app's row) — same idiom as MediaCard. */}
       <div
-        className={`relative w-40 aspect-video rounded bg-chino-bg shrink-0 ${
+        className={`relative w-32 sm:w-40 aspect-video rounded bg-chino-bg shrink-0 ${
           pickerOpen ? 'overflow-visible z-40' : 'overflow-hidden'
         }`}
       >
@@ -318,21 +318,36 @@ function EpisodeRow({
         <div className="flex items-baseline gap-3">
           {/* Not positioned itself, so its ::after (absolute, inset-0)
               covers the row, the nearest positioned ancestor. Its name is
-              "Play S01E01 <title>" (S03E18–19 for a file of two). */}
+              "Play S01E01 <title>" (S03E18–19 for a file of two).
+              On a phone, as the app's row: the number with the runtime at
+              the trailing edge, then the title with the column to itself,
+              on up to two lines - beside the still, one line for all three
+              left the title a word ("S03E11 The … 24m"). From sm, the one
+              line as before. The runtime is drawn inside the button there
+              (hidden from its name) and read from the one after it. */}
           <button
             type="button"
             onClick={open}
             aria-current={focused ? 'true' : undefined}
-            className="min-w-0 flex items-baseline gap-3 text-left focus:outline-none after:absolute after:inset-0"
+            className="min-w-0 w-full sm:w-auto flex flex-wrap sm:flex-nowrap items-baseline gap-x-3 text-left focus:outline-none after:absolute after:inset-0"
           >
             <span className="sr-only">Play </span>
             <span className="text-chino-accent text-sm font-medium shrink-0">{epLabel}</span>{' '}
-            <span className={`font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
+            {runtimeMin ? (
+              <span aria-hidden="true" className="sm:hidden text-chino-muted text-xs ml-auto shrink-0">
+                {runtimeMin}m
+              </span>
+            ) : null}
+            <span
+              className={`font-medium basis-full sm:basis-auto line-clamp-2 sm:line-clamp-none sm:truncate ${
+                watched ? 'text-chino-muted' : 'text-white'
+              }`}
+            >
               {rowTitle}
             </span>
           </button>
           {runtimeMin ? (
-            <span className="text-chino-muted text-xs ml-auto shrink-0">{runtimeMin}m</span>
+            <span className="sr-only sm:not-sr-only text-chino-muted text-xs sm:ml-auto shrink-0">{runtimeMin}m</span>
           ) : null}
         </div>
         {progress ? (
