@@ -15,6 +15,9 @@ export interface EpisodeItem extends KatalogItem {
   coveredBy?: string;
   covers?: string[];
   episodeEnd?: number;
+  // On the holder: how long its file is, as measured - the length of the
+  // one thing that plays, not of any one episode it holds (chino-api).
+  file_duration_ms?: number;
 }
 
 export interface Season {

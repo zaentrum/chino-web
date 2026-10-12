@@ -31,8 +31,13 @@ interface EpisodesListProps {
  * Series detail page's episodes section. Each season is an accordion with
  * a stills strip; episodes are clickable rows that jump straight to the
  * player. Defaults to season 1 open; subsequent seasons toggle on click
- * so a 30-episode series doesn't render a huge wall of HTML. A file that
- * holds several episodes is one row (S03E18–19), played and marked as one.
+ * so a 30-episode series doesn't render a huge wall of HTML.
+ *
+ * The file is the truth: a file that holds several episodes is one thing to
+ * play, so it is one entry - a box around the episodes it holds, named for
+ * them (S03E18–21), as long as the file is, played, resumed and marked as
+ * one. The episodes are listed inside it by number and title, and none of
+ * them plays on its own: the file says nowhere where one ends.
  */
 export function EpisodesList({ seasons, focusEpisodeId, progressById }: EpisodesListProps) {
   // Episodes that have no SxxEyy coordinates land in season 0; hide that
@@ -165,12 +170,18 @@ function EpisodeRow({
   }, [focused]);
 
   const ep = entry.episode;
-  // The row's runtime is the file's: each episode it holds has its own.
-  const durationMs = [ep, ...entry.covered].reduce((ms, e) => ms + (e.duration_ms ?? 0), 0);
+  // The episodes the file holds; several make the entry a box around them.
+  const held = [ep, ...entry.covered];
+  const several = held.length > 1;
+  // The entry's runtime is the file's: its measured length where chino-api
+  // says it, else what its episodes' own runtimes come to.
+  const durationMs =
+    (several && ep.file_duration_ms) || held.reduce((ms, e) => ms + (e.duration_ms ?? 0), 0);
   const runtimeMin = durationMs ? Math.round(durationMs / 60_000) : 0;
   const epLabel = episodeCode(seasonNum, entry.first, entry.last);
-  // Each episode the file holds has a title of its own: all of them, once.
-  const rowTitle = [...new Set([ep, ...entry.covered].map((e) => e.title).filter(Boolean))].join(' / ');
+  // Each episode the file holds has a title of its own: all of them, once
+  // (the play button's name; the box lists them one under the other).
+  const rowTitle = [...new Set(held.map((e) => e.title).filter(Boolean))].join(several ? ', ' : ' / ');
   // Watched is the file's: chino-api marks every episode it holds together.
   const watchedAt = ep.watched_at || entry.covered.find((e) => e.watched_at)?.watched_at;
 
@@ -211,12 +222,12 @@ function EpisodeRow({
   // code and title, stretched over the whole row by its ::after (so a tap
   // anywhere on the row still plays); the watched and add-to-list buttons
   // sit above that layer (z-10), the open picker above them all.
-  return (
+  const row = (
     <div
       ref={rowRef}
-      className={`relative w-full flex items-stretch gap-4 px-4 py-3 text-left hover:bg-chino-surface-2 focus-within:bg-chino-surface-2 transition-colors group ${
-        focused ? 'bg-chino-surface-2 ring-1 ring-inset ring-chino-accent' : ''
-      }`}
+      className={`relative flex items-stretch gap-4 text-left hover:bg-chino-surface-2 focus-within:bg-chino-surface-2 transition-colors group ${
+        several ? 'px-3 py-3 border border-chino-accent/50 bg-chino-bg/60' : 'w-full px-4 py-3'
+      } ${focused ? 'bg-chino-surface-2 ring-1 ring-inset ring-chino-accent' : ''}`}
     >
       {/* overflow lifts to visible while the add-to-list picker is open
           so the popover isn't clipped to the thumbnail (160 px, 128 on a
@@ -340,27 +351,55 @@ function EpisodeRow({
                 {runtimeMin}m
               </span>
             ) : null}
-            <span
-              className={`font-medium basis-full sm:basis-auto line-clamp-2 sm:line-clamp-none sm:truncate ${
-                watched ? 'text-chino-muted' : 'text-white'
-              }`}
-            >
-              {rowTitle}
-            </span>
+            {several ? (
+              // The box lists its episodes under this line; the button's
+              // name carries their titles.
+              <span className="sr-only">{rowTitle}</span>
+            ) : (
+              <span
+                className={`font-medium basis-full sm:basis-auto line-clamp-2 sm:line-clamp-none sm:truncate ${
+                  watched ? 'text-chino-muted' : 'text-white'
+                }`}
+              >
+                {rowTitle}
+              </span>
+            )}
           </button>
           {runtimeMin ? (
             <span className="sr-only sm:not-sr-only text-chino-muted text-xs sm:ml-auto shrink-0">{runtimeMin}m</span>
           ) : null}
         </div>
+        {several ? (
+          // What the box is: so many episodes in one file, each by its
+          // number and title. They are text, not controls - the file plays.
+          <>
+            <div className="text-chino-muted text-xs mt-0.5">{held.length} episodes · one file</div>
+            <ol className="mt-1.5 space-y-0.5">
+              {held.map((e) => (
+                <li key={e.id} className="flex items-baseline gap-2 min-w-0">
+                  <span className="text-chino-muted text-xs tabular-nums w-5 shrink-0 text-right">
+                    {e.episode_number}
+                  </span>
+                  <span className={`text-sm font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
+                    {e.title}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </>
+        ) : null}
         {progress ? (
           <div className="text-chino-accent text-xs font-medium mt-0.5">
             {remainingMin != null ? `Resume · ${remainingMin}m left` : 'Resume'}
           </div>
         ) : null}
-        {ep.description ? (
+        {!several && ep.description ? (
           <p className="text-chino-muted text-sm mt-1 line-clamp-2">{ep.description}</p>
         ) : null}
       </div>
     </div>
   );
+  // The box sits inside the season's list with room around it, so its border
+  // reads as a box and not as a row's divider.
+  return several ? <div className="p-2">{row}</div> : row;
 }
