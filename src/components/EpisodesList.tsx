@@ -380,7 +380,13 @@ function EpisodeRow({
                   <span className="text-chino-muted text-xs tabular-nums w-5 shrink-0 text-right">
                     {e.episode_number}
                   </span>
-                  <span className={`text-sm font-medium truncate ${watched ? 'text-chino-muted' : 'text-white'}`}>
+                  {/* Two lines on a phone: cut to one, four parts of one story
+                      read alike ("Sozin's Comet: The …" twice). */}
+                  <span
+                    className={`text-sm font-medium line-clamp-2 sm:line-clamp-1 ${
+                      watched ? 'text-chino-muted' : 'text-white'
+                    }`}
+                  >
                     {e.title}
                   </span>
                 </li>
