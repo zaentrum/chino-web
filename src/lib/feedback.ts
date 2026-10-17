@@ -1,4 +1,7 @@
 import { getRuntimeConfig } from './runtimeConfig';
+import { feedbackError } from './feedbackStatus';
+
+export { FeedbackOffError } from './feedbackStatus';
 
 /**
  * Client for the chino-api bug-report endpoint (POST /api/v1/feedback).
@@ -67,7 +70,8 @@ function accessToken(): string | null {
  * Submit a bug report. Builds the multipart body per the /api/v1/feedback
  * contract: a "report" JSON part plus an optional "screenshot" image
  * part. Resolves with the ticket id/url; throws on any non-2xx (callers
- * on the auto-report path swallow that — manual UI surfaces it).
+ * on the auto-report path swallow that — manual UI surfaces it). A 503
+ * throws FeedbackOffError: the server has reporting switched off.
  */
 export async function submitBugReport(report: BugReport): Promise<FeedbackResult> {
   const { screenshot, ...payload } = report;
@@ -94,6 +98,6 @@ export async function submitBugReport(report: BugReport): Promise<FeedbackResult
     headers,
     body: form,
   });
-  if (!res.ok) throw new Error(`chino-api ${res.status}`);
+  if (!res.ok) throw feedbackError(res.status);
   return res.json() as Promise<FeedbackResult>;
 }

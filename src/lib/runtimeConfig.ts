@@ -23,6 +23,21 @@ export interface RuntimeConfig {
     web: string;
     [k: string]: string;
   };
+  /** What this server can do beyond playback. */
+  features: {
+    /** The server can file bug reports: its issue tracker is connected. */
+    feedback: boolean;
+  };
+}
+
+/**
+ * The features a server declares in `/api/config`. Only an explicit `true`
+ * switches one on: a server that predates a flag, or sends anything else,
+ * gets the feature hidden rather than offered and then failing.
+ */
+export function featuresFrom(raw: unknown): RuntimeConfig['features'] {
+  const features = (raw as { features?: { feedback?: unknown } } | null)?.features;
+  return { feedback: features?.feedback === true };
 }
 
 // Module-level holder so non-React code (lib/feedback.ts) can read the
@@ -32,6 +47,11 @@ let RUNTIME: RuntimeConfig | null = null;
 /** The resolved runtime config, or null before `loadRuntimeConfig()` runs. */
 export function getRuntimeConfig(): RuntimeConfig | null {
   return RUNTIME;
+}
+
+/** Whether this server files bug reports, so the app may offer "Report a bug". */
+export function feedbackAvailable(): boolean {
+  return RUNTIME?.features.feedback === true;
 }
 
 /**
@@ -80,6 +100,7 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
       web: raw.oidcClientId?.web ?? 'chino',
       ...(raw.oidcClientId ?? {}),
     },
+    features: featuresFrom(raw),
   };
 
   RUNTIME = cfg;

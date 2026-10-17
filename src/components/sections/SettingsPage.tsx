@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bug } from 'lucide-react';
 import { useSettings, DEFAULT_SETTINGS } from '../../lib/settings';
 import { BugReportDialog } from '../BugReportDialog';
+import { feedbackAvailable } from '../../lib/runtimeConfig';
 
 /**
  * Client-side settings page. All values live in localStorage; the
@@ -95,6 +96,8 @@ export function SettingsPage() {
         />
       </Section>
 
+      {/* Offered only when this server files reports; otherwise the form would fail. */}
+      {feedbackAvailable() && (
       <Section
         title="Feedback"
         subtitle="Found something broken or confusing? File a bug report — and attach a screenshot of the page if you want us to see what you saw."
@@ -115,6 +118,7 @@ export function SettingsPage() {
           </button>
         </div>
       </Section>
+      )}
 
       <div className="mt-8 pt-6 border-t border-chino-border-2">
         <button

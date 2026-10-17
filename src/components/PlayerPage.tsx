@@ -34,6 +34,7 @@ import { extraMasterUrl, findExtra, pickTrailer, trailerFailure, trailerPlayBatc
 import { useDeviceCaps } from '../hooks/useDeviceCaps';
 import { useItem, type ExtraRef, type TrailerRef } from '../hooks/useItem';
 import { BugReportDialog } from './BugReportDialog';
+import { feedbackAvailable } from '../lib/runtimeConfig';
 import { StatusPage } from './StatusPage';
 
 interface Subtitle {
@@ -3105,7 +3106,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             reportedId={reportedId}
             onRetry={retryPlayback}
             onBack={goBack}
-            onReport={() => setBugDialogOpen(true)}
+            onReport={feedbackAvailable() ? () => setBugDialogOpen(true) : undefined}
             link={failureLink}
           />
         ) : (
@@ -3373,7 +3374,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             reportedId={reportedId}
             onRetry={retryPlayback}
             onBack={goBack}
-            onReport={() => setBugDialogOpen(true)}
+            onReport={feedbackAvailable() ? () => setBugDialogOpen(true) : undefined}
             link={failureLink}
           />
         </div>
@@ -4199,7 +4200,8 @@ function PlaybackFailure({
   reportedId: number | null;
   onRetry: () => void;
   onBack: () => void;
-  onReport: () => void;
+  /** Absent when the server files no reports: the button is not offered. */
+  onReport?: () => void;
   link?: FailureLink;
 }) {
   return (
@@ -4236,13 +4238,15 @@ function PlaybackFailure({
         >
           Back
         </button>
-        <button
-          type="button"
-          onClick={onReport}
-          className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
-        >
-          Report a bug
-        </button>
+        {onReport ? (
+          <button
+            type="button"
+            onClick={onReport}
+            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+          >
+            Report a bug
+          </button>
+        ) : null}
       </div>
     </div>
   );
