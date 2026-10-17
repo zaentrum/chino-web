@@ -30,6 +30,25 @@ import { AUTO, autoLabel, chosenQuality, packagedQualityMenu, playingLabel, type
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { withoutCodec } from '../lib/caps';
 import { extraHeading, extraInfo, playerCalls, type MasterAudio, type MasterVariant } from '../lib/playerMode';
+import {
+  EventBudget,
+  RebufferWatch,
+  bandwidthPayload,
+  firstFramePayload,
+  levelSwitchPayload,
+  playMode,
+  renditionChanged,
+  segmentKind,
+  sourceRequested,
+  startupClock,
+  startupTimeoutPayload,
+  type FirstFrame,
+  type LoadTimes,
+  type QoeKind,
+  type Rendition,
+  type SegmentKind,
+  type StartupClock,
+} from '../lib/qoe';
 import { extraMasterUrl, findExtra, pickTrailer, trailerFailure, trailerPlayBatch } from '../lib/trailers';
 import { useDeviceCaps } from '../hooks/useDeviceCaps';
 import { useItem, type ExtraRef, type TrailerRef } from '../hooks/useItem';
@@ -157,6 +176,55 @@ interface TelemetryEvent {
   kind: string;
   itemId?: string;
   payload?: Record<string, unknown>;
+}
+
+// A fetch hls.js has under way: what it is, and the fragment (its live load
+// stats and its level).
+interface InFlight {
+  kind: SegmentKind;
+  frag: { stats: LoadTimes; level: number };
+}
+
+// What the player keeps of playback quality for a mount (lib/qoe.ts).
+interface QoeState {
+  /** The attempt's: the mount's, or Try again's. */
+  clock: StartupClock;
+  /** The attempt's first frame, measured, and whether it went out. */
+  frame: FirstFrame | null;
+  frameSent: boolean;
+  /** Without a frame callback: where the playhead was first seen playing (-1
+   *  for not yet), and when the element last said playing. */
+  lastTime: number;
+  playingAt: number | null;
+  rebuffer: RebufferWatch;
+  budget: EventBudget;
+  inflight: { video: InFlight | null; audio: InFlight | null };
+  /** The last video segment buffered, and its level. */
+  lastVideo: { stats: LoadTimes; durationSec: number; rendition: Rendition | null } | null;
+  lastVideoLevel: number;
+  /** The rendition on screen; the number of the source playing; the one a
+   *  pick in the quality menu asked for. */
+  rendition: Rendition | null;
+  source: number;
+  manualSource: number;
+}
+
+function newQoeState(): QoeState {
+  return {
+    clock: startupClock(0, performance.now(), document.visibilityState === 'visible'),
+    frame: null,
+    frameSent: false,
+    lastTime: -1,
+    playingAt: null,
+    rebuffer: new RebufferWatch(),
+    budget: new EventBudget(),
+    inflight: { video: null, audio: null },
+    lastVideo: null,
+    lastVideoLevel: -1,
+    rendition: null,
+    source: 0,
+    manualSource: -1,
+  };
 }
 
 // How long a title may take to show its first frame before the player
@@ -372,6 +440,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const [info, setInfo] = useState<PlayInfo | null>(() => (extra ? extraInfo({ durationMs: extra.ref.duration_ms }) : null));
   const infoRef = useRef<PlayInfo | null>(info);
   useEffect(() => { infoRef.current = info; }, [info]);
+  // Once /play/info has answered, a first frame waiting for its mode goes out.
+  const infoSettledRef = useRef(infoSettled);
+  useEffect(() => {
+    infoSettledRef.current = infoSettled;
+    if (infoSettled) reportFirstFrame(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [infoSettled]);
   const [infoOpen, setInfoOpen] = useState(false);
   const clientCodecs = useMemo(probeClientCodecs, []);
 
@@ -429,6 +504,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
+      notePlayPressed(v);
       userWantsPlayingRef.current = true;
       v.play().catch(() => undefined);
     } else {
@@ -487,6 +563,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // Buffered telemetry events queued by reportEvent(); flushed every
   // 30s (interval) or on pagehide / unmount.
   const telemetryQueueRef = useRef<TelemetryEvent[]>([]);
+  // Playback quality: one record for the mount, its clock started with it.
+  const qoeRef = useRef<QoeState | null>(null);
+  if (!qoeRef.current) qoeRef.current = newQoeState();
+  const qoe = qoeRef.current;
   // Single-shot guard on the resume fetch.
   const [resumeChecked, setResumeChecked] = useState(false);
   // Force document body to pure black while the player is mounted so
@@ -741,6 +821,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     console.log('[hls-effect] SETUP', playUrl.slice(0, 100));
     // A new source: what it plays is not known until it says.
     setPlayingLevel(null);
+    qoe.source += 1;
+    qoe.inflight = { video: null, audio: null };
     // Prefer hls.js (MSE-based) over native HLS — Chrome's
     // canPlayType('application/vnd.apple.mpegurl') returns "maybe"
     // but doesn't actually decode the playlist correctly. Only fall
@@ -748,8 +830,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     // reports it CAN play HLS (Safari / iOS).
     if (!Hls.isSupported()) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
-        const onResize = () => setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
+        const onResize = () => {
+          setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
+          if (v.videoHeight > 0) noteRendition({ height: v.videoHeight, bitrate: null });
+        };
         v.addEventListener('resize', onResize);
+        // How far the source got before its first frame: natively, its
+        // metadata is all there is to tell (lib/qoe.ts startupPhase).
+        const onMetadata = () => { qoe.clock.playlist = qoe.clock.videoAsked = true; };
+        v.addEventListener('loadedmetadata', onMetadata);
         // The audio picked, once the browser lists the master's renditions -
         // and again should it enable its DEFAULT beside it afterwards.
         const audioList = (v as NativeAudioVideo).audioTracks;
@@ -769,13 +858,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             });
         };
         if (extra) v.addEventListener('error', onExtraError);
+        sourceRequested(qoe.clock, performance.now());
         v.src = playUrl;
         return () => {
           live = false;
           v.removeEventListener('resize', onResize);
+          v.removeEventListener('loadedmetadata', onMetadata);
           v.removeEventListener('error', onExtraError);
           audioList?.removeEventListener('addtrack', onAudioTrack);
           audioList?.removeEventListener('change', onAudioTrack);
+          // The source going is no stall, whatever the element says of it.
+          qoe.rebuffer.source();
           v.removeAttribute('src');
           v.load();
         };
@@ -828,7 +921,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       loadCount += 1;
       // eslint-disable-next-line no-console
       console.log('[hls] MEDIA_ATTACHED #' + loadCount + (loadCount === 1 ? ' → loadSource' : ' (media recovered)'));
-      if (loadCount === 1) hls.loadSource(playUrl);
+      if (loadCount === 1) {
+        sourceRequested(qoe.clock, performance.now());
+        hls.loadSource(playUrl);
+      }
     });
     hls.on(Hls.Events.MEDIA_DETACHED, () => {
       // eslint-disable-next-line no-console
@@ -837,6 +933,34 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
       const level = hls.levels[data.level];
       setPlayingLevel(level ? { uri: level.uri, width: level.width, height: level.height } : null);
+      if (level) noteRendition({ height: level.height || null, bitrate: level.bitrate || null });
+    });
+    // Playback quality (lib/qoe.ts): how far the source got before its
+    // first frame, the fetches under way, and the last video segment - for
+    // the bandwidth report, at most every 30 s while playing.
+    hls.on(Hls.Events.LEVEL_LOADED, () => { qoe.clock.playlist = true; });
+    hls.on(Hls.Events.FRAG_LOADING, (_, { frag }) => {
+      const kind = segmentKind(String(frag.type), frag.sn);
+      if (kind === 'audio') {
+        qoe.inflight.audio = { kind, frag };
+        qoe.clock.audioAsked = true;
+      } else if (kind) {
+        qoe.inflight.video = { kind, frag };
+        if (kind === 'video') qoe.clock.videoAsked = true;
+      }
+    });
+    hls.on(Hls.Events.FRAG_LOADED, (_, { frag }) => {
+      const kind = segmentKind(String(frag.type), frag.sn);
+      if (kind === 'video') qoe.clock.videoIn = true;
+      if (kind === 'audio') qoe.clock.audioIn = true;
+    });
+    hls.on(Hls.Events.FRAG_BUFFERED, (_, { frag, stats }) => {
+      if (segmentKind(String(frag.type), frag.sn) !== 'video') return;
+      qoe.lastVideoLevel = frag.level;
+      qoe.lastVideo = { stats, durationSec: frag.duration, rendition: renditionOf(hls, frag.level) };
+      if (qoe.clock.frameAt !== null && !v.paused) {
+        reportQoe('bandwidth', bandwidthPayload(hls.bandwidthEstimate, qoe.lastVideo, 'interval'));
+      }
     });
     // Circuit breaker — without this, a chronic codec / MSE-append
     // error sends recoverMediaError into a hot loop that hammers
@@ -989,10 +1113,22 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     return () => {
       // eslint-disable-next-line no-console
       console.log('[hls-effect] CLEANUP', playUrl.slice(0, 100));
+      // The source going is no stall, whatever the element says of it.
+      qoe.rebuffer.source();
       hls.destroy();
       hlsRef.current = null;
     };
   }, [playUrl]);
+
+  // The attempt's first frame, when the video presents it. Where the browser
+  // has no frame callback, onTimeUpdate takes the playhead's first move.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !playUrl || qoe.clock.frameAt !== null || typeof v.requestVideoFrameCallback !== 'function') return;
+    const id = v.requestVideoFrameCallback((now) => firstFrame(now, 'frame_callback'));
+    return () => v.cancelVideoFrameCallback(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playUrl, attempt]);
 
   // What the server is ACTUALLY doing right now. info.mode is the
   // initial probe; once forceTranscode is set (a ?q= below High on a
@@ -2146,6 +2282,92 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     telemetryQueueRef.current.push({ ts: Date.now(), kind, itemId, payload });
   };
 
+  // ---- Playback quality (lib/qoe.ts) ----
+  // first_frame, rebuffer, bandwidth and level_switch, each within its
+  // budget for the session, and what startup_timeout says of what was
+  // pending. Read through refs and `qoe`: the media and hls.js handlers that
+  // call these are bound once per source.
+  const qoeMode = () => playMode(infoRef.current?.mode, forceTranscodeRef.current);
+  const reportQoe = (kind: QoeKind, payload: Record<string, unknown> | null, ignoreGap = false) => {
+    if (payload && qoe.budget.allow(kind, performance.now(), ignoreGap)) reportEvent(kind, payload);
+  };
+  const reportRebuffer = (stall: Record<string, unknown> | null) => {
+    if (stall) reportQoe('rebuffer', { ...stall, mode: qoeMode() });
+  };
+  const renditionOf = (hls: Hls | null, level: number): Rendition | null => {
+    const l = level >= 0 ? hls?.levels[level] : undefined;
+    return l ? { height: l.height || null, bitrate: l.bitrate || null } : null;
+  };
+  // The level of the fragment at the playhead (or of the last video segment
+  // buffered); where the browser plays HLS itself, the picture's height.
+  const renditionOnScreen = (): Rendition | null => {
+    const hls = hlsRef.current;
+    if (hls) return renditionOf(hls, hls.currentLevel >= 0 ? hls.currentLevel : qoe.lastVideoLevel);
+    const v = videoRef.current;
+    return v && v.videoHeight > 0 ? { height: v.videoHeight, bitrate: null } : null;
+  };
+  // The fetch still loading: the video's, else the audio's.
+  const loadingSegment = (): InFlight | null => {
+    const loading = (f: InFlight | null) => (f && !f.frag.stats.aborted && !(f.frag.stats.loading.end > 0) ? f : null);
+    return loading(qoe.inflight.video) ?? loading(qoe.inflight.audio);
+  };
+  const stallSegment = () => {
+    const f = loadingSegment();
+    return f ? { kind: f.kind, stats: f.frag.stats } : null;
+  };
+  // The rendition on screen changed: a level_switch, but for the first one.
+  // A pick in the quality menu makes the next source's first switch manual.
+  const noteRendition = (to: Rendition) => {
+    const from = qoe.rendition;
+    qoe.rendition = to;
+    const manual = qoe.manualSource === qoe.source;
+    if (manual) qoe.manualSource = -1;
+    if (from && renditionChanged(from, to)) reportQoe('level_switch', levelSwitchPayload(from, to, manual, qoeMode()));
+  };
+  // The first frame of the attempt: measured now, reported with the play
+  // mode once /play/info has answered (it nearly always has), at the latest
+  // when the page goes. With it, the bandwidth the start was made on.
+  const firstFrame = (at: number, via: FirstFrame['via']) => {
+    if (qoe.clock.frameAt !== null) return;
+    qoe.clock.frameAt = at;
+    const rendition = renditionOnScreen();
+    qoe.frame = { at, position: videoRef.current?.currentTime ?? 0, rendition, via };
+    if (rendition && !qoe.rendition) qoe.rendition = rendition;
+    const hls = hlsRef.current;
+    if (hls) reportQoe('bandwidth', bandwidthPayload(hls.bandwidthEstimate, qoe.lastVideo, 'first_frame'), true);
+    reportFirstFrame(false);
+  };
+  const reportFirstFrame = (anyway: boolean) => {
+    if (!qoe.frame || qoe.frameSent || (!infoSettledRef.current && !anyway)) return;
+    qoe.frameSent = true;
+    reportQoe('first_frame', firstFramePayload(qoe.clock, qoe.frame, qoeMode()));
+  };
+  // A new attempt (Try again) starts its own clock.
+  const beginAttempt = (n: number) => {
+    qoe.clock = startupClock(n, performance.now(), document.visibilityState === 'visible');
+    qoe.frame = null;
+    qoe.frameSent = false;
+    qoe.lastTime = -1;
+    qoe.playingAt = null;
+    qoe.rebuffer.source();
+  };
+  // The viewer pressing play before the first frame, autoplay refused: the
+  // wait is partly theirs. (A press while it loads, autoplay allowed, is not.)
+  const notePlayPressed = (v: HTMLVideoElement) => {
+    if (v.paused && qoe.clock.refused && qoe.clock.frameAt === null) qoe.clock.clicked = true;
+  };
+  const qoeWaiting = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    qoe.playingAt = null;
+    qoe.rebuffer.waiting(performance.now(), v.currentTime, v.seeking, stallSegment());
+  };
+  // The page goes: what is pending is reported before the last flush.
+  const finishQoe = () => {
+    reportFirstFrame(true);
+    reportRebuffer(qoe.rebuffer.stop(performance.now(), 'exit'));
+  };
+
   // An extra's one event: trailer_play, when it starts, to the player's
   // sink with the bearer in the header (lib/trailers.ts trailerPlayBatch).
   const trailerPlayReportedRef = useRef(false);
@@ -2194,6 +2416,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // from the server): a bad link is not a bug.
   const giveUp = (title: string, label: string, tech: string, errName: string, message: string) => {
     gaveUpRef.current = true;
+    reportRebuffer(qoe.rebuffer.stop(performance.now(), 'error'));
     // Where Try again picks up: the source is about to go.
     keepPosition();
     const hls = hlsRef.current;
@@ -2225,6 +2448,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       return;
     }
     reportEvent('retry', { attempt: attempt + 1 });
+    beginAttempt(attempt + 1);
     gaveUpRef.current = false;
     setFatalError(null);
     setReportedId(null);
@@ -2264,7 +2488,18 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         err ? `last error: ${err.type} ${err.details}${err.status ? ` (HTTP ${err.status})` : ''}` : 'last error: none',
         err?.url ? `url: ${err.url.split('?')[0]}` : '',
       ].filter(Boolean).join('\n');
-      reportEvent('startup_timeout', { attempt, lastDetails: err?.details ?? null, status: err?.status ?? null });
+      // What it still waited for, and the fetch under way (lib/qoe.ts).
+      const pending = loadingSegment();
+      reportEvent('startup_timeout', {
+        attempt,
+        lastDetails: err?.details ?? null,
+        status: err?.status ?? null,
+        ...startupTimeoutPayload(qoe.clock, performance.now(), qoeMode(), pending && {
+          kind: pending.kind,
+          stats: pending.frag.stats,
+          rendition: pending.kind === 'audio' ? null : renditionOf(hlsRef.current, pending.frag.level),
+        }),
+      });
       giveUp(
         extra ? "This trailer won't start" : "This title won't start",
         `Nothing playable arrived from the server within ${STARTUP_DEADLINE_MS / 1000} seconds. Try again in a moment, or report it if it keeps happening.`,
@@ -2393,6 +2628,27 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       telemetryQueueRef.current.unshift(...events);
     });
   };
+
+  // Playback quality: the page hidden before the first frame makes the start
+  // one nobody watched, and ends a stall; the page going reports what is
+  // pending. Before the telemetry effect below: its pagehide listener and
+  // its cleanup flush, and these come first.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== 'hidden') return;
+      if (qoe.clock.frameAt === null) qoe.clock.hidden = true;
+      reportRebuffer(qoe.rebuffer.stop(performance.now(), 'hidden'));
+    };
+    const onHide = () => finishQoe();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onHide);
+      finishQoe();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (calls.events !== 'session') return;
@@ -2573,6 +2829,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         return;
       }
       if (now - s.lastChange <= 8000) return;
+      // A stall mid-play nothing said waiting for began when the playhead
+      // last moved (lib/qoe.ts).
+      qoe.rebuffer.stuck(s.lastChange, v.currentTime, stallSegment());
       s.lastChange = now; // look again in another 8 s
       const mode = infoRef.current?.mode ?? null;
       const hls = hlsRef.current;
@@ -2852,13 +3111,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     p.catch(() => {
       v.muted = true;
       setAutoplayMuted(true);
-      v.play().catch(() => setNeedsClickToPlay(true));
+      v.play().catch(() => {
+        setNeedsClickToPlay(true);
+        if (qoe.clock.frameAt === null) qoe.clock.refused = true;
+      });
     });
   };
 
   const startUnmuted = () => {
     const v = videoRef.current;
     if (!v) return;
+    notePlayPressed(v);
     v.muted = false;
     setAutoplayMuted(false);
     userWantsPlayingRef.current = true;
@@ -3021,6 +3284,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     setBuffering(true);
     setActionLabel(`Switching to ${label}…`);
     reportEvent('quality_switch', { from: streamQuality, to: q, manual: true });
+    // The source this builds: its first rendition is the viewer's pick.
+    qoe.manualSource = qoe.source + 1;
     recordSwitch(`→ ${label}`, 'manual', `at ${fmt(wallTime)}`);
     keepPosition();
     setStreamQuality(q);
@@ -3165,10 +3430,28 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             setBuffering(true);
             setActionLabel('Reconnecting…');
           }
+          // Playback quality (lib/qoe.ts): a pause with nothing buffered
+          // ahead while the viewer watches is the browser stalling; any
+          // other - the viewer's, a media key's, the title's end - ends a
+          // stall.
+          const pv = e.currentTarget;
+          const stalled = userWantsPlayingRef.current && !pv.ended && !pv.error
+            && document.visibilityState === 'visible' && bufferedAheadOf(pv) < 0.5;
+          reportRebuffer(qoe.rebuffer.paused(performance.now(), !stalled, pv.currentTime, stallSegment()));
         }}
+        onSeeking={() => qoe.rebuffer.seeking()}
         onTimeUpdate={(e) => {
           const v = e.currentTarget;
           setCurrent(v.currentTime);
+          // Playback quality: a stall ends when the playhead moves again;
+          // without a frame callback, its first move is the first frame.
+          const now = performance.now();
+          reportRebuffer(qoe.rebuffer.time(now, v.currentTime, { paused: v.paused, seeking: v.seeking, started: qoe.clock.frameAt !== null }));
+          if (qoe.clock.frameAt === null && typeof v.requestVideoFrameCallback !== 'function') {
+            if (v.paused || v.seeking) qoe.lastTime = -1;
+            else if (qoe.lastTime < 0) qoe.lastTime = v.currentTime;
+            else if (v.currentTime > qoe.lastTime) firstFrame(qoe.playingAt ?? now, 'timeupdate');
+          }
           // Refresh the buffered overlay too — onProgress doesn't fire
           // when the buffer trails the playhead (network steady-state
           // playback) but timeupdate fires ~4x/s, which is more than
@@ -3255,9 +3538,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             recoverFault('premature_eof', { seen: v.duration, expected: apiDurationSec });
           }
         }}
-        onWaiting={() => { setBuffering(true); onStall(); reportEvent('waiting', { t: videoRef.current?.currentTime, q: streamQuality }); }}
+        onWaiting={() => { setBuffering(true); onStall(); reportEvent('waiting', { t: videoRef.current?.currentTime, q: streamQuality }); qoeWaiting(); }}
         onLoadedData={() => { startedRef.current = true; }}
-        onPlaying={() => { startedRef.current = true; setBuffering(false); setActionLabel(null); reportTrailerPlay(); }}
+        onPlaying={() => {
+          startedRef.current = true; setBuffering(false); setActionLabel(null); reportTrailerPlay();
+          qoe.playingAt = performance.now();
+          qoe.rebuffer.playing(qoe.playingAt);
+        }}
         onCanPlay={(e) => {
           startedRef.current = true;
           setBuffering(false);
