@@ -15,6 +15,7 @@ import {
   onTheFlyQuality,
   restorePosition,
   stallAction,
+  stepDownNotice,
   type StallState,
 } from './playback.ts';
 
@@ -208,4 +209,28 @@ test('only a fragment that failed to load moves a direct stream: a playlist or t
   for (const details of ['levelLoadError', 'manifestLoadError', 'audioTrackLoadError', 'keyLoadError', 'fragParsingError']) {
     assert.deepEqual(fragmentError({ details, fatal: true }), { kind: 'keep' }, details);
   }
+});
+
+test('a step down between encoded qualities names the rung as the menu does and says the connection cannot keep up', () => {
+  assert.equal(stepDownNotice('low', false), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(stepDownNotice('medium', false), "Switched to Medium (720p) quality: the connection can't keep up.");
+  for (const q of QUALITY_RUNGS) {
+    const line = stepDownNotice(q, false);
+    // The menu's label, from its own entries; no original in a step between encodings.
+    assert.equal(line, `Switched to ${LADDER_MENU[q].label} (${LADDER_MENU[q].detail}) quality: the connection can't keep up.`, q);
+    assert.doesNotMatch(line, /original|slow connection|—/i, line);
+  }
+});
+
+test('three stalls step a transcode down a rung, and move a direct stream onto the ladder on the stall line', () => {
+  // As the player says it: the step, and whether it moved the stream onto the ladder.
+  const noticeOf = (s: { mode: 'transcode' | 'remux'; quality: 'high' | 'medium'; forcedTranscode: boolean }) => {
+    const step = downgradeStep(s);
+    assert.ok(step);
+    return stepDownNotice(step.quality, step.forceTranscode && !s.forcedTranscode);
+  };
+  assert.equal(noticeOf({ mode: 'transcode', quality: 'medium', forcedTranscode: false }), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(noticeOf({ mode: 'remux', quality: 'medium', forcedTranscode: true }), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(noticeOf({ mode: 'remux', quality: 'high', forcedTranscode: false }), ladderNotice('medium', 'stall'));
+  assert.equal(ladderNotice('medium', 'stall'), "Switched to Medium quality: the connection can't keep up with the original.");
 });

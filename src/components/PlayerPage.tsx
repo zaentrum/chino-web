@@ -20,13 +20,13 @@ import {
   downgradeStep,
   isLadderQuality,
   labelForQuality,
-  ladderNotice,
   leaveSource,
   mediaFallback,
   networkFallback,
   onTheFlyQuality,
   restorePosition,
   stallAction,
+  stepDownNotice,
   type LadderQuality,
   type Quality,
 } from '../lib/playback';
@@ -2991,11 +2991,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     );
     if (onto) setForceTranscode(true);
     setStreamQuality(step.quality);
-    setQualityNotice(
-      onto && isLadderQuality(step.quality)
-        ? ladderNotice(step.quality, 'stall')
-        : `Slow connection — switching to ${labelForQuality(step.quality)}`,
-    );
+    setQualityNotice(stepDownNotice(step.quality, onto));
     window.setTimeout(() => setQualityNotice(null), 4000);
   };
 

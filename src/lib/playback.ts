@@ -66,6 +66,18 @@ export function ladderNotice(quality: LadderQuality, why: LadderMove): string {
 }
 
 /**
+ * The notice of a step down after repeated stalls (downgradeStep): a direct
+ * stream moved onto the ladder (ontoLadder) says the connection can't keep
+ * up with the original; a step between encoded qualities names the rung by
+ * the menu's label of it ("Low (480p)") and says the connection can't keep
+ * up.
+ */
+export function stepDownNotice(quality: Quality, ontoLadder: boolean): string {
+  if (ontoLadder && isLadderQuality(quality)) return ladderNotice(quality, 'stall');
+  return `Switched to ${labelForQuality(quality)} quality: the connection can't keep up.`;
+}
+
+/**
  * Takes the player off its source for another: the position first, kept by
  * keep, then the teardown - hls.js's detaches the media element, which goes
  * back to 0:00, so a position read after it is lost. Returns the position.
