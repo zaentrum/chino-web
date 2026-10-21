@@ -1,7 +1,7 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { searchHeadline, type SearchState } from './search.ts';
+import { mergeAsBefore, SEARCH_TYPES, searchAsBeforeUrls, searchHeadline, searchIsMissing, searchUrl, type SearchState } from './search.ts';
 
 const state = (s: Partial<SearchState>): SearchState => ({
   query: 'hoffman',
@@ -30,4 +30,28 @@ test('a search under way, a failed search, no query', () => {
   assert.equal(searchHeadline(state({ loading: true, people: 1 })), 'Searching for "hoffman"…');
   assert.equal(searchHeadline(state({ failed: true, people: 1 })), 'Couldn\'t search for "hoffman"');
   assert.equal(searchHeadline(state({ query: '' })), 'Search the library');
+});
+
+test('one search of films and series, the types the page shows', () => {
+  const url = new URL(searchUrl('widow’s bay', { limit: 60, people: 12 }), 'https://chino.example');
+  assert.equal(url.pathname, '/api/v1/search');
+  assert.equal(url.searchParams.get('q'), 'widow’s bay');
+  assert.equal(url.searchParams.get('types'), 'movie,series');
+  assert.equal(url.searchParams.get('limit'), '60');
+  assert.equal(url.searchParams.get('people'), '12');
+  assert.deepEqual(SEARCH_TYPES, ['movie', 'series'], 'episodes wait for their result card');
+  const all = new URL(searchUrl('x', { limit: 8, people: 0, types: ['movie', 'series', 'episode'] }), 'https://chino.example');
+  assert.equal(all.searchParams.get('types'), 'movie,series,episode');
+  assert.equal(all.searchParams.get('people'), '0');
+});
+
+test('a server without the search is searched as before', () => {
+  assert.equal(searchIsMissing(404), true);
+  for (const status of [200, 401, 500, 502, 503]) assert.equal(searchIsMissing(status), false);
+  const urls = searchAsBeforeUrls('a & b', { limit: 30, people: 12 });
+  assert.equal(urls.movies, '/api/v1/items?q=a+%26+b&limit=30&type=movie');
+  assert.equal(urls.series, '/api/v1/items?q=a+%26+b&limit=30&type=series');
+  assert.equal(urls.people, '/api/v1/people?q=a+%26+b&limit=12');
+  assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1'], 10), ['m1', 'm2', 's1']);
+  assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1'], 2), ['m1', 'm2']);
 });

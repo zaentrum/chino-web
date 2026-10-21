@@ -1,8 +1,6 @@
-import { useMemo } from 'react';
 import { MediaCard } from './MediaCard';
 import { PersonAvatar } from './PersonAvatar';
-import { useItems } from '../hooks/useItems';
-import { usePeople, type PersonSummary } from '../hooks/usePeople';
+import { useSearch } from '../hooks/useSearch';
 import { toApp } from '../lib/basepath';
 import { searchHeadline } from '../lib/search';
 import { ExtensionSlot } from './ExtensionSlot';
@@ -12,53 +10,36 @@ interface SearchPageProps {
 }
 
 /**
- * Search results. Hits `/api/v1/items?q=…` for both movies and series in
- * parallel and renders the results in the order katalog-api returns
- * them — the backend now ranks `q=…` queries by relevance (exact >
- * prefix > FTS rank > alpha), so the client renders the server order
- * as-is and does NOT re-rank. Movies and series are kept as one merged
- * list so the strongest hits land at the top regardless of type.
+ * Search results: one search of the catalog, `/api/v1/search?q=…`
+ * (useSearch). The server ranks films and series together by how they match
+ * the query (the title is the query, begins with it, holds its words, then
+ * typos; a plot only when no title matched), and the page renders its order
+ * as-is, in one grid: no re-ranking, no films-then-series.
  *
- * Above the title results sits a "Cast & crew" section driven by
- * `/api/v1/people?q=…` (same debounced query as the titles): matching
- * people with their portrait (initials without one), their name and a
- * "· N titles" credit count. Tapping a person opens the Person surface.
+ * Above the titles sits a "Cast & crew" section from the same search:
+ * matching people with their portrait (initials without one), their name and
+ * a "· N titles" credit count. Tapping a person opens the Person surface.
  */
 export function SearchPage({ query }: SearchPageProps) {
-  const movies = useItems(query, 30, 'movie');
-  const series = useItems(query, 30, 'series');
-  const people = usePeople(query, 12);
+  const search = useSearch(query, { limit: 60, people: 12 });
 
-  const movieItems = movies.data?.source === 'katalog' ? movies.data.items : [];
-  const seriesItems = series.data?.source === 'katalog' ? series.data.items : [];
-  const loading = movies.loading || series.loading;
+  const items = search.data?.items ?? [];
+  const loading = search.loading;
   // A catalog that is DOWN and a catalog with no match are not the same thing,
   // and rendering them identically is how a total search outage looked like a
   // library that simply did not have the film — for weeks.
-  const catalogError = movies.error ?? series.error ?? null;
+  const catalogError = search.error;
 
-  // Merge movies + series, preserving the server's per-type relevance
-  // order via a stable interleave-free concat. Each type already arrives
-  // ranked; we keep movies first then series rather than re-sorting by a
-  // local relevance score.
-  const items = useMemo(
-    () => [
-      ...movieItems.map((it) => ({ ...it, _kind: 'movie' as const })),
-      ...seriesItems.map((it) => ({ ...it, _kind: 'series' as const })),
-    ],
-    [movieItems, seriesItems],
-  );
-
-  const peopleList: PersonSummary[] = people.data?.people ?? [];
+  const peopleList = search.data?.people ?? [];
   const total = items.length;
 
-  // People count as results too, and the headline waits for their search
-  // as well, so it does not say "No results" above a "Cast & crew" card.
+  // People count as results too, so the headline does not say "No results"
+  // above a "Cast & crew" card.
   const headline = searchHeadline({
     query,
     titles: total,
     people: peopleList.length,
-    loading: loading || people.loading,
+    loading,
     failed: !!catalogError,
   });
 
@@ -110,13 +91,13 @@ export function SearchPage({ query }: SearchPageProps) {
             <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
               {items.map((it) => (
                 <MediaCard
-                  key={`${it._kind}-${it.id}`}
+                  key={`${it.type}-${it.id}`}
                   id={it.id}
                   title={it.title}
                   image={it.poster_url || ''}
                   year={it.year ? String(it.year) : undefined}
                   rating={it.rating ? it.rating.toFixed(1) : undefined}
-                  type={it._kind}
+                  type={it.type === 'series' ? 'series' : 'movie'}
                   watchedAt={it.watched_at}
                 />
               ))}
