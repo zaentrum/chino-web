@@ -28,11 +28,14 @@ export interface SearchSeries {
   poster_url?: string;
 }
 
-/** What one search asks for: how many titles and people, and of which types. */
+/** What one search asks for: how many titles and people, and of which types;
+ *  and, of a server without the search, how many titles of each type, as the
+ *  page asked for them before (perType). */
 export interface SearchRequest {
   limit: number;
   people: number;
   types?: readonly string[];
+  perType?: number;
 }
 
 /** The URL of one search of the catalog: chino-api's /api/v1/search. */
@@ -48,13 +51,13 @@ export function searchIsMissing(status: number): boolean {
 }
 
 /** The URLs a server without the search is searched by, as before: the films
- *  of the query, its series, and its people. */
-export function searchAsBeforeUrls(query: string, { limit, people }: SearchRequest): {
+ *  of the query, its series (perType of each, else limit), and its people. */
+export function searchAsBeforeUrls(query: string, { limit, people, perType = limit }: SearchRequest): {
   movies: string;
   series: string;
   people: string;
 } {
-  const list = (type: string) => `/api/v1/items?${new URLSearchParams({ q: query, limit: String(limit), type })}`;
+  const list = (type: string) => `/api/v1/items?${new URLSearchParams({ q: query, limit: String(perType), type })}`;
   return {
     movies: list('movie'),
     series: list('series'),
@@ -62,10 +65,10 @@ export function searchAsBeforeUrls(query: string, { limit, people }: SearchReque
   };
 }
 
-/** The titles of a search as before: the films, then the series, each in the
- *  server's order, at most limit of them. */
-export function mergeAsBefore<T>(movies: T[], series: T[], limit: number): T[] {
-  return [...movies, ...series].slice(0, limit);
+/** The titles of a search as before: the films, then the series, each list
+ *  whole, in the server's order. */
+export function mergeAsBefore<T>(movies: T[], series: T[]): T[] {
+  return [...movies, ...series];
 }
 
 export interface SearchState {

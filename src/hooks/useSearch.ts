@@ -79,7 +79,7 @@ export function useSearch(q: string | undefined, request: SearchRequest) {
             return { people: [] as SearchPerson[] };
           }),
       ]);
-      return { items: mergeAsBefore(movies.items ?? [], series.items ?? [], request.limit), people: people.people ?? [] };
+      return { items: mergeAsBefore(movies.items ?? [], series.items ?? []), people: people.people ?? [] };
     };
     setLoading(true);
     setError(null); // a recovered outage must not still read as broken

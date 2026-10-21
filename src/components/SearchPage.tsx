@@ -21,7 +21,9 @@ interface SearchPageProps {
  * a "· N titles" credit count. Tapping a person opens the Person surface.
  */
 export function SearchPage({ query }: SearchPageProps) {
-  const search = useSearch(query, { limit: 60, people: 12 });
+  // Sixty titles ranked together; a server without the search is asked its
+  // thirty films and thirty series of the query, as before.
+  const search = useSearch(query, { limit: 60, people: 12, perType: 30 });
 
   const items = search.data?.items ?? [];
   const loading = search.loading;

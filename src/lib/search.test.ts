@@ -48,10 +48,11 @@ test('one search of films and series, the types the page shows', () => {
 test('a server without the search is searched as before', () => {
   assert.equal(searchIsMissing(404), true);
   for (const status of [200, 401, 500, 502, 503]) assert.equal(searchIsMissing(status), false);
-  const urls = searchAsBeforeUrls('a & b', { limit: 30, people: 12 });
+  const urls = searchAsBeforeUrls('a & b', { limit: 60, people: 12, perType: 30 });
   assert.equal(urls.movies, '/api/v1/items?q=a+%26+b&limit=30&type=movie');
   assert.equal(urls.series, '/api/v1/items?q=a+%26+b&limit=30&type=series');
   assert.equal(urls.people, '/api/v1/people?q=a+%26+b&limit=12');
-  assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1'], 10), ['m1', 'm2', 's1']);
-  assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1'], 2), ['m1', 'm2']);
+  assert.equal(searchAsBeforeUrls('x', { limit: 8, people: 0 }).movies, '/api/v1/items?q=x&limit=8&type=movie');
+  // Each list whole: many films never push the series out.
+  assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1']), ['m1', 'm2', 's1']);
 });
