@@ -6,6 +6,7 @@ import {
   downgradeStep,
   isLadderQuality,
   mediaFallback,
+  networkFallback,
   onTheFlyQuality,
   restorePosition,
   stallAction,
@@ -124,4 +125,41 @@ test('a packaged q on a title now served on the fly goes back to high; anything 
   assert.equal(onTheFlyQuality('packaged', 'auto'), null);
   assert.equal(onTheFlyQuality(null, 'v2'), null, 'not known yet');
   assert.equal(onTheFlyQuality(undefined, 'auto'), null);
+});
+
+const fragmentError = (s: Partial<Parameters<typeof networkFallback>[0]>) =>
+  networkFallback({ mode: 'remux', forcedTranscode: false, details: 'fragLoadError', status: 404, fatal: false, ...s });
+
+test('a direct stream whose fragment is answered 404 moves onto the ladder at once, as the stall watcher moves it', () => {
+  for (const mode of ['remux', 'passthrough'] as const) {
+    const a = fragmentError({ mode });
+    assert.equal(a.kind, 'transcode', mode);
+    if (a.kind !== 'transcode') continue;
+    assert.equal(a.quality, 'medium');
+    assert.match(a.label, /→ Medium/);
+    // The same move, the same notice: nothing new on the screen.
+    const stall = stallAction({ mode, quality: 'high', forcedTranscode: false, positionSec: 10, bufferedAheadSec: 0, loading: true, tries: 0 });
+    assert.equal(stall.kind === 'reload' ? stall.notice : null, a.notice);
+  }
+  assert.equal(fragmentError({ fatal: true }).kind, 'transcode');
+});
+
+test('a direct stream waits for hls.js\'s own retries on any other failure to load a fragment, then moves onto the ladder', () => {
+  for (const s of [{ status: 503 }, { status: 0 }, { status: null }, { status: 502, details: 'fragLoadTimeOut' }]) {
+    assert.equal(fragmentError(s).kind, 'keep', JSON.stringify(s));
+    assert.equal(fragmentError({ ...s, fatal: true }).kind, 'transcode', JSON.stringify(s));
+  }
+});
+
+test('a packaged title, a transcode, one already moved and a mode not known keep their handling of a fragment that failed', () => {
+  for (const s of [{ mode: 'packaged' as const }, { mode: 'transcode' as const }, { mode: null }, { forcedTranscode: true }]) {
+    assert.deepEqual(fragmentError(s), { kind: 'keep' }, JSON.stringify(s));
+    assert.deepEqual(fragmentError({ ...s, fatal: true, status: 503 }), { kind: 'keep' }, JSON.stringify(s));
+  }
+});
+
+test('only a fragment that failed to load moves a direct stream: a playlist or the master does not', () => {
+  for (const details of ['levelLoadError', 'manifestLoadError', 'audioTrackLoadError', 'keyLoadError', 'fragParsingError']) {
+    assert.deepEqual(fragmentError({ details, fatal: true }), { kind: 'keep' }, details);
+  }
 });

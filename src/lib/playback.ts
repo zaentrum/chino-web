@@ -125,9 +125,46 @@ export function stallAction(s: StallState): StallAction {
     at,
     quality: 'medium',
     forceTranscode: true,
-    notice: 'Unstable connection — switching to adaptive streaming',
+    notice: ONTO_LADDER_NOTICE,
     label: `→ Medium (auto, ${s.mode ?? 'unknown'} → transcode)`,
   };
+}
+
+/** The notice of a direct stream moved onto the transcode ladder. */
+export const ONTO_LADDER_NOTICE = 'Unstable connection — switching to adaptive streaming';
+
+export type NetworkFallback =
+  /** Onto the transcode ladder at Medium, at the position, with the notice
+   *  the stall watcher shows for the same move. */
+  | { kind: 'transcode'; quality: LadderQuality; notice: string; label: string }
+  /** As before: hls.js retries, then the player asks again or gives up. */
+  | { kind: 'keep' };
+
+/** The fragment errors of hls.js (ErrorDetails) that are a load that failed. */
+const FRAGMENT_LOAD_ERRORS: readonly string[] = ['fragLoadError', 'fragLoadTimeOut'];
+
+/**
+ * What to do when a fragment of the stream cannot be loaded. A direct stream
+ * (remux, passthrough: the server's copy of the file) whose fragment is
+ * answered 404 is one the server cannot make, which no retry changes: it
+ * moves onto the transcode ladder at once. Any other failure to load its
+ * fragments (a 5xx, a timeout, no answer) does so once hls.js's own retries
+ * have run out - the error turned fatal. The move is the stall watcher's:
+ * Medium, transcoding forced, the position kept. A packaged title, a
+ * transcode (already on the ladder) and a mode not known yet keep the
+ * handling they had.
+ */
+export function networkFallback(s: {
+  mode: PlayMode | null;
+  forcedTranscode: boolean;
+  details: string;
+  status: number | null;
+  fatal: boolean;
+}): NetworkFallback {
+  const direct = s.mode === 'remux' || s.mode === 'passthrough';
+  if (!direct || s.forcedTranscode || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
+  if (s.status !== 404 && !s.fatal) return { kind: 'keep' };
+  return { kind: 'transcode', quality: 'medium', notice: ONTO_LADDER_NOTICE, label: `→ Medium (auto, ${s.mode} → transcode)` };
 }
 
 /**

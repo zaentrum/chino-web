@@ -20,6 +20,7 @@ import {
   downgradeStep,
   isLadderQuality,
   mediaFallback,
+  networkFallback,
   onTheFlyQuality,
   restorePosition,
   stallAction,
@@ -1001,6 +1002,36 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         hls.destroy();
         markNotFound();
         return;
+      }
+      // A fragment of a direct stream that cannot be loaded - answered 404,
+      // which no retry changes, or failing still once hls.js's own retries
+      // ran out - moves the stream onto the transcode ladder at once (lib/
+      // playback.ts networkFallback), as the stall watcher would once the
+      // playhead stopped: Medium, transcoding forced, the position kept,
+      // the same notice. Asking for the same URL again only ended in
+      // "Stream unreachable".
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        const fallback = networkFallback({
+          mode: infoRef.current?.mode ?? null,
+          forcedTranscode: forceTranscodeRef.current,
+          details: String(data.details),
+          status,
+          fatal: !!data.fatal,
+        });
+        if (fallback.kind === 'transcode') {
+          // The position first: taking hls.js down detaches the media,
+          // which goes back to 0:00.
+          const at = v.currentTime;
+          keepPosition();
+          hls.destroy();
+          reportEvent('circuit_breaker', { kind: 'network_to_transcode', fatal: !!data.fatal, httpStatus: status, lastDetails: data.details });
+          setForceTranscode(true);
+          setStreamQuality(fallback.quality);
+          setQualityNotice(fallback.notice);
+          window.setTimeout(() => setQualityNotice(null), 5000);
+          recordSwitch(fallback.label, 'stall', `fragment ${status ?? 'not loaded'} @ ${fmt(at)}`);
+          return;
+        }
       }
       if (!data.fatal) {
         // bufferAppendError on init or fragment is a permanent failure
