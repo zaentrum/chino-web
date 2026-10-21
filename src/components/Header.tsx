@@ -6,8 +6,9 @@ import { FadeImage } from './FadeImage';
 import { Avatar } from './Avatar';
 import { NoticesBell } from './NoticesBell';
 import { toApp } from '../lib/basepath';
+import { searchIsMissing, searchUrl } from '../lib/search';
 
-// Per-suggestion shape from /api/v1/items?q=…. Picks the fields we
+// Per-suggestion shape from /api/v1/search?q=…. Picks the fields we
 // actually render so we don't carry the whole catalogue payload around.
 interface Suggestion {
   id: string;
@@ -64,10 +65,12 @@ export function Header() {
     return () => window.removeEventListener('mousedown', onClick);
   }, [open]);
 
-  // Debounced fetch of /v1/items?q=… as the user types. 200 ms is the
-  // Nielsen-style "feels instant" cutoff and matches what most other
-  // streamers use. Aborts in-flight requests when the query changes so
-  // a stale response can't overwrite the current suggestions.
+  // Debounced search as the user types: the best eight films and series,
+  // ranked together by the server (/api/v1/search, no people); a server
+  // older than the search is asked its list of the query, as before. 200 ms
+  // is the Nielsen-style "feels instant" cutoff. Aborts in-flight requests
+  // when the query changes so a stale response can't overwrite the current
+  // suggestions.
   const token = auth.user?.access_token;
   useEffect(() => {
     const trimmed = q.trim();
@@ -78,10 +81,9 @@ export function Header() {
     if (!token) return;
     const ctrl = new AbortController();
     const t = window.setTimeout(() => {
-      fetch(`/api/v1/items?q=${encodeURIComponent(trimmed)}&limit=8`, {
-        signal: ctrl.signal,
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const get = (url: string) => fetch(url, { signal: ctrl.signal, headers: { Authorization: `Bearer ${token}` } });
+      get(searchUrl(trimmed, { limit: 8, people: 0 }))
+        .then((r) => (searchIsMissing(r.status) ? get(`/api/v1/items?q=${encodeURIComponent(trimmed)}&limit=8`) : r))
         .then((r) => (r.ok ? r.json() : { items: [] }))
         .then((j) => {
           const list = (j.items ?? []) as Suggestion[];
