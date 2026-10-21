@@ -13,6 +13,7 @@
 // a direct stream (passthrough, remux) or the transcode ladder's rungs.
 
 import { hasCodec } from './caps.ts';
+import { AUTO } from './qualities.ts';
 
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
 
@@ -31,6 +32,49 @@ export const QUALITY_RUNGS: readonly LadderQuality[] = ['high', 'medium', 'low']
 
 export function isLadderQuality(q: Quality): q is LadderQuality {
   return (QUALITY_RUNGS as readonly string[]).includes(q);
+}
+
+/**
+ * The transcode ladder's rungs as the quality menu names them: the rung's
+ * name, and what it is - the picture's size, the source's for High. The
+ * menu says both ("Medium (720p)"), a notice of a switch the name.
+ */
+export const LADDER_MENU: Readonly<Record<LadderQuality, { label: string; detail: string }>> = {
+  high: { label: 'High', detail: 'source' },
+  medium: { label: 'Medium', detail: '720p' },
+  low: { label: 'Low', detail: '480p' },
+};
+
+/** A quality as the quality menu says it: a rung of the ladder with what it is, Auto, else a packaged rung's name (the menu has its label). */
+export function labelForQuality(q: Quality): string {
+  if (isLadderQuality(q)) return `${LADDER_MENU[q].label} (${LADDER_MENU[q].detail})`;
+  return q === AUTO ? 'Auto' : q;
+}
+
+/** Why a direct stream moved onto the transcode ladder: the connection could not keep up (a stall), or the original could not be streamed (an error). */
+export type LadderMove = 'stall' | 'error';
+
+/**
+ * The notice of a direct stream moved onto the transcode ladder at quality:
+ * the rung by the menu's name for it, and why.
+ */
+export function ladderNotice(quality: LadderQuality, why: LadderMove): string {
+  const name = LADDER_MENU[quality].label;
+  return why === 'stall'
+    ? `Switched to ${name} quality: the connection can't keep up with the original.`
+    : `Switched to ${name} quality: the original couldn't be streamed.`;
+}
+
+/**
+ * Takes the player off its source for another: the position first, kept by
+ * keep, then the teardown - hls.js's detaches the media element, which goes
+ * back to 0:00, so a position read after it is lost. Returns the position.
+ */
+export function leaveSource(media: { currentTime: number } | null | undefined, keep: (at: number) => void, teardown: () => void): number {
+  const at = media?.currentTime ?? 0;
+  keep(at);
+  teardown();
+  return at;
 }
 
 /**
@@ -125,17 +169,14 @@ export function stallAction(s: StallState): StallAction {
     at,
     quality: 'medium',
     forceTranscode: true,
-    notice: ONTO_LADDER_NOTICE,
+    notice: ladderNotice('medium', 'stall'),
     label: `→ Medium (auto, ${s.mode ?? 'unknown'} → transcode)`,
   };
 }
 
-/** The notice of a direct stream moved onto the transcode ladder. */
-export const ONTO_LADDER_NOTICE = 'Unstable connection — switching to adaptive streaming';
-
 export type NetworkFallback =
-  /** Onto the transcode ladder at Medium, at the position, with the notice
-   *  the stall watcher shows for the same move. */
+  /** Onto the transcode ladder at Medium, at the position, the notice saying
+   *  the original could not be streamed. */
   | { kind: 'transcode'; quality: LadderQuality; notice: string; label: string }
   /** As before: hls.js retries, then the player asks again or gives up. */
   | { kind: 'keep' };
@@ -149,10 +190,10 @@ const FRAGMENT_LOAD_ERRORS: readonly string[] = ['fragLoadError', 'fragLoadTimeO
  * answered 404 is one the server cannot make, which no retry changes: it
  * moves onto the transcode ladder at once. Any other failure to load its
  * fragments (a 5xx, a timeout, no answer) does so once hls.js's own retries
- * have run out - the error turned fatal. The move is the stall watcher's:
- * Medium, transcoding forced, the position kept. A packaged title, a
- * transcode (already on the ladder) and a mode not known yet keep the
- * handling they had.
+ * have run out - the error turned fatal. The move is the stall watcher's -
+ * Medium, transcoding forced, the position kept - its notice its own. A
+ * packaged title, a transcode (already on the ladder) and a mode not known
+ * yet keep the handling they had.
  */
 export function networkFallback(s: {
   mode: PlayMode | null;
@@ -164,7 +205,7 @@ export function networkFallback(s: {
   const direct = s.mode === 'remux' || s.mode === 'passthrough';
   if (!direct || s.forcedTranscode || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
   if (s.status !== 404 && !s.fatal) return { kind: 'keep' };
-  return { kind: 'transcode', quality: 'medium', notice: ONTO_LADDER_NOTICE, label: `→ Medium (auto, ${s.mode} → transcode)` };
+  return { kind: 'transcode', quality: 'medium', notice: ladderNotice('medium', 'error'), label: `→ Medium (auto, ${s.mode} → transcode)` };
 }
 
 /**

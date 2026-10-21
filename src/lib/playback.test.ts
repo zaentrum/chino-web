@@ -3,8 +3,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   IN_PLACE_TRIES,
+  LADDER_MENU,
+  QUALITY_RUNGS,
   downgradeStep,
   isLadderQuality,
+  labelForQuality,
+  ladderNotice,
+  leaveSource,
   mediaFallback,
   networkFallback,
   onTheFlyQuality,
@@ -130,18 +135,59 @@ test('a packaged q on a title now served on the fly goes back to high; anything 
 const fragmentError = (s: Partial<Parameters<typeof networkFallback>[0]>) =>
   networkFallback({ mode: 'remux', forcedTranscode: false, details: 'fragLoadError', status: 404, fatal: false, ...s });
 
-test('a direct stream whose fragment is answered 404 moves onto the ladder at once, as the stall watcher moves it', () => {
+test('a direct stream whose fragment is answered 404 moves onto the ladder at once, saying the original could not be streamed', () => {
   for (const mode of ['remux', 'passthrough'] as const) {
     const a = fragmentError({ mode });
     assert.equal(a.kind, 'transcode', mode);
     if (a.kind !== 'transcode') continue;
     assert.equal(a.quality, 'medium');
     assert.match(a.label, /→ Medium/);
-    // The same move, the same notice: nothing new on the screen.
-    const stall = stallAction({ mode, quality: 'high', forcedTranscode: false, positionSec: 10, bufferedAheadSec: 0, loading: true, tries: 0 });
-    assert.equal(stall.kind === 'reload' ? stall.notice : null, a.notice);
+    assert.equal(a.notice, "Switched to Medium quality: the original couldn't be streamed.");
   }
   assert.equal(fragmentError({ fatal: true }).kind, 'transcode');
+});
+
+test('each move onto the ladder says why: the connection, or the original', () => {
+  const stalled = stallAction(stall({ mode: 'remux' }));
+  assert.equal(stalled.kind === 'reload' ? stalled.notice : null, "Switched to Medium quality: the connection can't keep up with the original.");
+  const error = fragmentError({});
+  assert.equal(error.kind === 'transcode' ? error.notice : null, "Switched to Medium quality: the original couldn't be streamed.");
+  for (const q of QUALITY_RUNGS) {
+    for (const why of ['stall', 'error'] as const) {
+      const line = ladderNotice(q, why);
+      // A line in the viewer's words: no code, no cause it is not.
+      assert.doesNotMatch(line, /\d/, line);
+      assert.doesNotMatch(line, /unstable connection|adaptive streaming/i, line);
+      assert.match(line, /^Switched to [A-Z][a-z]+ quality: [a-z].*\.$/, line);
+    }
+  }
+});
+
+test('a notice names the rung as the quality menu does, from the menu\'s own entries', () => {
+  for (const q of QUALITY_RUNGS) {
+    const { label, detail } = LADDER_MENU[q];
+    assert.equal(labelForQuality(q), `${label} (${detail})`, q);
+    for (const why of ['stall', 'error'] as const) assert.ok(ladderNotice(q, why).startsWith(`Switched to ${label} quality:`), `${q} ${why}`);
+  }
+  // The menu as it was.
+  assert.deepEqual(QUALITY_RUNGS.map(labelForQuality), ['High (source)', 'Medium (720p)', 'Low (480p)']);
+  assert.equal(labelForQuality('auto'), 'Auto');
+  assert.equal(labelForQuality('v2'), 'v2');
+});
+
+test('a source left for another keeps the position from before its teardown, which sends the media back to 0:00', () => {
+  const media = { currentTime: 512.4 };
+  const calls: string[] = [];
+  let kept = -1;
+  const at = leaveSource(
+    media,
+    (t) => { kept = t; calls.push('keep'); },
+    () => { media.currentTime = 0; calls.push('teardown'); },
+  );
+  assert.equal(at, 512.4);
+  assert.equal(kept, 512.4);
+  assert.deepEqual(calls, ['keep', 'teardown']);
+  assert.equal(leaveSource(null, (t) => { kept = t; }, () => {}), 0);
 });
 
 test('a direct stream waits for hls.js\'s own retries on any other failure to load a fragment, then moves onto the ladder', () => {

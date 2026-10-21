@@ -19,6 +19,9 @@ import {
   QUALITY_RUNGS,
   downgradeStep,
   isLadderQuality,
+  labelForQuality,
+  ladderNotice,
+  leaveSource,
   mediaFallback,
   networkFallback,
   onTheFlyQuality,
@@ -1019,11 +1022,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           fatal: !!data.fatal,
         });
         if (fallback.kind === 'transcode') {
-          // The position first: taking hls.js down detaches the media,
-          // which goes back to 0:00.
-          const at = v.currentTime;
-          keepPosition();
-          hls.destroy();
+          const at = leaveSource(v, keepPosition, () => hls.destroy());
           reportEvent('circuit_breaker', { kind: 'network_to_transcode', fatal: !!data.fatal, httpStatus: status, lastDetails: data.details });
           setForceTranscode(true);
           setStreamQuality(fallback.quality);
@@ -1099,14 +1098,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           if (now - mediaRecoverFirst > 10_000) { mediaRecoverCount = 0; mediaRecoverFirst = now; }
           mediaRecoverCount += 1;
           if (mediaRecoverCount > 3) {
-            hls.destroy();
             const fallback = mediaFallback({
               mode: infoRef.current?.mode ?? null,
               forcedTranscode: forceTranscodeRef.current,
               caps: capsParamRef.current.split(','),
             });
+            // A fallback goes on where the viewer was: the position before
+            // the teardown, which sends the media back to 0:00.
+            if (fallback.kind === 'give-up') hls.destroy();
+            else leaveSource(v, keepPosition, () => hls.destroy());
             if (fallback.kind === 'drop-hevc') {
-              keepPosition();
               setHevcRefused(true);
               // Back to the start's q along with it: a rung picked may not
               // be served without HEVC, and should the title not be
@@ -1116,7 +1117,6 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               setActionLabel('This browser can\'t decode HEVC — switching…');
               reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
             } else if (fallback.kind === 'transcode') {
-              keepPosition();
               setForceTranscode(true);
               setStreamQuality('medium');
               setActionLabel('Codec issue — switching to transcode…');
@@ -1190,8 +1190,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // Stash the playhead for a source about to be rebuilt (pendingSeekRef).
   // At the very start a resume position may still be waiting there for
   // the first source; it stays.
-  const keepPosition = () => {
-    const t = videoRef.current?.currentTime ?? 0;
+  const keepPosition = (t = videoRef.current?.currentTime ?? 0) => {
     if (t > 0.5) pendingSeekRef.current = t;
   };
 
@@ -2993,7 +2992,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     if (onto) setForceTranscode(true);
     setStreamQuality(step.quality);
     setQualityNotice(
-      onto ? 'Slow connection — switching to adaptive streaming' : `Slow connection — switching to ${labelForQuality(step.quality)}`,
+      onto && isLadderQuality(step.quality)
+        ? ladderNotice(step.quality, 'stall')
+        : `Slow connection — switching to ${labelForQuality(step.quality)}`,
     );
     window.setTimeout(() => setQualityNotice(null), 4000);
   };
@@ -4757,17 +4758,6 @@ function PlaybackInfoDialog({
       </div>
     </div>
   );
-}
-
-function labelForQuality(q: Quality): string {
-  switch (q) {
-    case 'high':   return 'High (source)';
-    case 'medium': return 'Medium (720p)';
-    case 'low':    return 'Low (480p)';
-    case AUTO:     return 'Auto';
-    // A packaged rung's name; the menu has its label.
-    default:       return q;
-  }
 }
 
 // Friendly display string for a media segment. katalog stores `label` as
