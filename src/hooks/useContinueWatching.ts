@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
 import { useCatalogGen } from './useCatalogEvents';
+import { dismissProgress } from '../lib/continueWatching';
 
 export interface ContinueWatchingEntry extends KatalogItem {
   position_sec: number;
@@ -27,10 +28,11 @@ export interface UseContinueWatching {
   items: ContinueWatchingEntry[] | null;
   /**
    * Remove an item from Continue Watching by stamping its saved
-   * position at the end of the timeline. The server's ListContinueWatching
-   * SQL treats `position_sec >= duration_sec - 60` as "finished" — movies
-   * are dropped from the feed, episodes are replaced by the series'
-   * next-up card. No new schema/flag introduced; we ride on the existing
+   * position at the end of the timeline, as a dismiss (lib/continueWatching):
+   * chino-api's feed drops a title finished by its one rule (its last 5 %
+   * or 2 minutes) — movies are dropped, episodes are replaced by the
+   * series' next-up card — and leaves a dismissed one unwatched, where it
+   * marks a title saved at its end watched otherwise. We ride on the
    * /progress endpoint the player uses.
    */
   dismiss: (id: string) => void;
@@ -96,17 +98,15 @@ export function useContinueWatching(opts?: { enabled?: boolean }): UseContinueWa
       setItems((prev) => (prev ? prev.filter((it) => it.id !== id) : prev));
       const target = items?.find((it) => it.id === id);
       // duration_sec from the server is the authoritative timeline length;
-      // pushing exactly that satisfies the >= duration - 60 finished test.
-      // Fallback to 24h when the row never recorded a duration (live items,
-      // mis-scanned files) — still well past the finished cutoff.
-      const dur = target?.duration_sec && target.duration_sec > 0 ? target.duration_sec : 86400;
+      // its end is finished by the server's rule. A day where the row never
+      // recorded a duration (live items, mis-scanned files).
       fetch(`/api/v1/items/${encodeURIComponent(id)}/progress`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ position_sec: dur, duration_sec: dur }),
+        body: JSON.stringify(dismissProgress(target?.duration_sec)),
         keepalive: true,
       }).catch(() => undefined);
     },
