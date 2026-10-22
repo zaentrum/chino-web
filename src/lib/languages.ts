@@ -228,8 +228,9 @@ export function saysForced(title: string | undefined | null): boolean {
 }
 
 // A number a server gave a title to keep it unique in its group ("English
-// (2)"); the menu shows what reads the same once.
-const TRAILING_NUMBER = /\s*\(\d+\)$/;
+// (2)"); the menu shows what reads the same once. Not the code of one of
+// the world's regions: "Español (419)" is Latin America's.
+const TRAILING_NUMBER = /\s*\((?!(?:419|150)\))\d+\)$/;
 const SEPARATOR_RUN = /\s*([·\-–—:,|/])(\s*[·\-–—:,|/])+\s*/g;
 const SEPARATOR_AFTER_OPEN = /([(\[])\s*[·\-–—:,|/]+\s*/g;
 const SEPARATOR_BEFORE_CLOSE = /\s*[·\-–—:,|/]+\s*([)\]])/g;
@@ -384,6 +385,31 @@ function dialectsOf(base: string): Map<string, string> {
   return dialects;
 }
 
+const REGION_CODES_OF = new Map<string, Set<string>>();
+
+/** The regions the language `base` (normalizeLang) is a region's own in, by
+ *  their codes: where it is the language the region speaks most (Intl's
+ *  likely subtags: "BR" and "PT" for "pt", "CH" and "AT" for "de"), and
+ *  where Intl names a regional form of it ("CA" for "fr": "Canadian
+ *  French"). A code in brackets after the language names one of these
+ *  ("Português (BR)", "Português (PT)"); other capitals there are a word
+ *  ("English (BD)"), or the language's own code where it is none of its
+ *  regions ("Svenska (SV)"). Made once per language, when a title asks. */
+function regionCodesOf(base: string): Set<string> {
+  const cached = REGION_CODES_OF.get(base);
+  if (cached) return cached;
+  const codes = new Set(dialectsOf(base).values());
+  for (const region of REGION_CODES) {
+    try {
+      if (normalizeLang(new Intl.Locale(`und-${region}`).maximize().language) === base) codes.add(region);
+    } catch {
+      /* no Intl.Locale, or no likely subtags */
+    }
+  }
+  REGION_CODES_OF.set(base, codes);
+  return codes;
+}
+
 // The locales a language's name is looked up in: the languages a library
 // is likely to carry, each naming every other.
 const NAME_LOCALES = [...new Set([...Object.values(T_TO_1), 'fil', 'zh-Hans', 'zh-Hant'])];
@@ -417,12 +443,30 @@ function languageNames(code: unknown): Set<string> {
   return names;
 }
 
+/** The script and the region a title names that is only a code of the
+ *  track's own language ("BR" of "PT-BR", "Hant" of "zh-Hant" on "chi"),
+ *  each '' where it names none ("eng" on English); null for a title that
+ *  is no code, or one of another language or of none. */
+function codeSays(title: string, lang: string | undefined): { script: string; region: string } | null {
+  const base = normalizeLang(lang);
+  if (!base || !CODE_LIKE.test(title) || normalizeLang(title) !== base) return null;
+  const tag = namedTag(languageTag(title));
+  return { script: scriptOf(tag), region: regionOf(tag) };
+}
+
 /** Whether a title only names the track's language again, in any language
  *  ("Deutsch", "中文", "English", "eng" on a German, Chinese, English
- *  track), or names no language as a code ("und"). */
+ *  track) - as a code, with no script or region the track's tag does not
+ *  name ("pt-BR" on "pt-BR", not on "por" or "pt-PT") - or names no
+ *  language as a code ("und"). */
 function namesLanguage(title: string, lang: string | undefined): boolean {
   const t = title.trim();
   if (!t) return false;
+  const said = codeSays(t, lang);
+  if (said) {
+    const tag = namedTag(languageTag(lang));
+    return (!said.script || said.script === scriptOf(tag)) && (!said.region || said.region === regionOf(tag));
+  }
   return sameLanguageCode(t, lang) || languageNames(lang).has(t.toLocaleLowerCase());
 }
 
@@ -431,29 +475,42 @@ function namesLanguage(title: string, lang: string | undefined): boolean {
 const BRACKETED = /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）/g;
 const MASKED_BRACKET = /\u0001(\d+)\u0002/g;
 
-/** What a piece of a title says of the track's language. */
-type Says = { language: true } | { script: string } | { region: string } | { words: string };
+// A region's code as a title gives it in brackets: two capitals, or the
+// three digits of one of the world's regions ("419").
+const BRACKETED_REGION = /^([A-Z]{2}|\d{3})$/;
+
+/** What a piece of a title says of the track's language: that it is the
+ *  language, or its script and region - each '' where it names none - or
+ *  words to say instead. */
+type Says = { language: true } | { script: string; region: string } | { words: string };
 
 /** What a piece of a title - a part, a bracket, words of one - says of the
  *  track's language: that it is the language ("Deutsch", "中文"), its script
- *  ("简体"), its region ("Latinoamérica"), a Chinese variety in the word
- *  list's words ("粵語": "Cantonese"); null for none of these. Words inside a
- *  longer piece name the language by a name, never by a code: "und" is a
- *  German word. */
-function pieceSays(text: string, code: string | undefined, whole: boolean): Says | null {
+ *  ("简体"), its region ("Latinoamérica"), either or both as a code of the
+ *  language ("PT-BR", "zh-Hant-TW"), a Chinese variety in the word list's
+ *  words ("粵語": "Cantonese"); null for none of these. In brackets, a
+ *  region's code says the region where it is one of the language's
+ *  ("Português (BR)": regionCodesOf). Words inside a longer piece name the
+ *  language by a name, never by a code: "und" is a German word. */
+function pieceSays(text: string, code: string | undefined, whole: boolean, bracketed = false): Says | null {
   const t = text.trim();
   if (!t) return null;
   const lower = t.toLocaleLowerCase();
-  if (whole ? namesLanguage(t, code) : languageNames(code).has(lower)) return { language: true };
   const base = normalizeLang(code);
+  if (whole && base) {
+    if (bracketed && BRACKETED_REGION.test(t) && regionCodesOf(base).has(t)) return { script: '', region: t };
+    const said = codeSays(t, code);
+    if (said && (said.script || said.region)) return said;
+  }
+  if (whole ? namesLanguage(t, code) : languageNames(code).has(lower)) return { language: true };
   if (base === 'zh') {
     const script = CHINESE_SCRIPTS[lower];
-    if (script) return { script };
+    if (script) return { script, region: '' };
     const words = CHINESE_VARIETIES[t];
     if (words) return { words };
   }
   const region = base ? regionsOf(base).get(folded(t)) ?? dialectsOf(base).get(folded(t)) : undefined;
-  return region ? { region } : null;
+  return region ? { script: '', region } : null;
 }
 
 /**
@@ -461,10 +518,10 @@ function pieceSays(text: string, code: string | undefined, whole: boolean): Says
  * names the language again, and the script and the region it names that
  * the tag agrees with. A part, or a bracket, that is the language's name,
  * script or region goes whole ("Chinese (Simplified) · 中文", "Español
- * (Latinoamérica)"); inside one with other words only the language's names
- * go ("Deutsch Kommentar" is "Kommentar") - not the label's own name, which
- * says it once ("English Commentary") - and a region stays a word. Nothing
- * read, the title as it was.
+ * (Latinoamérica)", "PT-BR", "Português (BR)"); inside one with other
+ * words only the language's names go ("Deutsch Kommentar" is "Kommentar")
+ * - not the label's own name, which says it once ("English Commentary") -
+ * and a region stays a word. Nothing read, the title as it was.
  */
 function readParts(title: string, code: string | undefined): { title: string; script: string; region: string } {
   const tag = namedTag(languageTag(code));
@@ -474,26 +531,26 @@ function readParts(title: string, code: string | undefined): { title: string; sc
   let changed = false;
   const agrees = (kind: 'script' | 'region', value: string) =>
     (!own[kind] || own[kind] === value) && (!found[kind] || found[kind] === value);
-  // What is left of a piece; null for nothing.
-  const readPiece = (text: string): string | null => {
+  // Takes the script and the region a piece names, where both agree with
+  // the tag's and with what the title named before.
+  const takes = (says: { script: string; region: string }): boolean => {
+    if ((says.script && !agrees('script', says.script)) || (says.region && !agrees('region', says.region))) return false;
+    if (says.script) found.script = says.script;
+    if (says.region) found.region = says.region;
+    changed = true;
+    return true;
+  };
+  // What is left of a piece, a part or a bracket; null for nothing.
+  const readPiece = (text: string, bracketed: boolean): string | null => {
     const t = text.trim();
     if (!t) return null;
-    const whole = pieceSays(t, code, true);
+    const whole = pieceSays(t, code, true, bracketed);
     if (whole) {
       if ('language' in whole) {
         changed = true;
         return null;
       }
-      if ('script' in whole && agrees('script', whole.script)) {
-        found.script = whole.script;
-        changed = true;
-        return null;
-      }
-      if ('region' in whole && agrees('region', whole.region)) {
-        found.region = whole.region;
-        changed = true;
-        return null;
-      }
+      if ('script' in whole && takes(whole)) return null;
       if ('words' in whole) {
         changed = true;
         return whole.words;
@@ -525,16 +582,13 @@ function readParts(title: string, code: string | undefined): { title: string; sc
       else if ('language' in says) {
         if (plain && run.toLocaleLowerCase() === display) kept.push(run);
         else changed = true;
-      } else if ('script' in says && agrees('script', says.script)) {
-        found.script = says.script;
-        changed = true;
-      } else if ('region' in says && !plain && agrees('region', says.region)) {
-        found.region = says.region;
-        changed = true;
       } else if ('words' in says) {
         kept.push(says.words);
         changed = true;
-      } else kept.push(run);
+      } else if ((says.region && plain) || !takes(says)) {
+        // A region among other words stays a word; a script goes, where it agrees.
+        kept.push(run);
+      }
     }
     return kept.length ? kept.join(' ') : null;
   };
@@ -551,7 +605,9 @@ function readParts(title: string, code: string | undefined): { title: string; sc
       inner.push(brackets[Number(i)]);
       return ' ';
     });
-    const pieces = [readPiece(main.replace(/\s+/g, ' ')), ...inner.map(readPiece)].filter((p): p is string => p !== null);
+    const pieces = [readPiece(main.replace(/\s+/g, ' '), false), ...inner.map((b) => readPiece(b, true))].filter(
+      (p): p is string => p !== null,
+    );
     if (pieces.length) kept.push([pieces[0], ...pieces.slice(1).map((p) => `(${p})`)].join(' '));
   }
   return { title: changed ? kept.join(' · ') : title, ...found };

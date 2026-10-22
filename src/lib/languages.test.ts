@@ -264,6 +264,64 @@ test('a language\'s own name before a region: the region in brackets after the l
   assert.equal(subtitleLabel({ lang: 'spa', title: 'Español (Latinoamérica) (Forced)' }), 'Spanish (Latin America) · foreign-language parts only');
 });
 
+test('a title that is a code of the track\'s language: its region or script stays, in the word list\'s form', () => {
+  const cases: [string, string, string, string][] = [
+    ['por', 'PT-BR', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'PT-PT', 'Portuguese (Portugal)', 'pt-PT'],
+    ['por', 'pt_BR', 'Portuguese (Brazil)', 'pt-BR'],
+    ['chi', 'zh-Hant', 'Chinese (Traditional)', 'zh-Hant'],
+    ['chi', 'zh-Hans', 'Chinese (Simplified)', 'zh-Hans'],
+    ['chi', 'zh-Hant-TW', 'Chinese (Traditional, Taiwan)', 'zh-Hant-TW'],
+    ['spa', 'es-419', 'Spanish (Latin America)', 'es-419'],
+    ['spa', 'es-ES', 'Spanish (Spain)', 'es-ES'],
+    ['eng', 'en-US', 'English (United States)', 'en-US'],
+    ['eng', 'en-GB', 'English (United Kingdom)', 'en-GB'],
+    // In brackets after the language's name, and with the kind.
+    ['por', 'Português (PT-BR)', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'PT-BR (Forced)', 'Portuguese (Brazil) · foreign-language parts only', 'pt-BR'],
+    // The tag's own again says nothing more; a code alone is the language.
+    ['pt-BR', 'PT-BR', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'pt', 'Portuguese', 'pt'],
+    ['eng', 'eng', 'English', 'en'],
+    ['eng', 'en-US-x-custom', 'English (United States)', 'en-US'],
+  ];
+  for (const [lang, title, label, tag] of cases) {
+    assert.equal(subtitleLabel({ lang, title }), label, title);
+    assert.equal(subtitleLanguage({ lang, title }), tag, title);
+  }
+  // Another region or script than the tag's stays, as the title says it.
+  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'PT-BR' }), 'Portuguese (Portugal) · PT-BR');
+  assert.equal(subtitleLabel({ lang: 'zh-Hant', title: 'zh-Hans' }), 'Chinese (Traditional) · zh-Hans');
+  // Another language's code is something else.
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'de' }), 'English · de');
+});
+
+test('a region\'s code in brackets after the language: the region, where it is one of the language\'s', () => {
+  const cases: [string, string, string, string][] = [
+    ['por', 'Português (BR)', 'Portuguese (Brazil)', 'pt-BR'],
+    // The language's own code, and a region of it: the region.
+    ['por', 'Português (PT)', 'Portuguese (Portugal)', 'pt-PT'],
+    ['spa', 'Español (419)', 'Spanish (Latin America)', 'es-419'],
+    ['spa', 'Español [MX]', 'Spanish (Mexico)', 'es-MX'],
+    ['fre', 'Français (CA)', 'French (Canada)', 'fr-CA'],
+    ['ger', 'Deutsch (CH)', 'German (Switzerland)', 'de-CH'],
+    ['chi', '中文（TW）', 'Chinese (Taiwan)', 'zh-TW'],
+    ['spa', 'Español (419) (Forced)', 'Spanish (Latin America) · foreign-language parts only', 'es-419'],
+  ];
+  for (const [lang, title, label, tag] of cases) {
+    assert.equal(subtitleLabel({ lang, title }), label, title);
+    assert.equal(subtitleLanguage({ lang, title }), tag, title);
+  }
+  // The language's own code where it is none of its regions: the language
+  // (El Salvador, Argentina and Canada speak other languages most).
+  assert.equal(subtitleLabel({ lang: 'swe', title: 'Svenska (SV)' }), 'Swedish');
+  assert.equal(subtitleLabel({ lang: 'ara', title: 'Arabic (AR)' }), 'Arabic');
+  assert.equal(subtitleLabel({ lang: 'cat', title: 'Català (CA)' }), 'Catalan');
+  // A code in lower case is a language's; other capitals are a word.
+  assert.equal(subtitleLabel({ lang: 'por', title: 'Português (pt)' }), 'Portuguese');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English (BD)' }), 'English · BD');
+});
+
 test('what else a title says stays before the kind', () => {
   assert.deepEqual(
     subtitleLabels([

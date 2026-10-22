@@ -301,6 +301,34 @@ test('a language\'s region in a title lists the track with that region', () => {
   assert.deepEqual(m.top.map((e) => e.tag), ['es-ES', 'es-419']);
 });
 
+test('titles that are codes with a region or a script: two regions, two scripts are two', () => {
+  const pairs: [string, string, string, string[]][] = [
+    ['por', 'PT-BR', 'PT-PT', ['Portuguese (Brazil)', 'Portuguese (Portugal)']],
+    ['chi', 'zh-Hant', 'zh-Hans', ['Chinese (Traditional)', 'Chinese (Simplified)']],
+    ['spa', 'es-419', 'es-ES', ['Spanish (Latin America)', 'Spanish (Spain)']],
+    ['por', 'Português (BR)', 'Português (PT)', ['Portuguese (Brazil)', 'Portuguese (Portugal)']],
+  ];
+  for (const [lang, first, second, expected] of pairs) {
+    const tracks: SubtitleSource[] = [
+      { id: 'emb-2', lang, title: first, embedded: true },
+      { id: 'emb-3', lang, title: second, embedded: true },
+    ];
+    // Without the server's languages, in the file's order...
+    const all = menuEntries(menu(tracks, { serverLanguages: [] }));
+    assert.deepEqual(labels(all), expected, `${first}, ${second}`);
+    assert.deepEqual(all.map((e) => e.id), ['emb-2', 'emb-3']);
+    // ...and with them, both still there to pick.
+    assert.deepEqual(menuEntries(menu(tracks)).map((e) => e.id).sort(), ['emb-2', 'emb-3']);
+  }
+  // The same region twice, as a code and by its name, is one.
+  const twice = menu([
+    { id: 'emb-2', lang: 'por', title: 'PT-BR', embedded: true },
+    { id: 'side-pt', lang: 'pt-BR' },
+  ]);
+  assert.deepEqual(menuEntries(twice).map((e) => [e.id, e.label]), [['emb-2', 'Portuguese (Brazil)']]);
+});
+
+
 test('a language takes its regions and scripts only where they agree', () => {
   assert.equal(sameLanguage('en', 'en-GB'), true);
   assert.equal(sameLanguage('eng', 'en'), true);
