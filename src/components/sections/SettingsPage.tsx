@@ -74,7 +74,7 @@ export function SettingsPage() {
 
       <Section
         title="Subtitles"
-        subtitle="Subtitles stay off while a title's audio is in this language or your audio language. When it is in another, they come on in this language. Subtitles for foreign-language parts only come on by themselves in the language you listen in, with Off too. The player's subtitle menu changes them for the current playback only."
+        subtitle="Subtitles stay off while a title's audio is in this language or your audio language. When it is in another, they come on in this language where the title has them. Otherwise, and when this is Off, subtitles for foreign-language parts only, in the language you listen in, come on by themselves. The player's subtitle menu changes them for the current playback only."
       >
         <ChipRow
           label="Preferred language"
