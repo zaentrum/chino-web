@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Bookmark, BookmarkCheck, Maximize } from 'lucide-react';
+import { Bookmark, Maximize } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../../hooks/useStreamToken';
 import { useDeviceCaps } from '../../hooks/useDeviceCaps';
 import { useItem } from '../../hooks/useItem';
 import { useWatchlist } from '../../hooks/useUserFlags';
+import { LISTS_CHANGED } from '../../hooks/useWatchlists';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { episodeCode } from '../../lib/episodeFiles';
+import { ACTION_FOCUS, ICON_BUTTON, OFF_LOOK, actionLook, addToListName, watchlistPress } from '../../lib/titleActions';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
 import { AMBIENT_COLUMNS, AMBIENT_ROWS, followClip } from '../../lib/zapAmbient';
 import type { KatalogItem } from '../../hooks/useItems';
@@ -466,10 +468,13 @@ export function ZapCard({
     return followClip(v, c, () => setAmbientLit(true));
   }, [item.id, active]);
 
+  // Save is the Watchlist alone (lib/titleActions.ts watchlistPress), as
+  // add to list's main part is: it never touches another list.
   const inWatchlist = watchlist.has(item.id);
   const toggleSave = () => {
-    void watchlist.toggle(item.id, !inWatchlist);
-    onSaveToggle({ itemId: item.id, saved: !inWatchlist, features });
+    const { present } = watchlistPress(inWatchlist);
+    void watchlist.toggle(item.id, present).then(() => window.dispatchEvent(new CustomEvent(LISTS_CHANGED)));
+    onSaveToggle({ itemId: item.id, saved: present, features });
   };
 
   const expand = () => {
@@ -595,26 +600,27 @@ export function ZapCard({
           </div>
         </div>
         <div className="shrink-0 flex flex-col gap-3.5">
+          {/* On solid fills, never see-through over the picture: the
+              Watchlist's bookmark outlined on the plain surface, or dark
+              on blue - one icon and one colour for the Watchlist, as on a
+              title's page. */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               toggleSave();
             }}
-            className={`w-12 h-12 bg-white/[0.12] hover:bg-white/20 flex items-center justify-center ${
-              inWatchlist ? 'text-chino-accent' : 'text-white'
-            }`}
-            title={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
-            aria-label={inWatchlist ? 'Remove from watchlist' : 'Add to watchlist'}
-            aria-pressed={inWatchlist}
+            className={`${ICON_BUTTON} ${actionLook('watchlist', inWatchlist)} ${ACTION_FOCUS} flex items-center justify-center`}
+            title={addToListName(inWatchlist)}
+            aria-label={addToListName(inWatchlist)}
           >
-            {inWatchlist ? <BookmarkCheck className="w-6 h-6" /> : <Bookmark className="w-6 h-6" />}
+            <Bookmark aria-hidden className={`w-6 h-6 ${inWatchlist ? 'fill-current' : ''}`} />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
               expand();
             }}
-            className="w-12 h-12 bg-white/[0.12] hover:bg-white/20 flex items-center justify-center text-white"
+            className={`${ICON_BUTTON} ${OFF_LOOK} ${ACTION_FOCUS} flex items-center justify-center`}
             title="Watch"
             aria-label="Watch"
           >

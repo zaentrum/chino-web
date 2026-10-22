@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, Eye, Play, Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Season } from '../hooks/useSeriesEpisodes';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { toApp } from '../lib/basepath';
 import { entryIds, episodeCode, fileEntries, type FileEntry } from '../lib/episodeFiles';
-import { AddToListPicker } from './AddToListPicker';
+import { ACTION_GAP } from '../lib/titleActions';
 import { FadeImage } from './FadeImage';
+import { AddToListControl, WatchedToggle } from './TitleActions';
 
 // Saved playback position for one episode, cross-referenced by the
 // caller from the continue-watching feed (the episodes payload itself
@@ -190,11 +191,8 @@ function EpisodeRow({
   // identity changes (e.g. season swap reuses the same row position).
   const toggleWatched = useWatchedToggle();
   const [watchedOverride, setWatchedOverride] = useState<boolean | null>(null);
+  // The list picker open lifts the actions line over the rows below it.
   const [pickerOpen, setPickerOpen] = useState(false);
-  // Handed to the picker as ignoreRef so a mousedown on the open "+"
-  // trigger doesn't count as outside-click: the picker would close on
-  // mousedown and the trigger's click toggle would instantly reopen it.
-  const pickerTriggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     setWatchedOverride(null);
     setPickerOpen(false);
@@ -217,28 +215,28 @@ function EpisodeRow({
 
   const open = () => window.location.assign(toApp(`/player/${encodeURIComponent(ep.id)}`));
 
-  // The row itself is not interactive: it holds three buttons side by side
+  // The row itself is not interactive: it holds its buttons side by side
   // and none inside another. Playing is the button around the episode's
   // code and title, stretched over the whole row by its ::after (so a tap
-  // anywhere on the row still plays); the watched and add-to-list buttons
-  // sit above that layer (z-10), the open picker above them all.
+  // anywhere on the row still plays); the row's actions line sits above
+  // that layer (z-10), the open picker above the rows below it. Nothing is
+  // drawn over the still (docs/chino, title actions: nothing on artwork):
+  // watched and add to list are in the actions line, at the title page's
+  // 48 px, as one look everywhere.
   const row = (
     <div
       ref={rowRef}
-      className={`relative flex items-stretch gap-4 text-left hover:bg-chino-surface-2 focus-within:bg-chino-surface-2 transition-colors group ${
+      // A row lit by the pointer or the focus goes darker, to bg-2: lit to
+      // surface-2 it took the colour of its actions line's off buttons,
+      // and they went into it.
+      className={`relative flex items-stretch gap-4 text-left hover:bg-chino-bg-2 focus-within:bg-chino-bg-2 transition-colors group ${
         several ? 'px-3 py-3 border border-chino-accent/50 bg-chino-bg/60' : 'w-full px-4 py-3'
-      } ${focused ? 'bg-chino-surface-2 ring-1 ring-inset ring-chino-accent' : ''}`}
+      } ${focused ? 'bg-chino-bg-2 ring-1 ring-inset ring-chino-accent' : ''}`}
     >
-      {/* overflow lifts to visible while the add-to-list picker is open
-          so the popover isn't clipped to the thumbnail (160 px, 128 on a
-          phone, as the app's row) — same idiom as MediaCard. The still
-          keeps its 16:9 at the row's top where the text beside it is the
-          taller (a title on two lines): stretched to it, it was cropped. */}
-      <div
-        className={`relative w-32 sm:w-40 aspect-video self-start rounded bg-chino-bg shrink-0 ${
-          pickerOpen ? 'overflow-visible z-40' : 'overflow-hidden'
-        }`}
-      >
+      {/* The still (160 px, 128 on a phone, as the app's row) keeps its
+          16:9 at the row's top where the text beside it is the taller (a
+          title on two lines): stretched to it, it was cropped. */}
+      <div className="relative w-32 sm:w-40 aspect-video self-start rounded bg-chino-bg shrink-0 overflow-hidden">
         <FadeImage
           src={ep.backdrop_url || ep.poster_url}
           alt=""
@@ -254,69 +252,6 @@ function EpisodeRow({
             if (ep.poster_url && img.src !== ep.poster_url) img.src = ep.poster_url;
           }}
         />
-
-        {/* Watched toggle. Always rendered so a watched episode keeps a
-            visible green check; on unwatched rows it stays hidden until
-            hover (or focus, for keyboard users). It sits above the row's
-            stretched play button, so a click toggles instead of opening
-            the player. */}
-        <button
-          type="button"
-          onClick={() => {
-            const next = !watched;
-            setWatchedOverride(next);
-            void toggleWatched(ep.id, next);
-          }}
-          className={`absolute z-10 top-1.5 right-1.5 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity ${
-            watched
-              ? 'bg-chino-green/95 hover:bg-chino-green opacity-100'
-              : 'bg-black/60 hover:bg-black/80 opacity-0 group-hover:opacity-100 focus:opacity-100'
-          }`}
-          title={watched ? 'Mark as unwatched' : 'Mark as watched'}
-          aria-pressed={watched}
-          aria-label={watched ? 'Mark episode as unwatched' : 'Mark episode as watched'}
-        >
-          {watched ? (
-            <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-          ) : (
-            <Eye className="w-3.5 h-3.5 text-white" />
-          )}
-        </button>
-
-        {/* Add-to-list. Same overlay idiom as the watched toggle: hidden
-            until hover/focus (pinned visible while its picker is open),
-            above the stretched play button so the click doesn't open the
-            player. Sits left of the watched toggle. */}
-        <button
-          ref={pickerTriggerRef}
-          type="button"
-          onClick={() => setPickerOpen((v) => !v)}
-          className={`absolute z-10 top-1.5 right-9 w-6 h-6 flex items-center justify-center shadow-md ring-1 ring-black/30 transition-opacity bg-black/60 hover:bg-black/80 ${
-            pickerOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
-          }`}
-          title="Add to list…"
-          aria-haspopup="menu"
-          aria-expanded={pickerOpen}
-          aria-label="Add episode to a list"
-        >
-          <Plus className="w-3.5 h-3.5 text-white" />
-        </button>
-        {pickerOpen ? (
-          // alignX="left": the anchor is the 160px thumbnail, so a
-          // right-anchored 256px popover would stick 96px out past the
-          // thumbnail's LEFT edge — off-viewport below ~1260px wide.
-          // Left-anchoring opens it rightward over the text column.
-          <AddToListPicker
-            itemId={ep.id}
-            alignX="left"
-            ignoreRef={pickerTriggerRef}
-            onClose={() => setPickerOpen(false)}
-          />
-        ) : null}
-
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center pointer-events-none">
-          <Play className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 fill-white transition-opacity" />
-        </div>
 
         {/* In-progress state cross-referenced from the continue-watching
             feed — thin accent bar across the thumbnail bottom, same as
@@ -402,6 +337,23 @@ function EpisodeRow({
         {!several && ep.description ? (
           <p className="text-chino-muted text-sm mt-1 line-clamp-2">{ep.description}</p>
         ) : null}
+        {/* The row's actions line: watched, then add to list - the file's,
+            as everything of the row is. */}
+        <div
+          role="group"
+          aria-label={`${epLabel} ${rowTitle}`.trim()}
+          className={`relative mt-3 flex flex-wrap ${ACTION_GAP} ${pickerOpen ? 'z-40' : 'z-10'}`}
+        >
+          <WatchedToggle
+            watched={watched}
+            onToggle={() => {
+              const next = !watched;
+              setWatchedOverride(next);
+              void toggleWatched(ep.id, next);
+            }}
+          />
+          <AddToListControl key={ep.id} itemId={ep.id} alignX="left" onPickerOpenChange={setPickerOpen} />
+        </div>
       </div>
     </div>
   );

@@ -33,14 +33,15 @@ interface AddToListPickerProps {
 }
 
 /**
- * Small popover listing the user's watchlists with a checkbox each
- * (checked = item is in that list). Toggling a row optimistically flips
+ * Small popover listing the user's lists with a check each (checked =
+ * the title is in that list). Toggling a row optimistically flips
  * the membership and calls PUT/DELETE items. An inline "+ New list…" row
  * creates a list then adds the item to it.
  *
- * Shared by the DetailPage add-to-list control and the MediaCard hover
- * overlay. The caller owns open/close state and positions this absolutely
- * relative to the trigger button.
+ * What add to list's "⌄" opens (TitleActions.tsx AddToListControl), on a
+ * title's page and an episode row: the one place a title leaves a list
+ * other than the Watchlist. The caller owns open/close state and positions
+ * this absolutely relative to the trigger button.
  */
 export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'right', ignoreRef }: AddToListPickerProps) {
   const auth = useAuth();
@@ -143,12 +144,15 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
                   role="menuitemcheckbox"
                   aria-checked={checked}
                 >
+                  {/* A check against each list that holds the title: dark on
+                      the Watchlist's blue (green is watched). */}
                   <span
-                    className={`flex items-center justify-center w-5 h-5 rounded border shrink-0 ${
-                      checked ? 'bg-chino-green border-chino-green' : 'border-chino-border bg-transparent'
+                    aria-hidden
+                    className={`flex items-center justify-center w-5 h-5 border shrink-0 ${
+                      checked ? 'bg-chino-accent border-chino-accent text-chino-bg' : 'border-chino-border-2 bg-transparent'
                     }`}
                   >
-                    {checked ? <Check className="w-3.5 h-3.5 text-white stroke-[3]" /> : null}
+                    {checked ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
                   </span>
                   <span className="truncate flex-1">{list.name}</span>
                   {list.isDefault ? (
@@ -180,7 +184,7 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
               <button
                 onClick={() => void submitNew()}
                 disabled={busy}
-                className="px-3 py-1 rounded bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-1"
+                className="px-3 py-1 bg-chino-accent hover:brightness-110 text-chino-bg text-sm font-medium disabled:opacity-50 flex items-center gap-1"
               >
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 Create

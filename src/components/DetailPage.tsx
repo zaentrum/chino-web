@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { ArrowLeft, Check, ChevronDown, Clapperboard, Eye, Heart, House, Loader2, Play, Plus, Star, Youtube } from 'lucide-react';
-import { useLikes, useWatchlist } from '../hooks/useUserFlags';
-import { useMemberships } from '../hooks/useWatchlists';
+import { ArrowLeft, Clapperboard, House, Loader2, Play, Star, Youtube } from 'lucide-react';
+import { useLikes } from '../hooks/useUserFlags';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
 import { useItem } from '../hooks/useItem';
 import { useSeriesEpisodes } from '../hooks/useSeriesEpisodes';
 import { useSimilarItems } from '../hooks/useSimilarItems';
 import { useContinueWatching } from '../hooks/useContinueWatching';
 import { useCatalogGen } from '../hooks/useCatalogEvents';
-import { AddToListPicker } from './AddToListPicker';
+import { AddToListControl, LikedToggle, WatchedToggle } from './TitleActions';
 import { EpisodesList, type EpisodeProgress } from './EpisodesList';
 import { FadeImage } from './FadeImage';
 import { CastNames, Starring } from './Credits';
@@ -19,6 +18,7 @@ import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
 import { ratingBadge } from '../lib/ratings';
 import { trailerChoice, trailerPath } from '../lib/trailers';
+import { ACTION_FOCUS, ACTION_GAP, ACTION_HEIGHT, OFF_LOOK, PLAY_LOOK } from '../lib/titleActions';
 import { MediaRow } from './MediaRow';
 import { StatusPage } from './StatusPage';
 
@@ -79,15 +79,8 @@ export function DetailPage({ itemId }: DetailPageProps) {
     }
     return map;
   }, [cwItems]);
-  const watchlist = useWatchlist();
   const likes = useLikes();
   const liked = likes.has(itemId);
-  // "in >=1 list" drives the filled icon; the legacy default-list flag
-  // drives the single-tap add. memberships keep the picker checkmarks
-  // and this icon in sync.
-  const { savedSet } = useMemberships([itemId]);
-  const inAnyList = savedSet.has(itemId) || watchlist.has(itemId);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Watched state: seed from the catalogue payload's watched_at stamp,
   // override locally on toggle so the button reflects the user's most
@@ -97,7 +90,6 @@ export function DetailPage({ itemId }: DetailPageProps) {
   const [watchedOverride, setWatchedOverride] = useState<boolean | null>(null);
   useEffect(() => {
     setWatchedOverride(null);
-    setPickerOpen(false);
   }, [itemId]);
   const watched = watchedOverride ?? !!data?.watched_at;
 
@@ -283,19 +275,23 @@ export function DetailPage({ itemId }: DetailPageProps) {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-3 mb-6">
+            {/* The title actions (docs/chino, title actions): play, or
+                resume and start over, then trailer, add to list, watched
+                and liked - every control 48 px tall, 8 px apart, a control
+                wrapping as a whole. */}
+            <div className={`flex flex-wrap ${ACTION_GAP} mb-6`}>
               {resumeSec > 30 ? (
                 <>
                   <button
                     onClick={() => goPlayer(true)}
-                    className="px-5 py-2.5 bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2"
+                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
                   >
-                    <Play className="w-5 h-5 fill-white" />
+                    <Play aria-hidden className="w-5 h-5 fill-current" />
                     Resume {fmtDur(resumeSec)}
                   </button>
                   <button
                     onClick={() => goPlayer(false)}
-                    className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                    className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
                   >
                     Start over
                   </button>
@@ -303,19 +299,19 @@ export function DetailPage({ itemId }: DetailPageProps) {
               ) : !isSeries ? (
                 <button
                   onClick={() => goPlayer(false)}
-                  className="px-5 py-2.5 bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2"
+                  className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
                 >
-                  <Play className="w-5 h-5 fill-white" />
+                  <Play aria-hidden className="w-5 h-5 fill-current" />
                   Play
                 </button>
               ) : null}
               {trailer?.local ? (
                 <a
                   href={toApp(trailerPath(itemId, trailer.extra.id))}
-                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
                   title="Play the trailer"
                 >
-                  <Clapperboard className="w-5 h-5" />
+                  <Clapperboard aria-hidden className="w-5 h-5" />
                   Trailer
                 </a>
               ) : trailer ? (
@@ -323,67 +319,23 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   href={trailer.link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white font-medium flex items-center gap-2"
+                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
                   title="Watch trailer on YouTube"
                 >
-                  <Youtube className="w-5 h-5" />
+                  <Youtube aria-hidden className="w-5 h-5" />
                   Trailer
                 </a>
               ) : null}
-              {/* Add-to-list control. Plain tap on the icon adds to the
-                  default list when the item is in NO list (so casual
-                  users never see the picker); the caret opens the
-                  multi-list picker. The icon fills when the item is in
-                  >=1 list. */}
-              <div className="relative inline-flex">
-                <button
-                  className={`p-2.5 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
-                  onClick={() => {
-                    if (inAnyList) {
-                      // Already saved somewhere — open the picker so the
-                      // user can choose what to remove / add.
-                      setPickerOpen(true);
-                    } else {
-                      // Casual fast-path: drop it in the default list.
-                      void watchlist.toggle(itemId, true);
-                    }
-                  }}
-                  title={inAnyList ? 'In your lists' : 'Add to watchlist'}
-                >
-                  {inAnyList ? <Check className="w-5 h-5 stroke-[3]" /> : <Plus className="w-5 h-5" />}
-                </button>
-                <button
-                  className={`px-1.5 border-l border-black/20 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
-                  onClick={() => setPickerOpen((v) => !v)}
-                  title="Add to list…"
-                  aria-haspopup="menu"
-                  aria-expanded={pickerOpen}
-                >
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                {pickerOpen ? (
-                  <AddToListPicker itemId={itemId} onClose={() => setPickerOpen(false)} />
-                ) : null}
-              </div>
-              <button
-                className={`p-2.5 transition-colors ${watched ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/10 hover:bg-white/20'}`}
-                onClick={() => {
+              <AddToListControl key={itemId} itemId={itemId} />
+              <WatchedToggle
+                watched={watched}
+                onToggle={() => {
                   const next = !watched;
                   setWatchedOverride(next);
                   void toggleWatched(itemId, next);
                 }}
-                title={watched ? 'Mark as unwatched' : 'Mark as watched'}
-                aria-pressed={watched}
-              >
-                <Eye className={`w-5 h-5 ${watched ? 'stroke-[2.5]' : ''}`} />
-              </button>
-              <button
-                className={`p-2.5 transition-colors ${liked ? 'bg-chino-red/90 hover:bg-chino-red' : 'bg-white/10 hover:bg-white/20'}`}
-                onClick={() => void likes.toggle(itemId, !liked)}
-                title={liked ? 'Unlike' : 'Like'}
-              >
-                <Heart className={`w-5 h-5 ${liked ? 'fill-white' : ''}`} />
-              </button>
+              />
+              <LikedToggle liked={liked} onToggle={() => void likes.toggle(itemId, !liked)} />
             </div>
 
             {data.description ? (

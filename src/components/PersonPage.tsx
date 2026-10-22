@@ -19,8 +19,9 @@ interface PersonPageProps {
  * the detail page. Header = portrait (initials without one), name, credit
  * count, then what the catalog knows about them — known for, born, died —
  * and the biography; body = a grid of the person's titles, rendered with
- * the same MediaCard / grid the Browse and Watchlist surfaces use (watched /
- * saved badges, tap → detail), each naming the person's roles on it.
+ * the same MediaCard / grid the Browse and Watchlist surfaces use (the
+ * Watchlist and watched marks, tap → detail), each naming the person's
+ * roles on it.
  *
  * The filmography is rendered in the order katalog-api returns it — no
  * client-side re-ranking.

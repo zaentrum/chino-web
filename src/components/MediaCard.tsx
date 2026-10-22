@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Info, Plus, Check, MoreVertical, Bookmark, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Check, MoreVertical, Play, X } from 'lucide-react';
 import { FadeImage } from './FadeImage';
 import { useWatchlist } from '../hooks/useUserFlags';
 import { useWatchedToggle } from '../hooks/useWatchedToggle';
-import { useMemberships } from '../hooks/useWatchlists';
 import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
-import { AddToListPicker } from './AddToListPicker';
+import { StatusMark } from './TitleActions';
 
 interface MediaCardProps {
   id?: string;
@@ -26,17 +25,17 @@ interface MediaCardProps {
   progress?: number;
   watchedAt?: string | null;
   // When set, the card adds a "Remove from Continue Watching" item to
-  // the hover-only 3-dot menu. Only the in-progress home rail wires
-  // this — other rails leave it undefined and the item is omitted. The
-  // menu itself now renders on EVERY card (it always carries the
-  // Mark-watched toggle), so this prop only gates the extra item.
+  // its menu. Only the in-progress home rail wires this — other rails
+  // leave it undefined and the item is omitted. The menu itself is on
+  // every card (it always carries play and the watched toggle), so this
+  // prop only gates the extra item.
   onRemoveFromContinueWatching?: () => void;
   // When true, marking the card watched removes it from view
   // optimistically (collapse + unmount), the way the CW-remove action
   // does. The Home rails set this because they request `unwatched=true`
   // and hide watched titles — a freshly-watched card would otherwise
   // linger until the next refetch. Browse / Search / Watchlist leave it
-  // undefined so the green watched ✓ badge appears on the card instead.
+  // undefined so the watched mark appears on the card instead.
   dropWhenWatched?: boolean;
   // A line under the year/rating naming someone's credit on the title —
   // the person page's filmography sets it ("Director · Writer"). Cards
@@ -45,39 +44,27 @@ interface MediaCardProps {
 }
 
 /**
- * Default click target is the detail page (`/i/<id>`). The hover overlay
- * surfaces:
- *   - Play  → straight to /player/<id>
- *   - Plus  → watchlist (placeholder, disabled for now)
- *   - Info  → detail page (same as body click)
- *
- * The overlay shows via `group-hover` (pure CSS), and only where the
- * device can hover (`(hover: hover)`), or while a button in it has the
- * keyboard focus. Its buttons take pointer events only while it shows:
- * invisible, they used to sit over the poster and take taps meant for
- * it, so a tap on a poster's lower edge on a phone played the title
- * instead of opening it. Touch devices get no overlay — a tap just opens
- * the detail page (no double-tap-then-pick-button dance). Each button
- * uses stopPropagation so a click on it doesn't also fall through to the
- * body's openDetail handler.
+ * A title's card: its poster and name, a click opens the title's page
+ * (`/i/<id>`). Nothing is drawn over the artwork but its status marks
+ * (docs/chino, title actions: nothing on artwork) - the Watchlist bookmark
+ * dark on blue, the watched check dark on green, and the progress bar -
+ * drawn as the title page's actions are when on. Its actions are on the
+ * title's page, and in the card's menu, whose button sits by the name
+ * under the poster: play (resume on Continue watching), mark as watched,
+ * and on Continue watching its removal. A button over a picture has the
+ * picture's contrast, and a smaller one reads as another button.
  */
 export function MediaCard({ id, title, image, year, rating, type, episode, progress, watchedAt, onRemoveFromContinueWatching, dropWhenWatched, credit }: MediaCardProps) {
   const watchlist = useWatchlist();
-  // "in >=1 list" drives the saved badge + filled icon; the legacy
-  // default-list flag drives the single-tap add.
-  const { savedSet } = useMemberships(id ? [id] : []);
-  const inAnyList = id ? savedSet.has(id) || watchlist.has(id) : false;
+  const inWatchlist = id ? watchlist.has(id) : false;
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { play, pending } = usePlayTitle();
-  // The list picker or the menu holds the overlay open.
-  const overlayOpen = pickerOpen || menuOpen;
 
   // Watched state: seed from the catalogue payload's watched_at stamp,
-  // override locally on toggle so the badge + menu label reflect the
+  // override locally on toggle so the mark + menu label reflect the
   // user's most recent click without waiting on a refetch — mirrors the
-  // DetailPage eye. Reuses the SAME hook the detail page uses, so the
+  // title page's toggle. Reuses the SAME hook the title page uses, so the
   // POST/DELETE to /me/items/{id}/watched and the chino:flag-changed
   // broadcast are not re-implemented here.
   const toggleWatched = useWatchedToggle();
@@ -97,42 +84,37 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
     if (next && dropWhenWatched) setDismissed(true);
   };
 
-  // Close the dropdown when the user clicks anywhere outside it.
-  // Without this, the menu can linger after a click that landed
-  // somewhere else on the row (e.g. on a neighbouring card's body).
+  // Close the menu when the user clicks anywhere outside it, or presses
+  // Escape.
   useEffect(() => {
     if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [menuOpen]);
   const openDetail = () => {
     if (id) window.location.assign(toApp(`/i/${encodeURIComponent(id)}`));
   };
-  const openPlayer = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const resumes = progress !== undefined && progress > 0;
+  const openPlayer = () => {
     if (!id) return;
-    // Continue-watching cards carry `progress` — clicking from there
+    // Continue-watching cards carry `progress` — playing from there
     // means "resume", so the player should land mid-stream without
     // any "Resume from X?" dialog. The flag is consumed by PlayerPage
     // via the URL query.
-    const resumeHint = progress !== undefined && progress > 0 ? '?autoresume=1' : '';
+    const resumeHint = resumes ? '?autoresume=1' : '';
     // A series card (not an episode's, which carries `episode`) plays
     // the series' next episode or S01E01 — not the series' own id.
     void play(id, type === 'series' && !episode ? 'series' : 'movie', resumeHint);
-  };
-  // Plain tap on the bookmark: drop into the default list when the item
-  // is in no list (casual fast-path, fills the icon); open the picker
-  // when it's already saved so the user can choose what to add/remove.
-  const onBookmark = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!id) return;
-    if (inAnyList) setPickerOpen(true);
-    else void watchlist.toggle(id, true);
   };
 
   // Collapsed-out: once marked watched on a drop-when-watched rail the
@@ -141,25 +123,16 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
   // too; until then the optimistic unmount keeps it out of view.
   if (dismissed) return null;
 
+  const menuItem = 'w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2';
   return (
     <div
-      // Named group (`group/card`) so the overlay's group-hover/card
-      // only fires when THIS card is hovered. MediaRow uses an
-      // unnamed `group` to drive chevron visibility — without the
-      // namespace, hovering anywhere in the row would light up every
-      // card's overlay simultaneously.
       // scale-[1.03] is subtle on purpose: at 4K the overview grid is
-      // dense enough that a stronger pop (scale-105 was prior) reads
-      // as visually disruptive — the hovered card felt "too big" next
-      // to its neighbours. 3% still gives the user a clear "this is
-      // the active card" cue without making the row jump.
-      // overflow lifts to visible while the add-to-list picker is open so
-      // the popover isn't clipped by the card's rounded mask; otherwise
-      // the poster stays clipped to its rounded corners as before.
-      className={`group/card relative rounded-lg bg-chino-surface cursor-pointer transition-transform hover:scale-[1.03] ${pickerOpen ? 'overflow-visible z-50' : 'overflow-hidden'}`}
+      // dense enough that a stronger pop reads as visually disruptive.
+      // The menu lifts the card over its neighbours while it is open.
+      className={`group/card relative rounded-lg bg-chino-surface cursor-pointer transition-transform hover:scale-[1.03] ${menuOpen ? 'z-50' : ''}`}
       onClick={openDetail}
     >
-      <div className={`aspect-[2/3] relative ${pickerOpen ? 'overflow-visible' : 'overflow-hidden'}`}>
+      <div className="aspect-[2/3] relative overflow-hidden">
         {/* fallbackTitle routes a missing / 404 poster to the DS artwork
             placeholder (title initials, square corners) instead of a
             broken-image glyph or empty box. */}
@@ -172,194 +145,122 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
           decoding="async"
         />
 
-        {/* Watched badge — top-right corner. Pure visual; the card stays
-            clickable through it. Sits above the hover overlay so it
-            remains visible while the overlay fades in. Reads the local
-            (optimistic) watched state so a Mark-as-watched toggle from
-            the card menu lights the badge immediately on Browse/Search. */}
-        {watched && (
-          <div
-            className="absolute top-2 right-2 z-40 flex items-center justify-center w-7 h-7 bg-chino-green shadow-lg pointer-events-none"
-            title="Watched"
-          >
-            <Check className="w-4 h-4 text-white stroke-[3]" />
-          </div>
-        )}
-
-        {/* Saved badge — top-left corner, shown when the item is in >=1
-            list. Offset from the watched badge (top-right) so the two
-            never collide. Pure visual; stays clickable through it. */}
-        {inAnyList && (
-          <div
-            className="absolute top-2 left-2 z-40 flex items-center justify-center w-7 h-7 bg-chino-accent shadow-lg pointer-events-none"
-            title="In your lists"
-          >
-            <Bookmark className="w-4 h-4 text-white fill-white" />
-          </div>
-        )}
-
-        {/* Hover overlay — shown on hover where there is hover, on
-            keyboard focus, and while its list picker or menu is open;
-            touch devices never see it. Its buttons take pointer events
-            only while it shows. Higher z-index than the MediaRow chevron
-            buttons (z-10) so the play button wins clicks on the
-            leftmost / rightmost card. */}
-        <div className={`absolute inset-0 z-30 bg-gradient-to-t from-black via-black/60 to-transparent flex flex-col justify-end p-4 transition-opacity duration-200 pointer-events-none ${overlayOpen ? 'opacity-100' : 'opacity-0 [@media(hover:hover)]:group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
-          <div className={`flex gap-2 mb-2 items-center ${overlayOpen ? 'pointer-events-auto' : 'pointer-events-none [@media(hover:hover)]:group-hover/card:pointer-events-auto group-focus-within/card:pointer-events-auto'}`}>
-            <button
-              className="p-2 bg-chino-accent hover:bg-chino-accent/80 transition-colors disabled:opacity-50"
-              disabled={!id || pending}
-              onClick={openPlayer}
-              title="Play"
-            >
-              <Play className="w-4 h-4 text-white fill-white" />
-            </button>
-            {/* Add-to-list cluster: icon (single-tap default-list add /
-                open picker when already saved) + caret (always opens the
-                picker). Mirrors the DetailPage control, compact. */}
-            <div className="relative inline-flex items-center">
-              <button
-                className={`p-2 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/20 hover:bg-white/30'}`}
-                title={inAnyList ? 'In your lists' : 'Add to watchlist'}
-                onClick={onBookmark}
-                disabled={!id}
-              >
-                {inAnyList ? (
-                  <Check className="w-4 h-4 text-white stroke-[3]" />
-                ) : (
-                  <Plus className="w-4 h-4 text-white" />
-                )}
-              </button>
-              <button
-                className={`px-1 py-2 border-l border-black/20 transition-colors ${inAnyList ? 'bg-chino-green hover:bg-chino-green/80' : 'bg-white/20 hover:bg-white/30'}`}
-                title="Add to list…"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPickerOpen((v) => !v);
-                }}
-                disabled={!id}
-                aria-haspopup="menu"
-                aria-expanded={pickerOpen}
-              >
-                <ChevronDown className="w-3.5 h-3.5 text-white" />
-              </button>
-              {pickerOpen && id ? (
-                // Opens upward so the popover clears the bottom-anchored
-                // action row and reads over the poster rather than the
-                // row below.
-                <AddToListPicker itemId={id} align="up" onClose={() => setPickerOpen(false)} />
-              ) : null}
-            </div>
-            <button
-              className="p-2 bg-white/20 hover:bg-white/30 transition-colors"
-              onClick={(e) => { e.stopPropagation(); openDetail(); }}
-              title="Details"
-            >
-              <Info className="w-4 h-4 text-white" />
-            </button>
-
-            {/* Card actions menu — joined into the same action row as
-                the other buttons so the alignment reads as one cluster.
-                Renders on EVERY card now: it always carries the
-                Mark-watched toggle, and adds "Remove from Continue
-                Watching" only when that prop is wired. Dropdown opens
-                upward (bottom-full) so it doesn't get clipped by the
-                row below. */}
-            <div ref={menuRef} className="relative">
-              <button
-                className="p-2 bg-white/20 hover:bg-white/30 transition-colors disabled:opacity-50"
-                disabled={!id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen((v) => !v);
-                }}
-                title="More options"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-              >
-                <MoreVertical className="w-4 h-4 text-white" />
-              </button>
-              {menuOpen && (
-                <div
-                  className="absolute left-0 bottom-full mb-1 min-w-[220px] bg-chino-surface border border-chino-border rounded-md shadow-xl py-1 z-50"
-                  role="menu"
-                >
-                  <button
-                    className="w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMenuOpen(false);
-                      onToggleWatched();
-                    }}
-                    role="menuitem"
-                  >
-                    {watched ? (
-                      <EyeOff className="w-4 h-4 shrink-0" />
-                    ) : (
-                      <Eye className="w-4 h-4 shrink-0" />
-                    )}
-                    {watched ? 'Mark as unwatched' : 'Mark as watched'}
-                  </button>
-                  {onRemoveFromContinueWatching && (
-                    <button
-                      className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMenuOpen(false);
-                        onRemoveFromContinueWatching();
-                      }}
-                      role="menuitem"
-                    >
-                      Remove from Continue Watching
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        {/* The status marks, marks and not buttons: the card stays
+            clickable through them. The Watchlist top-left, watched
+            top-right, so the two never collide. */}
+        {inWatchlist ? <StatusMark meaning="watchlist" className="absolute top-2 left-2" /> : null}
+        {watched ? <StatusMark meaning="watched" className="absolute top-2 right-2" /> : null}
 
         {progress !== undefined && progress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-chino-border z-30">
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-chino-border">
             <div className="h-full bg-chino-accent" style={{ width: `${progress}%` }} />
           </div>
         )}
       </div>
 
-      <div className="p-3">
-        <h3 className="text-chino-text font-medium truncate">{title}</h3>
+      {/* The caption: the name, and the card's menu beside it. The menu
+          opens over the poster at the card's own width, so a rail never
+          cuts it off at either end. */}
+      <div ref={menuRef} className="relative p-3 flex items-start gap-1">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-chino-text font-medium truncate">{title}</h3>
 
-        {episode ? (
-          // Episode subtitle mirrors the movie year·rating row so the
-          // card stays the same height as its siblings in the Continue
-          // Watching strip. SxxExx (no space) matches the standard
-          // file-naming convention and is tighter than 'S1 E1'.
-          <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted truncate">
-            <span className="text-chino-accent shrink-0">
-              {episodeCode(episode.season, episode.episode, episode.episodeEnd)}
-            </span>
-            {episode.title ? (
-              <>
-                <span className="shrink-0">·</span>
-                <span className="truncate">{episode.title}</span>
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted">
-            {year && <span>{year}</span>}
-            {rating && (
-              <>
-                <span>•</span>
-                <span className="text-chino-accent">{rating}</span>
-              </>
+          {episode ? (
+            // Episode subtitle mirrors the movie year·rating row so the
+            // card stays the same height as its siblings in the Continue
+            // Watching strip. SxxExx (no space) matches the standard
+            // file-naming convention and is tighter than 'S1 E1'.
+            <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted truncate">
+              <span className="text-chino-accent shrink-0">
+                {episodeCode(episode.season, episode.episode, episode.episodeEnd)}
+              </span>
+              {episode.title ? (
+                <>
+                  <span className="shrink-0">·</span>
+                  <span className="truncate">{episode.title}</span>
+                </>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mt-1 text-sm text-chino-muted">
+              {year && <span>{year}</span>}
+              {rating && (
+                <>
+                  <span>•</span>
+                  <span className="text-chino-accent">{rating}</span>
+                </>
+              )}
+            </div>
+          )}
+          {credit ? (
+            <div className="mt-1 text-xs text-chino-muted line-clamp-2" title={credit}>
+              {credit}
+            </div>
+          ) : null}
+        </div>
+
+        {/* The card's menu, by its name and off the artwork. */}
+        {id ? (
+          <>
+            <button
+              type="button"
+              className="shrink-0 -mr-2 -mt-1 w-10 h-12 flex items-center justify-center text-chino-muted hover:text-chino-fg hover:bg-chino-surface-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-chino-cyan"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              aria-label={`More for ${title}`}
+              title="More"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              <MoreVertical aria-hidden className="w-4 h-4" />
+            </button>
+            {menuOpen && (
+              <div
+                className="absolute inset-x-0 bottom-full mb-1 bg-chino-surface border border-chino-border shadow-xl py-1 z-50"
+                role="menu"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  className={`${menuItem} disabled:opacity-50`}
+                  disabled={pending}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    openPlayer();
+                  }}
+                  role="menuitem"
+                >
+                  <Play aria-hidden className="w-4 h-4 shrink-0" />
+                  {resumes ? 'Resume' : 'Play'}
+                </button>
+                <button
+                  className={menuItem}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onToggleWatched();
+                  }}
+                  role="menuitem"
+                >
+                  <Check aria-hidden className="w-4 h-4 shrink-0" />
+                  {watched ? 'Mark as unwatched' : 'Mark as watched'}
+                </button>
+                {onRemoveFromContinueWatching && (
+                  <button
+                    className={menuItem}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onRemoveFromContinueWatching();
+                    }}
+                    role="menuitem"
+                  >
+                    <X aria-hidden className="w-4 h-4 shrink-0" />
+                    Remove from Continue Watching
+                  </button>
+                )}
+              </div>
             )}
-          </div>
-        )}
-        {credit ? (
-          <div className="mt-1 text-xs text-chino-muted line-clamp-2" title={credit}>
-            {credit}
-          </div>
+          </>
         ) : null}
       </div>
     </div>
