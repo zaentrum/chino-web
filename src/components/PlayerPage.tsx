@@ -4257,7 +4257,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <span className="text-sm tabular-nums w-16">{fmt(effectiveDuration)}</span>
         </div>
 
-        <div className="flex items-center gap-2 mt-2">
+        {/* relative: the subtitles menu's place on a narrow screen. */}
+        <div className="relative flex items-center gap-2 mt-2">
           <button
             onClick={() => userTogglePlay()}
             className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
@@ -4320,7 +4321,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             </div>
           )}
 
-          <div className="relative">
+          {/* The subtitles menu opens above its button; on a narrow screen
+              (below md), where the buttons to its right would push it
+              past the left edge, it opens at the right end of the row
+              instead, within the bar's 16 px sides. */}
+          <div className="md:relative">
             <button
               onClick={() => toggleMenu('captions')}
               className={`p-2 transition-colors ${activeSubId ? 'bg-chino-accent/30 hover:bg-chino-accent/40' : 'bg-white/10 hover:bg-white/20'}`}
@@ -4333,7 +4338,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             </button>
             {showCaptionsMenu && mergedSubs.length > 0 && (
               <div
-                className="absolute right-0 bottom-full mb-3 w-96 max-w-[calc(100vw-2rem)] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
+                className="absolute right-0 bottom-full mb-3 w-96 max-w-full md:max-w-none bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
                 role="menu"
                 aria-label="subtitles"
               >
