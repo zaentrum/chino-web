@@ -95,6 +95,11 @@ interface Subtitle {
 const VIDEO_CLASS = 'chino-player';
 const CUE_CSS = cueCss(VIDEO_CLASS);
 
+// A header in the player's menus - "subtitles", "audio", "quality",
+// "speed", and "timing" inside the subtitles menu: lowercase, like the
+// menus' items, in the mono face (docs/chino, playback: the player's menus).
+const MENU_HEADER = 'font-mono text-xs tracking-wide text-chino-muted';
+
 /**
  * Whether the subtitle's track stays "showing" while the player draws it:
  * in Firefox, which has no picture-in-picture API - nothing tells the page
@@ -4305,7 +4310,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               </button>
               {audioMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Audio</div>
+                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>audio</div>
                   {audioMenu.map((t) => (
                     <button
                       key={t.index}
@@ -4342,9 +4347,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 role="menu"
                 aria-label="subtitles"
               >
-                {/* Lowercase, like its items (the design system's
-                    subtitles pattern). */}
-                <div className="px-4 pt-2 pb-1 font-mono text-xs tracking-wide text-chino-muted">subtitles</div>
+                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>subtitles</div>
                 {/* "off", the languages that matter here, then "more
                     languages" with the rest (subMenu). One subtitle at a
                     time: a pick replaces the one on. Scrolls where it is
@@ -4382,9 +4385,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     re-fetching the VTT. Disabled when no track is
                     active. */}
                 <div className="border-t border-white/10 mt-1 px-4 py-2">
-                  <div className="text-[10px] uppercase tracking-wide text-chino-muted mb-1">
-                    Timing offset
-                  </div>
+                  <div className={`mb-1 ${MENU_HEADER}`}>timing</div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSubOffsetSec((o) => Math.max(-10, +(o - 0.25).toFixed(2)))}
@@ -4409,9 +4410,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                       onClick={() => setSubOffsetSec(0)}
                       disabled={!activeSub || activeSub.picture || subOffsetSec === 0}
                       className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-xs"
-                      title="Reset offset"
+                      title="Back to the subtitle's own timing"
                     >
-                      Reset
+                      reset
                     </button>
                   </div>
                 </div>
@@ -4435,7 +4436,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               </button>
               {qualityMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                  <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Quality</div>
+                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>quality</div>
                   {packagedMenu
                     ? packagedMenu.map((entry) => (
                         <button
@@ -4481,8 +4482,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               <div
                 className="absolute right-0 bottom-full mb-2 min-w-[180px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
                 role="menu"
+                aria-label="speed"
               >
-                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted">Speed</div>
+                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>speed</div>
                 {PLAYBACK_RATES.map((rate) => (
                   <button
                     key={rate}
