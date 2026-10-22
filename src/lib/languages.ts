@@ -726,7 +726,7 @@ export interface AudioTrackLabelInput {
   lang?: string;
   /** What the track is called: the file's title, or the master's NAME. */
   name?: string;
-  /** What the menu shows beside the label ("AAC · 2ch"). Two tracks that
+  /** What the menu shows beside the label ("AAC · Stereo"). Two tracks that
    *  differ there are told apart there. */
   detail?: string;
   /**
@@ -739,14 +739,31 @@ export interface AudioTrackLabelInput {
   channels?: number;
 }
 
-// The layout ffmpeg gives a number of channels by default, as a menu names it.
-const LAYOUTS: Record<number, string> = { 3: '2.1', 4: '4.0', 5: '5.0', 6: '5.1', 7: '6.1', 8: '7.1' };
+// The layout ffmpeg gives a number of channels by default, as a menu names
+// it: words people know from their speakers, never a count ("2ch").
+const LAYOUTS: Record<number, string> = { 1: 'Mono', 2: 'Stereo', 3: '2.1', 4: '4.0', 5: '5.0', 6: '5.1', 7: '6.1', 8: '7.1' };
 
-/** The layout of a rendition in that many channels: "5.1" for six, "7.1"
- *  for eight; '' for stereo, mono or none. */
+/** A number of channels in the menu's words: "Mono" for one, "Stereo" for
+ *  two, "5.1" for six, "7.1" for eight; past the table "10 channels"; ''
+ *  for none, or a number that is no count. Never "2ch". */
+export function channelWords(channels: number | null | undefined): string {
+  if (typeof channels !== 'number' || !Number.isInteger(channels) || channels < 1) return '';
+  return LAYOUTS[channels] ?? `${channels} channels`;
+}
+
+/** What the audio menu shows beside a track's label: its codec and its
+ *  channels in words, "AAC · Stereo", "EAC3 · 5.1"; either alone where the
+ *  other is not known. */
+export function audioDetail(codec: string | null | undefined, channels: number | null | undefined): string {
+  return [(codec ?? '').trim().toUpperCase(), channelWords(channels)].filter(Boolean).join(' · ');
+}
+
+/** The layout of a rendition in that many channels, said after its
+ *  language ("English 5.1"): "5.1" for six, "7.1" for eight; '' for stereo,
+ *  mono or none. */
 export function channelLayout(channels: number | null | undefined): string {
   if (typeof channels !== 'number' || !Number.isInteger(channels) || channels <= 2) return '';
-  return LAYOUTS[channels] ?? `${channels}ch`;
+  return channelWords(channels);
 }
 
 // A name that describes the source's audio format - a codec, a bitrate, a

@@ -18,7 +18,9 @@ import {
   audioChipLabel,
   audioLabels,
   audioRenditionFor,
+  audioDetail,
   channelLayout,
+  channelWords,
 } from './languages.ts';
 
 test('codes in every spelling the library uses are one language', () => {
@@ -456,11 +458,11 @@ test('a track in no language is called what its name says; a code Intl cannot na
 test('two of one language: told apart by their names, else numbered; another detail tells them apart', () => {
   assert.deepEqual(
     audioLabels([
-      { lang: 'eng', name: 'English', detail: 'AAC · 2ch' },
-      { lang: 'eng', name: 'Commentary', detail: 'AAC · 2ch' },
-      { lang: 'eng', name: 'English Commentary (SDH)', detail: 'AAC · 2ch' },
-      { lang: 'eng', name: 'AC3 5.1', detail: 'AAC · 2ch' },
-      { lang: 'eng', name: 'English 5.1', detail: 'AC3 · 6ch' },
+      { lang: 'eng', name: 'English', detail: 'AAC · Stereo' },
+      { lang: 'eng', name: 'Commentary', detail: 'AAC · Stereo' },
+      { lang: 'eng', name: 'English Commentary (SDH)', detail: 'AAC · Stereo' },
+      { lang: 'eng', name: 'AC3 5.1', detail: 'AAC · Stereo' },
+      { lang: 'eng', name: 'English 5.1', detail: 'AC3 · 5.1' },
     ]),
     ['English', 'English · Commentary', 'English · Commentary (SDH)', 'English (2)', 'English'],
   );
@@ -474,24 +476,24 @@ test('a 5.1 rendition says its layout, beside its stereo twin: the demo\'s Sinte
   // the stereo rendition of its source track (codec, channels, group, rendition).
   assert.deepEqual(
     audioLabels([
-      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 6ch', channels: 6 },
-      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · 2ch', channels: 2 },
+      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 5.1', channels: 6 },
+      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · Stereo', channels: 2 },
     ]),
     ['English 5.1', 'English'],
   );
   assert.deepEqual(
     audioLabels([
-      { lang: 'zxx', name: 'No dialogue 5.1', detail: 'EC-3 · 6ch', channels: 6 },
-      { lang: 'zxx', name: 'No dialogue', detail: 'MP4A.40.2 · 2ch', channels: 2 },
+      { lang: 'zxx', name: 'No dialogue 5.1', detail: 'EC-3 · 5.1', channels: 6 },
+      { lang: 'zxx', name: 'No dialogue', detail: 'MP4A.40.2 · Stereo', channels: 2 },
     ]),
     ['No dialogue 5.1', 'No dialogue'],
   );
   // On the fly from a package: the companions beside the stereo transcodes.
   assert.deepEqual(
     audioLabels([
-      { lang: 'eng', name: 'English 5.1', detail: 'EAC3 · 6ch', channels: 6 },
-      { lang: 'eng', name: 'English', detail: 'AAC · 2ch', channels: 2 },
-      { lang: 'ger', name: 'German', detail: 'AAC · 2ch', channels: 2 },
+      { lang: 'eng', name: 'English 5.1', detail: 'EAC3 · 5.1', channels: 6 },
+      { lang: 'eng', name: 'English', detail: 'AAC · Stereo', channels: 2 },
+      { lang: 'ger', name: 'German', detail: 'AAC · Stereo', channels: 2 },
     ]),
     ['English 5.1', 'English', 'German'],
   );
@@ -502,27 +504,27 @@ test('a 5.1 rendition says its layout, beside its stereo twin: the demo\'s Sinte
 test('the layout only for what plays in it: a source\'s 5.1 track, which plays as stereo, says none', () => {
   // A source's tracks as /play/info lists them on the fly (no channels given
   // for the label): the file's AC-3 5.1 is transcoded to stereo AAC.
-  assert.deepEqual(audioLabels([{ lang: 'eng', name: 'English', detail: 'AC3 · 6ch' }, { lang: 'ger', detail: 'AAC · 2ch' }]), ['English', 'German']);
-  assert.deepEqual(audioLabels([{ lang: 'eng', channels: 2 }, { lang: 'eng', channels: 1, detail: 'mono' }]), ['English', 'English']);
+  assert.deepEqual(audioLabels([{ lang: 'eng', name: 'English', detail: 'AC3 · 5.1' }, { lang: 'ger', detail: 'AAC · Stereo' }]), ['English', 'German']);
+  assert.deepEqual(audioLabels([{ lang: 'eng', channels: 2 }, { lang: 'eng', channels: 1, detail: 'Mono' }]), ['English', 'English']);
 });
 
 test('5.1 renditions among others of one language: told apart as before, the layout last', () => {
   assert.deepEqual(
     audioLabels([
-      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 6ch', channels: 6 },
-      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · 2ch', channels: 2 },
-      { lang: 'eng', name: 'English · Commentary', detail: 'MP4A.40.2 · 2ch', channels: 2 },
+      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 5.1', channels: 6 },
+      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · Stereo', channels: 2 },
+      { lang: 'eng', name: 'English · Commentary', detail: 'MP4A.40.2 · Stereo', channels: 2 },
     ]),
     ['English 5.1', 'English', 'English · Commentary'],
   );
   // Two 5.1 sources of one language, as chino-stream names them apart.
   assert.deepEqual(
     audioLabels([
-      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 6ch', channels: 6 },
-      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · 2ch', channels: 2 },
-      { lang: 'eng', name: 'English 5.1 (2)', detail: 'EC-3 · 6ch', channels: 6 },
-      { lang: 'eng', name: 'English (2)', detail: 'MP4A.40.2 · 2ch', channels: 2 },
-      { lang: 'eng', name: 'English · Director 5.1', detail: 'EC-3 · 6ch', channels: 6 },
+      { lang: 'eng', name: 'English 5.1', detail: 'EC-3 · 5.1', channels: 6 },
+      { lang: 'eng', name: 'English', detail: 'MP4A.40.2 · Stereo', channels: 2 },
+      { lang: 'eng', name: 'English 5.1 (2)', detail: 'EC-3 · 5.1', channels: 6 },
+      { lang: 'eng', name: 'English (2)', detail: 'MP4A.40.2 · Stereo', channels: 2 },
+      { lang: 'eng', name: 'English · Director 5.1', detail: 'EC-3 · 5.1', channels: 6 },
     ]),
     ['English 5.1', 'English', 'English 5.1 (2)', 'English (2)', 'English · Director 5.1'],
   );
@@ -537,7 +539,27 @@ test('a layout by its channels: 5.1 for six, 7.1 for eight, none for stereo or l
   assert.deepEqual([6, 8, 7, 3, 2, 1, 0, -6, 5.5, Number.NaN, undefined, null].map(channelLayout), [
     '5.1', '7.1', '6.1', '2.1', '', '', '', '', '', '', '', '',
   ]);
-  assert.equal(channelLayout(12), '12ch');
+  assert.equal(channelLayout(12), '12 channels');
+});
+
+test('channels in words: Mono, Stereo, 5.1, 7.1 - never a count like "2ch"', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8].map(channelWords), ['Mono', 'Stereo', '2.1', '4.0', '5.0', '5.1', '6.1', '7.1']);
+  // Past the table: the number in words, still no "ch".
+  assert.equal(channelWords(12), '12 channels');
+  for (const n of [0, -2, 2.5, Number.NaN, undefined, null]) assert.equal(channelWords(n), '', String(n));
+  for (let n = 1; n <= 16; n++) assert.doesNotMatch(channelWords(n), /\dch\b/, String(n));
+});
+
+test('the audio menu\'s detail: the codec and the channels in words', () => {
+  assert.equal(audioDetail('aac', 2), 'AAC · Stereo');
+  assert.equal(audioDetail('eac3', 6), 'EAC3 · 5.1');
+  assert.equal(audioDetail('truehd', 8), 'TRUEHD · 7.1');
+  assert.equal(audioDetail('mp3', 1), 'MP3 · Mono');
+  // Either alone where the other is not known, with no separator left over.
+  assert.equal(audioDetail('aac', undefined), 'AAC');
+  assert.equal(audioDetail('', 2), 'Stereo');
+  assert.equal(audioDetail(undefined, 0), '');
+  for (const n of [1, 2, 6, 8, 12]) assert.doesNotMatch(audioDetail('aac', n), /\dch\b/, String(n));
 });
 
 test('a pick in the 5.1 group: its rendition by name, the stereo twin by its own', () => {

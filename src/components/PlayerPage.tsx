@@ -14,7 +14,7 @@ import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
 import { episodeCode, fileNeighbours, type FileEpisode } from '../lib/episodeFiles';
-import { audioChipLabel, audioLabels, audioRenditionFor, normalizeLang } from '../lib/languages';
+import { audioChipLabel, audioDetail, audioLabels, audioRenditionFor, normalizeLang } from '../lib/languages';
 import {
   NO_SUBTITLE,
   autoSubtitle,
@@ -1611,7 +1611,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // whatever channels the file has.
   const audioMenu = useMemo(() => {
     const tracks = info?.audio_tracks ?? [];
-    const details = tracks.map((t) => `${t.codec?.toUpperCase() ?? ''}${t.channels ? ` · ${t.channels}ch` : ''}`);
+    // Beside each, its codec and its channels in words: "AAC · Stereo",
+    // "EAC3 · 5.1" - never "2ch" (lib/languages.ts audioDetail).
+    const details = tracks.map((t) => audioDetail(t.codec, t.channels));
     const labels = audioLabels(
       tracks.map((t, i) => ({ lang: t.language, name: t.title, detail: details[i], channels: t.group ? t.channels : undefined })),
     );
