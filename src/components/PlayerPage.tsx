@@ -45,6 +45,7 @@ import {
 } from '../lib/playback';
 import {
   AUTO,
+  ORIGINAL,
   autoLabel,
   chosenQuality,
   ladderRow,
@@ -52,6 +53,7 @@ import {
   onTheFlyLadder,
   packagedQualityMenu,
   playingLabel,
+  playsOriginal,
   type PlayQuality,
   type PlayingLevel,
 } from '../lib/qualities';
@@ -215,13 +217,14 @@ interface SwitchEntry {
   detail?: string;
 }
 
-// Per-rung output spec for the transcode ladder, mirrored from the
+// Per-rung encoder settings of the transcode ladder, mirrored from the
 // stream service's QualityLadder. Used in the Playback info dialog to
-// show what the user is actually asking ffmpeg for.
-const QUALITY_SPEC: Record<LadderQuality, { vcodec: string; crf: string; abps: string; scale: string }> = {
-  high:   { vcodec: 'libx264', crf: '23', abps: '192 kbps', scale: 'source' },
-  medium: { vcodec: 'libx264', crf: '26', abps: '128 kbps', scale: '720p'   },
-  low:    { vcodec: 'libx264', crf: '28', abps: '96 kbps',  scale: '480p'   },
+// show what the user is actually asking ffmpeg for. The frame each rung
+// encodes is the server's to say, by its quality name (the ladder's).
+const QUALITY_SPEC: Record<LadderQuality, { vcodec: string; crf: string; abps: string }> = {
+  high:   { vcodec: 'libx264', crf: '23', abps: '192 kbps' },
+  medium: { vcodec: 'libx264', crf: '26', abps: '128 kbps' },
+  low:    { vcodec: 'libx264', crf: '28', abps: '96 kbps'  },
 };
 
 interface TelemetryEvent {
@@ -4676,6 +4679,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           streamQuality={streamQuality}
           packagedQuality={chosenPackaged ? qualityName : null}
           qualityName={qualityName}
+          playingName={playingName}
           switchHistory={switchHistory}
           videoEl={videoRef.current}
           displayedCurrent={displayedCurrent}
@@ -4858,6 +4862,7 @@ function PlaybackInfoDialog({
   streamQuality,
   packagedQuality,
   qualityName,
+  playingName,
   switchHistory,
   videoEl,
   displayedCurrent,
@@ -4871,11 +4876,17 @@ function PlaybackInfoDialog({
   packagedQuality: string | null;
   /** The quality as the menu names it. */
   qualityName: string;
+  /** What plays, by the server's name for it (playingLabel); null until known. */
+  playingName: string | null;
   switchHistory: SwitchEntry[];
   videoEl: HTMLVideoElement | null;
   displayedCurrent: number;
   onClose: () => void;
 }) {
+  // What the server does now: the Original picked again after a move onto
+  // the ladder is the original, stream-copied, not a transcode.
+  const liveMode: PlayInfo['mode'] =
+    effectiveMode === 'transcode' && info && playsOriginal(info.mode, streamQuality) ? info.mode : effectiveMode;
   // The transcode ladder's output, for its rungs only (a packaged rung's
   // name is no transcode rung).
   const spec = isLadderQuality(streamQuality) ? QUALITY_SPEC[streamQuality] : null;
@@ -4957,11 +4968,11 @@ function PlaybackInfoDialog({
                 <dl className="grid grid-cols-[8rem_1fr] gap-y-1">
                   <dt className="text-chino-muted">Effective mode</dt>
                   <dd>
-                    <span className={`inline-flex items-center px-2 py-0.5 border text-xs ${modeColor[effectiveMode]}`}>
-                      {modeLabel[effectiveMode]}
+                    <span className={`inline-flex items-center px-2 py-0.5 border text-xs ${modeColor[liveMode]}`}>
+                      {modeLabel[liveMode]}
                     </span>
                   </dd>
-                  {effectiveMode === 'transcode' ? (
+                  {liveMode === 'transcode' ? (
                     <>
                       <dt className="text-chino-muted">Quality</dt>
                       <dd>{qualityName}</dd>
@@ -4974,7 +4985,7 @@ function PlaybackInfoDialog({
                       {spec ? (
                         <>
                           <dt className="text-chino-muted">Video target</dt>
-                          <dd>H.264 High@4.0 · {spec.scale} · {info.encoder === 'h264_nvenc' ? `CQ ${22}` : `CRF ${spec.crf}`}</dd>
+                          <dd>H.264 High@4.0 · {qualityName} · {info.encoder === 'h264_nvenc' ? `CQ ${22}` : `CRF ${spec.crf}`}</dd>
                           <dt className="text-chino-muted">Audio target</dt>
                           <dd>AAC stereo · {spec.abps}</dd>
                         </>
@@ -4983,7 +4994,9 @@ function PlaybackInfoDialog({
                   ) : (
                     <>
                       <dt className="text-chino-muted">Quality</dt>
-                      <dd>{packagedQuality ?? `Direct (${info.video_codec.toUpperCase()})`}</dd>
+                      {/* A packaged title by its menu's name, or by what
+                          plays; the original played as it is "Original". */}
+                      <dd>{liveMode === 'packaged' ? packagedQuality ?? playingName ?? '—' : ORIGINAL}</dd>
                       <dt className="text-chino-muted">Encoder</dt>
                       <dd>None — source bytes pass through unmodified</dd>
                     </>
