@@ -4617,10 +4617,10 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
 }
 
 /** One row of a menu of one choice - subtitles, audio, quality, speed: the
- *  picked one in the accent blue with a small filled dot before it, the
- *  others with the dot's place empty; no checkboxes (docs/chino, playback:
- *  the player's menus). The dot is 8 px and square, as the design system's
- *  corners and the hero's dots are. */
+ *  picked one in the accent blue with a small filled square before it, the
+ *  others with the square's place empty; no checkboxes (docs/chino,
+ *  playback: the player's menus). The square is 8 px, with the design
+ *  system's square corners, as the hero's markers are. */
 function MenuChoice({ picked, onPick, children }: { picked: boolean; onPick: () => void; children: ReactNode }) {
   return (
     <button
