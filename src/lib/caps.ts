@@ -101,6 +101,26 @@ export function hasCodec(caps: string | readonly string[], codec: string): boole
   return tokens.some((t) => codecOf(t) === codec);
 }
 
+const VIDEO_CODECS: readonly string[] = ['avc', 'h264', 'hvc', 'hevc', 'h265', 'av1', 'vp9'];
+
+/**
+ * The tallest frame caps say the device decodes in a video codec they give
+ * a height for ("hvc:1080"), as chino-stream reads them (Caps
+ * MaxVideoHeight): the most it transcodes to for this device. 0 where no
+ * video token carries a height.
+ */
+export function maxVideoHeight(caps: string | readonly string[]): number {
+  const tokens = typeof caps === 'string' ? caps.split(',') : caps;
+  let max = 0;
+  for (const token of tokens) {
+    const at = token.indexOf(':');
+    if (at < 0 || !VIDEO_CODECS.includes(codecOf(token))) continue;
+    const h = Number.parseInt(token.slice(at + 1).trim(), 10);
+    if (Number.isFinite(h) && h > max) max = h;
+  }
+  return max;
+}
+
 /** caps without a codec, at whatever height it was sent. */
 export function withoutCodec(caps: string, codec: string): string {
   return caps

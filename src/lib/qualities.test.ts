@@ -7,6 +7,7 @@ import {
   autoLabel,
   chosenQuality,
   frameQualityName,
+  highRungFrame,
   ladderRow,
   ladderRows,
   lowerRung,
@@ -108,6 +109,30 @@ test('an older server\'s "High (source resolution)": Original where it plays the
   assert.equal(shownQualityName(old, { q: 'high', mode: 'transcode', width: 1280, height: 720 }), 'Medium (720p)');
   assert.equal(shownQualityName(old, { q: 'high', mode: 'transcode' }), 'High');
   assert.doesNotMatch(shownQualityName(old, {}), /source/i);
+});
+
+test('an older server\'s high above 1080p is named by the frame it encodes: the original fitted into 1080 lines, or the device\'s cap', () => {
+  const old = 'High (source resolution)';
+  const high = (width: number, height: number, maxHeight?: number) => shownQualityName(old, { q: 'high', mode: 'transcode', width, height, maxHeight });
+  // A 4K original is encoded at 1080p, 16:9 or scope alike; so is 1440p.
+  assert.equal(high(3840, 2160), 'High (1080p)');
+  assert.equal(high(3840, 1606), 'High (1080p)');
+  assert.equal(high(4096, 2160), 'High (1080p)');
+  assert.equal(high(2560, 1440), 'High (1080p)');
+  assert.equal(high(2560, 1080), 'High (1080p)');
+  // A device that decodes no taller than 720 lines: its cap's frame.
+  assert.equal(high(3840, 2160, 720), 'Medium (720p)');
+  assert.equal(high(1920, 800, 720), 'Medium (720p)');
+  // A cap above 1080 changes nothing; a frame that fits is its own.
+  assert.equal(high(3840, 2160, 2160), 'High (1080p)');
+  assert.equal(high(1920, 1080, 720), 'Medium (720p)');
+  assert.equal(high(1280, 720, 1080), 'Medium (720p)');
+  // The frames, as chino-stream's transcodeGeometry has them.
+  assert.deepEqual(highRungFrame(3840, 2160), { width: 1920, height: 1080 });
+  assert.deepEqual(highRungFrame(3840, 1606), { width: 1920, height: 804 });
+  assert.deepEqual(highRungFrame(1920, 800, 720), { width: 1280, height: 534 });
+  assert.deepEqual(highRungFrame(1440, 1080), { width: 1440, height: 1080 });
+  assert.deepEqual(highRungFrame(0, 0), { width: 0, height: 0 });
 });
 
 test('a packaged ladder: Auto, then its rungs by their names, in the order given', () => {
@@ -260,6 +285,17 @@ test("an older server's on-the-fly labels go through the table; an empty one is 
     height: 800,
   });
   assert.deepEqual(old.map((e) => e.label), ['High (1080p)', 'Medium (720p)', 'Low (480p)']);
+  // A 4K original: high is encoded at 1080p, three rows; on a 720p cap one
+  // row with medium, the same frame.
+  const oldListed = old.map((e) => ({ name: e.name, label: e.name === 'high' ? 'High (source resolution)' : e.label }));
+  const uhd = onTheFlyLadder({ mode: 'transcode', listed: oldListed, width: 3840, height: 2160, playing: { q: 'high', width: 1920, height: 1080 } });
+  assert.deepEqual(ladderRows(uhd).map((e) => e.label), ['High (1080p)', 'Medium (720p)', 'Low (480p)']);
+  const capped = onTheFlyLadder({ mode: 'transcode', listed: oldListed, width: 3840, height: 2160, maxHeight: 720 });
+  assert.deepEqual(ladderRows(capped).map((e) => e.label), ['Medium (720p)', 'Low (480p)']);
+  assert.equal(ladderRow(capped, 'medium')?.name, 'high');
+  // Nothing listed for high: named by the frame it encodes too, not known.
+  const unlisted = onTheFlyLadder({ mode: 'transcode', listed: oldListed.slice(1), width: 3840, height: 2160 });
+  assert.deepEqual([unlisted[0].label, unlisted[0].known], ['High (1080p)', false]);
   // chino-stream names no high of an original of unknown size: the word, not a guess.
   const unknown = onTheFlyLadder({ mode: 'transcode', listed: [{ name: 'high', label: '' }, { name: 'medium', label: 'Medium (720p)' }, { name: 'low', label: 'Low (480p)' }] });
   assert.deepEqual(unknown.map((e) => [e.label, e.known]), [['High', false], ['Medium (720p)', true], ['Low (480p)', true]]);

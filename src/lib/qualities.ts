@@ -114,12 +114,38 @@ export function playsOriginal(mode: string | null | undefined, q: string): boole
 }
 
 /** What the player knows of a title around a label: the q it is for, the
- *  mode /play/info said, and the original's frame. */
+ *  mode /play/info said, the original's frame, and the tallest frame the
+ *  device's caps say it decodes (lib/caps.ts maxVideoHeight; 0: no cap). */
 export interface LabelContext {
   q?: string;
   mode?: string | null;
   width?: number;
   height?: number;
+  maxHeight?: number;
+}
+
+/**
+ * The frame chino-stream encodes the on-the-fly ladder's high at, as its
+ * transcodeGeometry does for that rung of no scale - an older server, which
+ * labels it "High (source resolution)", as a newer one: the original's own
+ * where it fits a 16:9 box 1080 lines tall, or as tall as the device's cap
+ * where that is lower; else the original fitted into that box, its shape
+ * kept, each side made even (3840x2160 is 1920x1080, 3840x1606 1920x804).
+ * An original of a size not known, as it comes.
+ */
+export function highRungFrame(
+  width: number | null | undefined,
+  height: number | null | undefined,
+  maxHeight = 0,
+): { width: number; height: number } {
+  const w = typeof width === 'number' && Number.isFinite(width) ? Math.trunc(width) : 0;
+  const h = typeof height === 'number' && Number.isFinite(height) ? Math.trunc(height) : 0;
+  const capH = maxHeight > 0 && maxHeight < 1080 ? Math.trunc(maxHeight) : 1080;
+  const capW = Math.trunc((capH * 16) / 9);
+  if (w <= 0 || h <= 0 || (w <= capW && h <= capH)) return { width: w, height: h };
+  const even = (n: number) => (n + 1) & ~1;
+  if (w * capH > h * capW) return { width: capW, height: even(Math.trunc((h * capW) / w)) };
+  return { width: even(Math.trunc((w * capH) / h)), height: capH };
 }
 
 const HEIGHT_ONLY = /^(\d{3,4})p$/i;
@@ -130,9 +156,11 @@ const SOURCE_WORD = /(^|[^a-z])source([^a-z]|$)/i;
  * it is ("Medium (720p)", "Original", "Auto"), but an older server's - a
  * height alone ("720p") is named by the table, never with its height twice
  * ("Medium (720p)"), and its "High (source resolution)" is "Original" where
- * that q plays the original as it is, else the name of the original's frame,
- * as a re-encode at the original's size is named, else the word alone
- * ("High") - no height rather than a wrong one. '' for no label.
+ * that q plays the original as it is, else the name of the frame that
+ * server encodes it at (highRungFrame: the original's, fitted into 1080
+ * lines or the device's cap), as a re-encode is named by its frame - a 4K
+ * original's is "High (1080p)" - else the word alone ("High"): no height
+ * rather than a wrong one. '' for no label.
  */
 export function shownQualityName(label: string | null | undefined, ctx: LabelContext = {}): string {
   const t = (label ?? '').trim();
@@ -140,7 +168,8 @@ export function shownQualityName(label: string | null | undefined, ctx: LabelCon
   if (height) return qualityName(Number(height[1])) ?? t;
   if (SOURCE_WORD.test(t)) {
     if (ctx.q && playsOriginal(ctx.mode, ctx.q)) return ORIGINAL;
-    return frameQualityName(ctx.width, ctx.height) ?? t.split(/[\s(]/)[0];
+    const frame = highRungFrame(ctx.width, ctx.height, ctx.maxHeight);
+    return frameQualityName(frame.width, frame.height) ?? t.split(/[\s(]/)[0];
   }
   return t;
 }
@@ -247,24 +276,29 @@ const RUNG_WORDS: Readonly<Record<string, string>> = { high: 'High', medium: 'Me
  * /play/info's label for it (listed: its qualities, or those it gives for a
  * q of the ladder, for a direct stream moved onto it), shown as
  * shownQualityName shows it; else, for the rung playing, the NAME of its
- * variant or its frame's name; else high by the original's frame; else the
- * rung's word alone.
+ * variant or its frame's name; else high by the frame it encodes from the
+ * original (highRungFrame); else the rung's word alone. maxHeight, the
+ * tallest frame the device's caps say it decodes (0: no cap).
  */
 export function onTheFlyLadder(o: {
   mode?: string | null;
   listed?: readonly PlayQuality[] | null;
   width?: number;
   height?: number;
+  maxHeight?: number;
   playing?: PlayingLevel | null;
 }): LadderEntry[] {
   return ON_THE_FLY_RUNGS.map((q) => {
     if (playsOriginal(o.mode, q)) return { name: q, label: ORIGINAL, known: true };
     const listed = (o.listed ?? []).find((e) => e?.name === q && typeof e.label === 'string' && e.label.trim() !== '');
-    if (listed) return { name: q, label: shownQualityName(listed.label, { q, mode: o.mode, width: o.width, height: o.height }), known: true };
+    if (listed) {
+      return { name: q, label: shownQualityName(listed.label, { q, mode: o.mode, width: o.width, height: o.height, maxHeight: o.maxHeight }), known: true };
+    }
     const playing = o.playing && o.playing.q === q ? shownQualityName(o.playing.name) || frameQualityName(o.playing.width, o.playing.height) : null;
     if (playing) return { name: q, label: playing, known: true };
-    const original = q === 'high' ? frameQualityName(o.width, o.height) : null;
-    return { name: q, label: original ?? RUNG_WORDS[q], known: false };
+    const high = q === 'high' ? highRungFrame(o.width, o.height, o.maxHeight) : null;
+    const guessed = high ? frameQualityName(high.width, high.height) : null;
+    return { name: q, label: guessed ?? RUNG_WORDS[q], known: false };
   });
 }
 

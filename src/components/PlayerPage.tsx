@@ -56,7 +56,7 @@ import {
   type PlayingLevel,
 } from '../lib/qualities';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
-import { withoutCodec } from '../lib/caps';
+import { maxVideoHeight, withoutCodec } from '../lib/caps';
 import { extraHeading, extraInfo, playerCalls, type MasterAudio, type MasterVariant } from '../lib/playerMode';
 import {
   EventBudget,
@@ -1294,8 +1294,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // The transcode ladder, each rung by the server's name for it (lib/
   // qualities.ts onTheFlyLadder): /play/info's label, "Original" for a
-  // direct stream's high, or what the rung playing is called in its master.
-  // One row per name in the menu; null off the ladder.
+  // direct stream's high, or what the rung playing is called in its master;
+  // an older server's high by the frame it encodes, the device's height cap
+  // (its caps) counted. One row per name in the menu; null off the ladder.
   const ladder = useMemo(
     () =>
       effectiveMode === 'transcode' && info
@@ -1304,10 +1305,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             listed: info.mode === 'transcode' ? info.qualities : movedLadder,
             width: info.width,
             height: info.height,
+            maxHeight: maxVideoHeight(capsParam),
             playing: playingLevel,
           })
         : null,
-    [effectiveMode, info, movedLadder, playingLevel],
+    [effectiveMode, info, movedLadder, playingLevel, capsParam],
   );
   // For hls.js's error handler, which lives as long as its source.
   const ladderRef = useRef(ladder);

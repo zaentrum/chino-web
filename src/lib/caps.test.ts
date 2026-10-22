@@ -9,6 +9,7 @@ import {
   decoderCheck,
   deviceCapsTokens,
   hasCodec,
+  maxVideoHeight,
   playsHlsNatively,
   withoutCodec,
 } from './caps.ts';
@@ -99,4 +100,13 @@ test('a codec dropped or looked for at any height', () => {
   assert.equal(hasCodec(['avc', 'hvc'], 'hvc'), true);
   assert.equal(hasCodec('avc,aac', 'hvc'), false);
   assert.equal(hasCodec('', 'hvc'), false);
+});
+
+test("the tallest frame the caps say the device decodes, as chino-stream reads them; 0 without a height", () => {
+  assert.equal(maxVideoHeight('avc,hvc:1080,aac'), 1080);
+  assert.equal(maxVideoHeight('avc:720,hvc:2160,aac'), 2160);
+  assert.equal(maxVideoHeight(['avc:720', 'aac']), 720);
+  assert.equal(maxVideoHeight(' HVC : 1080 ,aac'), 1080);
+  // No height, an audio token's, one not a number: no cap.
+  for (const caps of ['avc,hvc,aac', '', 'aac:6', 'hvc:', 'hvc:tall', 'native']) assert.equal(maxVideoHeight(caps), 0, caps);
 });
