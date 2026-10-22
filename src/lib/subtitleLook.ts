@@ -16,7 +16,13 @@
 //
 // The player draws a text subtitle itself (SubtitleOverlay); where the
 // browser draws it instead (picture-in-picture, a phone's own fullscreen),
-// its ::cue rule gives it the same look.
+// its ::cue rule gives it the same look. While the controls show, the line
+// moves up above them, and back down when they hide.
+//
+// On the TV and the phone, caption settings made on the device (under
+// accessibility: a box behind the text, say) win over this look. A web
+// page cannot read the device's, so the web always shows this look, and it
+// has no caption setting of its own (docs/chino, subtitles: the look).
 
 /** The text's size, as a share of the picture's height. */
 export const SUBTITLE_TEXT_SIZE = 0.0533;

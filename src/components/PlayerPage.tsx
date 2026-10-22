@@ -27,7 +27,7 @@ import {
   type SubtitleEntry,
 } from '../lib/subtitles';
 import { CUES_DRAWN_BY_PAGE, cueCss, shownLines, type CueLine } from '../lib/subtitleLook';
-import { SubtitleOverlay } from './SubtitleOverlay';
+import { CONTROLS_PACE, SubtitleOverlay } from './SubtitleOverlay';
 import {
   QUALITY_RUNGS,
   downgradeStep,
@@ -3871,7 +3871,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // 'HH:MM 4G' system bar on iPhone (see #player-mobile-top).
         data-chrome-zone
         style={{ paddingTop: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
-        className={`absolute top-0 inset-x-0 px-4 pb-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute top-0 inset-x-0 px-4 pb-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity ${CONTROLS_PACE} ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         <div className="flex items-center gap-3">
           <button
@@ -4026,7 +4026,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         data-chrome-zone
         ref={bottomBarRef}
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
-        className={`absolute bottom-0 inset-x-0 px-4 pt-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute bottom-0 inset-x-0 px-4 pt-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity ${CONTROLS_PACE} ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
         <div className="flex items-center gap-3">
           <span className="text-sm tabular-nums w-16 text-right">{fmt(displayedCurrent)}</span>

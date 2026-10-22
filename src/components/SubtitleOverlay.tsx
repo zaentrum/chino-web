@@ -9,6 +9,10 @@ import {
   type CueLine,
 } from '../lib/subtitleLook';
 
+/** The pace the player's controls fade in and out at, and the subtitle
+ *  moves up above them and back down at: one pace for both. */
+export const CONTROLS_PACE = 'duration-150 ease-in-out';
+
 interface SubtitleOverlayProps {
   /** The video the subtitle is drawn over. */
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -33,7 +37,8 @@ interface Sizes {
  * A text subtitle, drawn by the player in the one look (lib/subtitleLook.ts):
  * white with a black outline, no box, 5.33 % of the picture's height,
  * centred within 80 % of the picture's width, 8 % of its height above its
- * bottom edge - above the controls while they show. Italics and ruby stay
+ * bottom edge - above the controls while they show, moving up and back
+ * down at the pace they fade at (CONTROLS_PACE). Italics and ruby stay
  * as the file sets them. It follows the picture as the window, the element
  * or the picture's size changes.
  */
@@ -77,7 +82,7 @@ export function SubtitleOverlay({ videoRef, lines, lang, clear }: SubtitleOverla
     <div
       data-subtitle
       lang={lang || undefined}
-      className="pointer-events-none absolute text-center transition-[bottom] duration-150 ease-out motion-reduce:transition-none"
+      className={`pointer-events-none absolute text-center transition-[bottom] ${CONTROLS_PACE} motion-reduce:transition-none`}
       style={{
         left: place.left,
         width: place.width,
