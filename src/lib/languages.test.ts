@@ -250,6 +250,18 @@ test('a language\'s own name before a region: the region in brackets after the l
     ['eng', 'British English', 'English (United Kingdom)', 'en-GB'],
     ['dut', 'Flemish', 'Dutch (Belgium)', 'nl-BE'],
     ['pt-BR', 'Brazilian Portuguese', 'Portuguese (Brazil)', 'pt-BR'],
+    // The dialect's adjective in brackets after the language, or alone.
+    ['por', 'Portuguese (Brazilian)', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'Portuguese (European)', 'Portuguese (Portugal)', 'pt-PT'],
+    ['spa', 'Spanish (Latin American)', 'Spanish (Latin America)', 'es-419'],
+    ['spa', 'Spanish (Mexican)', 'Spanish (Mexico)', 'es-MX'],
+    ['fre', 'French (Canadian)', 'French (Canada)', 'fr-CA'],
+    ['eng', 'English (British)', 'English (United Kingdom)', 'en-GB'],
+    ['eng', 'English [American]', 'English (United States)', 'en-US'],
+    ['ger', 'German (Austrian)', 'German (Austria)', 'de-AT'],
+    ['por', 'Brazilian', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'Portuguese - Brazilian', 'Portuguese (Brazil)', 'pt-BR'],
+    ['spa', 'Spanish (Latin American) (Forced)', 'Spanish (Latin America) · foreign-language parts only', 'es-419'],
   ];
   for (const [lang, title, label, tag] of cases) {
     assert.equal(subtitleLabel({ lang, title }), label, title);
@@ -258,8 +270,10 @@ test('a language\'s own name before a region: the region in brackets after the l
   // Another region than the tag's stays a word.
   assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latinoamérica' }), 'Spanish (Spain) · Latinoamérica');
   assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latin American Spanish' }), 'Spanish (Spain) · Latin American Spanish');
-  // A region among other words is a word.
+  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'Portuguese (Brazilian)' }), 'Portuguese (Portugal) · Brazilian');
+  // A region among other words is a word, its adjective too.
   assert.equal(subtitleLabel({ lang: 'fre', title: 'Canada Commentaire' }), 'French · Canada Commentaire');
+  assert.equal(subtitleLabel({ lang: 'por', title: 'Brazilian Commentary' }), 'Portuguese · Brazilian Commentary');
   // With the kind: once, after.
   assert.equal(subtitleLabel({ lang: 'spa', title: 'Español (Latinoamérica) (Forced)' }), 'Spanish (Latin America) · foreign-language parts only');
 });

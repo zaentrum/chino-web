@@ -362,23 +362,34 @@ function regionsOf(base: string): Map<string, string> {
 
 const DIALECTS = new Map<string, Map<string, string>>();
 
+/** The name without the word or words `word` ("brazilian" of "brazilian
+ *  portuguese"); the name as it is where they are not among its words. */
+function withoutWords(name: string, word: string): string {
+  return ` ${name} `.replace(` ${word} `, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The names Intl's dialect form gives a language's regional forms of its
- *  own, in the language itself and in English, folded: "brazilian
+ *  own, in the language itself and in English, folded - "brazilian
  *  portuguese" → "BR", "latin american spanish" → "419", "flemish" → "BE"
- *  for "nl". A title that says one names the region, which the standard
- *  form says in brackets ("Portuguese (Brazil)"). Made once per language,
- *  when a title asks. */
+ *  for "nl" - and each without the language's own name, the adjective a
+ *  title puts in brackets after it ("Portuguese (Brazilian)"): "brazilian"
+ *  → "BR", "latin american" → "419", "british" → "GB". A title that says
+ *  one names the region, which the standard form says in brackets
+ *  ("Portuguese (Brazil)"). Made once per language, when a title asks. */
 function dialectsOf(base: string): Map<string, string> {
   const cached = DIALECTS.get(base);
   if (cached) return cached;
   const dialects = new Map<string, string>();
   for (const locale of [base, 'en']) {
+    const own = folded(intlName(base, [locale], 'standard'));
     for (const region of REGION_CODES) {
       const tag = `${base}-${region}`;
       const dialect = intlName(tag, [locale], 'dialect');
-      if (dialect && dialect !== intlName(tag, [locale], 'standard') && !dialects.has(folded(dialect))) {
-        dialects.set(folded(dialect), region);
-      }
+      if (!dialect || dialect === intlName(tag, [locale], 'standard')) continue;
+      const name = folded(dialect);
+      if (!dialects.has(name)) dialects.set(name, region);
+      const adjective = own ? withoutWords(name, own) : '';
+      if (adjective && adjective !== name && !dialects.has(adjective)) dialects.set(adjective, region);
     }
   }
   DIALECTS.set(base, dialects);
@@ -486,12 +497,13 @@ type Says = { language: true } | { script: string; region: string } | { words: s
 
 /** What a piece of a title - a part, a bracket, words of one - says of the
  *  track's language: that it is the language ("Deutsch", "中文"), its script
- *  ("简体"), its region ("Latinoamérica"), either or both as a code of the
- *  language ("PT-BR", "zh-Hant-TW"), a Chinese variety in the word list's
- *  words ("粵語": "Cantonese"); null for none of these. In brackets, a
- *  region's code says the region where it is one of the language's
- *  ("Português (BR)": regionCodesOf). Words inside a longer piece name the
- *  language by a name, never by a code: "und" is a German word. */
+ *  ("简体"), its region ("Latinoamérica", "Brazilian"), either or both as
+ *  a code of the language ("PT-BR", "zh-Hant-TW"), a Chinese variety in
+ *  the word list's words ("粵語": "Cantonese"); null for none of these. In
+ *  brackets, a region's code says the region where it is one of the
+ *  language's ("Português (BR)": regionCodesOf). Words inside a longer
+ *  piece name the language by a name, never by a code: "und" is a German
+ *  word. */
 function pieceSays(text: string, code: string | undefined, whole: boolean, bracketed = false): Says | null {
   const t = text.trim();
   if (!t) return null;
@@ -518,10 +530,11 @@ function pieceSays(text: string, code: string | undefined, whole: boolean, brack
  * names the language again, and the script and the region it names that
  * the tag agrees with. A part, or a bracket, that is the language's name,
  * script or region goes whole ("Chinese (Simplified) · 中文", "Español
- * (Latinoamérica)", "PT-BR", "Português (BR)"); inside one with other
- * words only the language's names go ("Deutsch Kommentar" is "Kommentar")
- * - not the label's own name, which says it once ("English Commentary") -
- * and a region stays a word. Nothing read, the title as it was.
+ * (Latinoamérica)", "Portuguese (Brazilian)", "PT-BR", "Português (BR)");
+ * inside one with other words only the language's names go ("Deutsch
+ * Kommentar" is "Kommentar") - not the label's own name, which says it
+ * once ("English Commentary") - and a region stays a word. Nothing read,
+ * the title as it was.
  */
 function readParts(title: string, code: string | undefined): { title: string; script: string; region: string } {
   const tag = namedTag(languageTag(code));

@@ -299,6 +299,15 @@ test('a language\'s region in a title lists the track with that region', () => {
   // The same region twice is one; Spain and Latin America are two.
   assert.deepEqual(labels(m.top), ['Spanish (Spain)', 'Spanish (Latin America)']);
   assert.deepEqual(m.top.map((e) => e.tag), ['es-ES', 'es-419']);
+  // A region's adjective reads as the region: the file's Brazilian
+  // Portuguese and the server's are one, the file's own.
+  const brazil: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'por', title: 'Portuguese (Brazilian)', embedded: true },
+    { id: 'side-pt', lang: 'pt-BR' },
+  ];
+  for (const serverLanguages of [[], ['en', 'pt-BR']]) {
+    assert.deepEqual(menuEntries(menu(brazil, { serverLanguages })).map((e) => [e.id, e.label]), [['emb-2', 'Portuguese (Brazil)']]);
+  }
 });
 
 test('titles that are codes with a region or a script: two regions, two scripts are two', () => {
