@@ -126,7 +126,7 @@ test('a packaged title: the server\'s languages, no "more languages"', () => {
   ]);
 });
 
-test('duplicates of one language and kind show once: the file\'s own before a sidecar', () => {
+test('tracks that would read the same show once: the file\'s own before a sidecar, else the first in the file', () => {
   const m = menu(ORIGINAL);
   const english = m.top.filter((e) => e.label === 'English');
   assert.equal(english.length, 1);
@@ -135,9 +135,39 @@ test('duplicates of one language and kind show once: the file\'s own before a si
   assert.equal(m.top.filter((e) => e.label === 'German').length, 1);
   // A number the server gave to keep a title unique is no difference.
   assert.deepEqual(labels(menu([{ id: 'a', lang: 'eng', title: 'English' }, { id: 'b', lang: 'eng', title: 'English (2)' }]).top), ['English']);
+  // Three of the file's own, then two sidecars: the first of the file's.
+  const many = menu([
+    { id: 'emb-2', lang: 'eng', embedded: true },
+    { id: 'emb-3', lang: 'eng', title: 'English', embedded: true },
+    { id: 'emb-4', lang: 'en', embedded: true },
+    { id: 'side-1', lang: 'en' },
+    { id: 'side-2', lang: 'eng', title: 'English' },
+  ]);
+  assert.deepEqual(many.top.map((e) => [e.id, e.label]), [['emb-2', 'English']]);
+  // Two sidecars alone: the first.
+  assert.deepEqual(menu([{ id: 'side-1', lang: 'en' }, { id: 'side-2', lang: 'en' }]).top.map((e) => e.id), ['side-1']);
 });
 
-test('duplicates: the one on stays, whichever it is; a text one before a picture one', () => {
+test('never numbered: no entry of a menu reads "(2)", in any language or kind', () => {
+  const tracks: SubtitleSource[] = [
+    ...ORIGINAL,
+    { id: 'emb-20', lang: 'ger', embedded: true },
+    { id: 'emb-21', lang: 'jpn', title: '日本語', embedded: true },
+    { id: 'emb-22', lang: 'eng', title: 'SDH', embedded: true },
+    { id: 'emb-23', lang: 'und', title: 'Signs', embedded: true },
+    { id: 'emb-24', lang: 'und', title: 'English', embedded: true },
+    { id: 'side-en-2', lang: 'eng', title: 'English (2)' },
+    { id: 'side-zh-2', lang: 'zh-Hans', title: 'AI (2)' },
+  ];
+  for (const serverLanguages of [SERVER, []]) {
+    const all = menuEntries(menu(tracks, { serverLanguages }));
+    for (const e of all) assert.doesNotMatch(e.label, /\(\d+\)/, e.label);
+    // Each label once.
+    assert.equal(new Set(all.map((e) => e.label)).size, all.length);
+  }
+});
+
+test('tracks that read the same: the one on stays, whichever it is; a text one before a picture one', () => {
   const twice: SubtitleSource[] = [
     { id: 'emb', lang: 'eng', embedded: true },
     { id: 'side', lang: 'en' },
@@ -153,9 +183,10 @@ test('duplicates: the one on stays, whichever it is; a text one before a picture
   assert.equal(subtitleEntries(pictures)[0].picture, true);
 });
 
-test('a track tagged with no language is no duplicate of one in a language, whatever its title says', () => {
+test('a track tagged with no language is none of a language\'s, whatever its title says: one in the language stands for it', () => {
   // The file's untagged track titled "English", then a French one, then an
-  // English sidecar: the English one is on top, and comes on by itself.
+  // English sidecar: they read the same, and show once - the English one,
+  // on top, which comes on by itself. No "English (2)".
   const tracks: SubtitleSource[] = [
     { id: 'emb-2', lang: 'und', title: 'English', embedded: true },
     { id: 'emb-3', lang: 'fre', embedded: true },
@@ -163,8 +194,10 @@ test('a track tagged with no language is no duplicate of one in a language, what
   ];
   const m = menu(tracks);
   assert.deepEqual(m.top.map((e) => e.id), ['s1']);
-  assert.deepEqual(m.more.map((e) => [e.id, e.label]), [['emb-3', 'French'], ['emb-2', 'English (2)']]);
+  assert.deepEqual(m.more.map((e) => [e.id, e.label]), [['emb-3', 'French']]);
   assert.equal(autoSubtitle(m, { audioLang: 'fre', subtitlePref: 'eng' }), 's1');
+  // Alone, it is listed by its title, with the tracks in no language.
+  assert.deepEqual(menu(tracks.slice(0, 2)).more.map((e) => [e.id, e.label]), [['emb-3', 'French'], ['emb-2', 'English']]);
   // Two of the file's own, the untagged one first: the tagged one still.
   const both = menu([{ id: 'emb-2', lang: 'und', title: 'English', embedded: true }, { id: 'emb-3', lang: 'eng', embedded: true }]);
   assert.deepEqual(both.top.map((e) => e.id), ['emb-3']);

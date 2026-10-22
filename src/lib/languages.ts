@@ -588,16 +588,17 @@ export function subtitleLabel(track: SubtitleLabelInput): string {
   return [label, ...kinds].join(' · ');
 }
 
-/** The subtitle labels, one per track, in order (subtitleLabel); where two
- *  tracks would still read the same, a number for the second and later ones
- *  ("German (2)"). */
+/** The subtitle labels, one per track, in order (subtitleLabel). Two that
+ *  read the same are never numbered ("German (2)"): the menu shows them once
+ *  (subtitles.ts subtitleMenu). */
 export function subtitleLabels(tracks: readonly SubtitleLabelInput[]): string[] {
-  return numbered(tracks.map(subtitleLabel));
+  return tracks.map(subtitleLabel);
 }
 
 /** The labels, the second and later of the ones that read the same
- *  numbered ("German (2)"). `key` says which read the same: by default the
- *  label. */
+ *  numbered ("English (2)"): the audio menu's, where nothing else tells two
+ *  tracks apart (subtitles that read the same show once instead). `key`
+ *  says which read the same: by default the label. */
 function numbered(labels: readonly string[], key: (label: string, i: number) => string = (l) => l): string[] {
   const seen = new Map<string, number>();
   return labels.map((label, i) => {

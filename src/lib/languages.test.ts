@@ -269,30 +269,29 @@ test('a sidecar the server made says " · AI" after the language', () => {
   ]);
 });
 
-test('the same label twice is numbered, the server\'s number no more', () => {
-  assert.deepEqual(
-    subtitleLabels([
-      { lang: 'eng', title: 'eng' },
-      { lang: 'eng', title: 'English' },
-      // chino-stream's unique NAME: numbered by the labels, once.
-      { lang: 'eng', title: 'English (2)' },
-      { lang: 'eng', title: 'SDH' },
-      { lang: 'eng', title: 'English · SDH (2)' },
-      { lang: 'ger', forced: true },
-      { lang: 'ger', title: 'Forced', forced: true },
-      { lang: 'und' },
-    ]),
-    [
-      'English',
-      'English (2)',
-      'English (3)',
-      'English · for deaf and hard of hearing',
-      'English · for deaf and hard of hearing (2)',
-      'German · foreign-language parts only',
-      'German · foreign-language parts only (2)',
-      'Unknown',
-    ],
-  );
+test('the same label twice reads the same, never numbered; the server\'s number goes', () => {
+  const labels = subtitleLabels([
+    { lang: 'eng', title: 'eng' },
+    { lang: 'eng', title: 'English' },
+    // chino-stream's unique NAME: its number says nothing of the track.
+    { lang: 'eng', title: 'English (2)' },
+    { lang: 'eng', title: 'SDH' },
+    { lang: 'eng', title: 'English · SDH (2)' },
+    { lang: 'ger', forced: true },
+    { lang: 'ger', title: 'Forced', forced: true },
+    { lang: 'und' },
+  ]);
+  assert.deepEqual(labels, [
+    'English',
+    'English',
+    'English',
+    'English · for deaf and hard of hearing',
+    'English · for deaf and hard of hearing',
+    'German · foreign-language parts only',
+    'German · foreign-language parts only',
+    'Unknown',
+  ]);
+  for (const label of labels) assert.doesNotMatch(label, /\(\d+\)/);
 });
 
 test('subtitles without dialogue, or in no known language: "No dialogue", else the title, else "Unknown"', () => {
@@ -306,7 +305,7 @@ test('subtitles without dialogue, or in no known language: "No dialogue", else t
       { lang: '', title: 'Forced', forced: true },
       { lang: 'und' },
     ]),
-    ['No dialogue', 'No dialogue (2)', 'No dialogue · Signs', 'Signs & Songs', 'Unknown', 'Unknown · foreign-language parts only', 'Unknown (2)'],
+    ['No dialogue', 'No dialogue', 'No dialogue · Signs', 'Signs & Songs', 'Unknown', 'Unknown · foreign-language parts only', 'Unknown'],
   );
 });
 

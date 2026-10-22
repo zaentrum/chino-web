@@ -119,17 +119,21 @@ function kindRank(e: SubtitleEntry): number {
 }
 
 /**
- * Which of two tracks that read the same the menu shows: the one on, else a
- * text one before a picture one, else the file's own before a sidecar, else
- * the first.
+ * Which of two tracks that read the same the menu shows, `a` the one that
+ * comes first: the one on; else one in a language before one in none,
+ * which reads as a language only by its title ("English" on an "und"
+ * track) - the one in the language is listed with it and comes on by it;
+ * else the file's own before a sidecar; else a text one before a picture
+ * one; else the first.
  */
 function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefined): SubtitleEntry {
   if (on) {
     if (b.id === on) return b;
     if (a.id === on) return a;
   }
-  if (a.picture !== b.picture) return a.picture ? b : a;
+  if (!!a.tag !== !!b.tag) return a.tag ? a : b;
   if (!!a.embedded !== !!b.embedded) return a.embedded ? a : b;
+  if (a.picture !== b.picture) return a.picture ? b : a;
   return a;
 }
 
@@ -149,12 +153,12 @@ function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefine
  * "more languages" alone would hide every track behind a click - their
  * tracks are all listed on top, the viewer's language first.
  *
- * Two tracks of one language and one kind, with nothing in their titles to
- * tell them apart, show once, where the first of them was: the one on if
- * either is, else a text one, else the file's own. A track tagged with no
- * language is none of a language's, whatever its title says ("English" on
- * an "und" track): two that still read the same are numbered, the second
- * "English (2)".
+ * Tracks that would read the same show once, where the first of them was,
+ * and are never numbered ("English (2)"): the file's own before one the
+ * server adds, otherwise the first in the file (better). A track tagged
+ * with no language is none of a language's, whatever its title says
+ * ("English" on an "und" track): where it reads the same as one in that
+ * language, that one stands for both.
  */
 export function subtitleMenu<T extends SubtitleSource>(
   entries: readonly SubtitleEntry<T>[],
@@ -162,9 +166,8 @@ export function subtitleMenu<T extends SubtitleSource>(
 ): SubtitleMenu<T> {
   const firstOf = new Map<string, SubtitleEntry<T>>();
   for (const e of entries) {
-    const key = `${e.tag}\u0000${e.label}`;
-    const seen = firstOf.get(key);
-    firstOf.set(key, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
+    const seen = firstOf.get(e.label);
+    firstOf.set(e.label, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
   }
   const unique = [...firstOf.values()];
   const ordered = (list: readonly SubtitleEntry<T>[]) => {
@@ -188,20 +191,7 @@ export function subtitleMenu<T extends SubtitleSource>(
   const rest = unique.filter((e) => !placed.has(e));
   const others = [...ordered(rest.filter((e) => e.tag)), ...rest.filter((e) => !e.tag)];
   const noMore = packaged || !serverLanguages.some((l) => languageTag(l));
-  return numbered(noMore ? { top: [...top, ...others], more: [] } : { top, more: others });
-}
-
-/** The menu with the second and later of the entries that read the same
- *  numbered, in its order ("English", "English (2)"). */
-function numbered<T extends SubtitleSource>(menu: SubtitleMenu<T>): SubtitleMenu<T> {
-  const seen = new Map<string, number>();
-  const number = (e: SubtitleEntry<T>): SubtitleEntry<T> => {
-    const n = (seen.get(e.label) ?? 0) + 1;
-    seen.set(e.label, n);
-    return n === 1 ? e : { ...e, label: `${e.label} (${n})` };
-  };
-  const top = menu.top.map(number);
-  return { top, more: menu.more.map(number) };
+  return noMore ? { top: [...top, ...others], more: [] } : { top, more: others };
 }
 
 /** Every entry of the menu, in its order. */
