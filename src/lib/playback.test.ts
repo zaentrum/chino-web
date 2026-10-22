@@ -169,11 +169,12 @@ test('each move onto the ladder says why: the connection, or the original', () =
   assert.equal(stalled.kind === 'reload' ? stalled.notice : null, 'original-stall');
   const error = fragmentError({});
   assert.equal(error.kind === 'transcode' ? error.notice : null, 'original-error');
-  for (const why of ['original-stall', 'original-error', 'step'] as StepDownWhy[]) {
-    const line = stepDownNotice('Medium (720p)', why);
+  for (const why of ['original-stall', 'original-error', 'step', 'rung-error'] as StepDownWhy[]) {
+    const line = stepDownNotice('Medium (720p)', why, 'High (1080p)');
     // A line in the viewer's words: no code, no cause it is not.
     assert.doesNotMatch(line, /\b(404|5\d\d)\b|unstable connection|adaptive streaming/i, line);
-    assert.match(line, /^Switched to Medium \(720p\) quality: [a-z].*\.$/, line);
+    // In words, or the name of the quality left.
+    assert.match(line, /^Switched to Medium \(720p\) quality: (?:[a-z]|High \(1080p\) ).*\.$/, line);
   }
 });
 
@@ -181,6 +182,7 @@ test("the notices of docs/chino, word for word, the quality by the server's name
   assert.equal(stepDownNotice('Medium (720p)', 'original-stall'), "Switched to Medium (720p) quality: the connection can't keep up with the original.");
   assert.equal(stepDownNotice('Low (480p)', 'original-error'), "Switched to Low (480p) quality: the original couldn't be streamed.");
   assert.equal(stepDownNotice('Low (480p)', 'step'), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(stepDownNotice('Low (480p)', 'rung-error', 'Medium (720p)'), "Switched to Low (480p) quality: Medium (720p) couldn't be streamed.");
 });
 
 test('a source left for another keeps the position from before its teardown, which sends the media back to 0:00', () => {
@@ -205,11 +207,79 @@ test('a direct stream waits for hls.js\'s own retries on any other failure to lo
   }
 });
 
-test('a packaged title, a transcode, one already moved and a mode not known keep their handling of a fragment that failed', () => {
-  for (const s of [{ mode: 'packaged' as const }, { mode: 'transcode' as const }, { mode: null }, { forcedTranscode: true, quality: 'medium' }]) {
+test('a packaged title and a mode not known keep their handling of a fragment that failed', () => {
+  for (const s of [{ mode: 'packaged' as const }, { mode: null }, { mode: 'packaged' as const, quality: 'v2' }]) {
     assert.deepEqual(fragmentError(s), { kind: 'keep' }, JSON.stringify(s));
     assert.deepEqual(fragmentError({ ...s, fatal: true, status: 503 }), { kind: 'keep' }, JSON.stringify(s));
   }
+});
+
+const FULL = named(['High (1080p)', 'Medium (720p)', 'Low (480p)']);
+
+test("a rung of the ladder that can't be streamed steps down to the next, saying which couldn't be streamed", () => {
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: FULL });
+  // A 404 at once: the server can't make that segment, no retry changes it.
+  const a = fragmentError({ mode: 'transcode', quality: 'medium', ladder });
+  assert.equal(a.kind, 'step');
+  if (a.kind !== 'step') return;
+  assert.equal(a.quality, 'low');
+  assert.equal(a.forceTranscode, false);
+  assert.equal(a.previous, 'Medium (720p)');
+  // As the player says it, the quality it went to by the ladder's name.
+  assert.equal(
+    stepDownNotice(ladder.find((e) => e.name === a.quality)!.label, a.notice, a.previous),
+    "Switched to Low (480p) quality: Medium (720p) couldn't be streamed.",
+  );
+  assert.deepEqual(
+    (({ kind, quality, previous }) => ({ kind, quality, previous }))(fragmentError({ mode: 'transcode', quality: 'high', ladder }) as { kind: string; quality: string; previous: string }),
+    { kind: 'step', quality: 'medium', previous: 'High (1080p)' },
+  );
+  // Any other failure once hls.js's own retries ran out.
+  for (const status of [503, 502, 504, 0, null]) {
+    assert.equal(fragmentError({ mode: 'transcode', quality: 'medium', ladder, status }).kind, 'keep', String(status));
+    assert.equal(fragmentError({ mode: 'transcode', quality: 'medium', ladder, status, fatal: true }).kind, 'step', String(status));
+  }
+  // A direct stream moved onto the ladder steps down on it, still forced.
+  const moved = onTheFlyLadder({ mode: 'remux', listed: FULL });
+  const m = fragmentError({ mode: 'remux', quality: 'medium', forcedTranscode: true, ladder: moved });
+  assert.equal(m.kind, 'step');
+  if (m.kind === 'step') {
+    assert.equal(m.quality, 'low');
+    assert.equal(m.forceTranscode, true);
+    assert.equal(m.previous, 'Medium (720p)');
+  }
+});
+
+test('past the last rung there is nowhere lower: the player tries on, then gives up', () => {
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: FULL });
+  assert.deepEqual(fragmentError({ mode: 'transcode', quality: 'low', ladder }), { kind: 'keep' });
+  assert.deepEqual(fragmentError({ mode: 'transcode', quality: 'low', ladder, fatal: true, status: 503 }), { kind: 'keep' });
+  // A 360p original: every rung reads the same, nothing lower.
+  const small = onTheFlyLadder({ mode: 'transcode', listed: named(['Lowest (360p)', 'Lowest (360p)', 'Lowest (360p)']) });
+  assert.deepEqual(fragmentError({ mode: 'transcode', quality: 'high', ladder: small }), { kind: 'keep' });
+  // Not a rung of the ladder, or not a fragment: as before.
+  assert.deepEqual(fragmentError({ mode: 'transcode', quality: 'auto', ladder }), { kind: 'keep' });
+  assert.deepEqual(fragmentError({ mode: 'transcode', quality: 'medium', ladder, details: 'levelLoadError', fatal: true }), { kind: 'keep' });
+});
+
+test("a 720p original's high that can't be streamed goes past medium, which encodes the same frame", () => {
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: named(['Medium (720p)', 'Medium (720p)', 'Low (480p)']) });
+  const a = fragmentError({ mode: 'transcode', quality: 'high', ladder });
+  assert.equal(a.kind === 'step' ? a.quality : null, 'low');
+  assert.equal(a.kind === 'step' ? stepDownNotice('Low (480p)', a.notice, a.previous) : null, "Switched to Low (480p) quality: Medium (720p) couldn't be streamed.");
+});
+
+test('the rung left is named by its source where the server named it not; the fixed ladder where there is none', () => {
+  // chino-stream names no high of an original of unknown size; the master of that source does.
+  const unknown = onTheFlyLadder({ mode: 'transcode', listed: [{ name: 'high', label: '' }, FULL[1], FULL[2]] });
+  const a = fragmentError({ mode: 'transcode', quality: 'high', ladder: unknown, playing: { q: 'high', name: 'High (1080p)', width: 1920, height: 1080 } });
+  assert.equal(a.kind === 'step' ? a.previous : null, 'High (1080p)');
+  // A level of another source names nothing of this one.
+  const b = fragmentError({ mode: 'transcode', quality: 'high', ladder: unknown, playing: { q: 'medium', name: 'Medium (720p)' } });
+  assert.equal(b.kind === 'step' ? b.previous : null, 'High');
+  // No ladder: the fixed one, high, medium, low.
+  const c = fragmentError({ mode: 'transcode', quality: 'high' });
+  assert.equal(c.kind === 'step' ? c.quality : null, 'medium');
 });
 
 test('only a fragment that failed to load moves a direct stream: a playlist or the master does not', () => {

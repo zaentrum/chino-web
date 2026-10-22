@@ -13,7 +13,7 @@
 // a direct stream (passthrough, remux) or the transcode ladder's rungs.
 
 import { hasCodec } from './caps.ts';
-import { lowerRung, playsOriginal, type LadderEntry } from './qualities.ts';
+import { lowerRung, onTheFlyLadder, playsOriginal, rungName, type LadderEntry, type PlayingLevel } from './qualities.ts';
 
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
 
@@ -38,22 +38,26 @@ export function isLadderQuality(q: Quality): q is LadderQuality {
  * Why the player changed the quality by itself, which its notice says
  * (docs/chino, playback: when the quality changes by itself): off the
  * original because the connection can't keep up with it ('original-stall')
- * or because it couldn't be streamed ('original-error'), or one step down
- * between qualities ('step').
+ * or because it couldn't be streamed ('original-error'), one step down
+ * between qualities ('step'), or off a quality between that couldn't be
+ * streamed ('rung-error').
  */
-export type StepDownWhy = 'original-stall' | 'original-error' | 'step';
+export type StepDownWhy = 'original-stall' | 'original-error' | 'step' | 'rung-error';
 
 /**
  * The notice of a quality change the player made by itself, label the
  * quality it went to as the menu names it - the server's name, "Medium
- * (720p)" (lib/qualities.ts).
+ * (720p)" (lib/qualities.ts) - and previous, for 'rung-error', the one it
+ * left, named the same way.
  */
-export function stepDownNotice(label: string, why: StepDownWhy): string {
+export function stepDownNotice(label: string, why: StepDownWhy, previous?: string): string {
   switch (why) {
     case 'original-stall':
       return `Switched to ${label} quality: the connection can't keep up with the original.`;
     case 'original-error':
       return `Switched to ${label} quality: the original couldn't be streamed.`;
+    case 'rung-error':
+      return `Switched to ${label} quality: ${previous || 'the quality before'} couldn't be streamed.`;
     default:
       return `Switched to ${label} quality: the connection can't keep up.`;
   }
@@ -186,6 +190,10 @@ export type NetworkFallback =
   /** Onto the transcode ladder at Medium, at the position, the notice saying
    *  the original could not be streamed. */
   | { kind: 'transcode'; quality: LadderQuality; notice: StepDownWhy; label: string }
+  /** On the ladder, down to its next rung of another name, at the position,
+   *  transcoding forced as it was; the notice naming the rung it left
+   *  (previous) as one that could not be streamed. */
+  | { kind: 'step'; quality: LadderQuality; forceTranscode: boolean; notice: 'rung-error'; previous: string; label: string }
   /** As before: hls.js retries, then the player asks again or gives up. */
   | { kind: 'keep' };
 
@@ -193,16 +201,24 @@ export type NetworkFallback =
 const FRAGMENT_LOAD_ERRORS: readonly string[] = ['fragLoadError', 'fragLoadTimeOut'];
 
 /**
- * What to do when a fragment of the stream cannot be loaded. A direct stream
- * (remux, passthrough: the server's copy of the file) whose fragment is
- * answered 404 is one the server cannot make, which no retry changes: it
- * moves onto the transcode ladder at once. Any other failure to load its
- * fragments (a 5xx, a timeout, no answer) does so once hls.js's own retries
- * have run out - the error turned fatal. The move is the stall watcher's -
- * Medium, transcoding forced, the position kept - its notice its own; so
- * does the Original picked again after such a move (onTranscodeLadder). A
- * packaged title, a transcode (already on the ladder) and a mode not known
- * yet keep the handling they had.
+ * What to do when a fragment of the stream cannot be loaded. A fragment
+ * answered 404 is one the server cannot make, which no retry changes: the
+ * player steps off it at once. Any other failure to load one (a 5xx, a
+ * timeout, no answer) does so once hls.js's own retries have run out - the
+ * error turned fatal.
+ *
+ * A direct stream (remux, passthrough: the server's copy of the file), and
+ * the Original picked again after a move onto the ladder
+ * (onTranscodeLadder), moves onto the transcode ladder - the stall
+ * watcher's move: Medium, transcoding forced, the position kept - saying
+ * the original couldn't be streamed. On the ladder (a transcode, or a
+ * direct stream moved onto it) the player steps to the next rung with
+ * another name (lib/qualities.ts lowerRung, on ladder - the fixed ladder's
+ * next where it is not named), saying the rung it left couldn't be
+ * streamed, named as the ladder names it (rungName; playing, the level of
+ * the source that failed, names one the server did not); none past the
+ * last rung, where hls.js and the player's own tries go on until it gives
+ * up. A packaged title and a mode not known yet keep the handling they had.
  */
 export function networkFallback(s: {
   mode: PlayMode | null;
@@ -212,11 +228,30 @@ export function networkFallback(s: {
   details: string;
   status: number | null;
   fatal: boolean;
+  /** The on-the-fly ladder, named (lib/qualities.ts onTheFlyLadder). */
+  ladder?: readonly LadderEntry[] | null;
+  playing?: PlayingLevel | null;
 }): NetworkFallback {
-  const direct = s.mode === 'remux' || s.mode === 'passthrough';
-  if (!direct || onTranscodeLadder(s.mode, s.quality, s.forcedTranscode) || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
+  if (!FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
   if (s.status !== 404 && !s.fatal) return { kind: 'keep' };
-  return { kind: 'transcode', quality: 'medium', notice: 'original-error', label: `→ Medium (auto, ${s.mode} → transcode)` };
+  const direct = s.mode === 'remux' || s.mode === 'passthrough';
+  const onLadder = onTranscodeLadder(s.mode, s.quality, s.forcedTranscode);
+  if (direct && !onLadder) {
+    return { kind: 'transcode', quality: 'medium', notice: 'original-error', label: `→ Medium (auto, ${s.mode} → transcode)` };
+  }
+  if (!onLadder || !isLadderQuality(s.quality)) return { kind: 'keep' };
+  const ladder = s.ladder?.length ? s.ladder : onTheFlyLadder({ mode: s.mode });
+  const next = lowerRung(ladder, s.quality);
+  if (!next || !isLadderQuality(next)) return { kind: 'keep' };
+  const previous = rungName(ladder, s.quality, s.playing) ?? s.quality;
+  return {
+    kind: 'step',
+    quality: next,
+    forceTranscode: s.forcedTranscode,
+    notice: 'rung-error',
+    previous,
+    label: `→ ${ladder.find((e) => e.name === next)?.label ?? next} (auto, ${previous} couldn't be streamed)`,
+  };
 }
 
 /**

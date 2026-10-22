@@ -268,6 +268,20 @@ export function onTheFlyLadder(o: {
   });
 }
 
+/**
+ * A rung's name where the player says it (a notice): the ladder's, where
+ * it is the server's; else what the rung's source calls what it plays
+ * (level: its variant's NAME, else its frame) when it is that rung's; else
+ * the ladder's word. null for a q the ladder lacks.
+ */
+export function rungName(ladder: readonly LadderEntry[], q: string, level?: PlayingLevel | null): string | null {
+  const entry = ladder.find((e) => e.name === q);
+  if (!entry) return null;
+  if (entry.known) return entry.label;
+  const named = level && level.q === q ? shownQualityName(level.name) || frameQualityName(level.width, level.height) : null;
+  return named || entry.label;
+}
+
 /** The on-the-fly menu's rows: one per name, the first rung of each. */
 export function ladderRows(ladder: readonly LadderEntry[]): LadderEntry[] {
   return oneRowPerName(ladder);

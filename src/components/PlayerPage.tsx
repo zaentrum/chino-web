@@ -527,8 +527,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const [qualityNotice, setQualityNotice] = useState<string | null>(null);
   // A quality change the player made by itself, whose notice waits for the
   // name of the quality it went to (stepDownNotice): the server's, from
-  // /play/info or the master of the new source (the effect below).
-  const [pendingNotice, setPendingNotice] = useState<{ quality: Quality; why: StepDownWhy; ms: number } | null>(null);
+  // /play/info or the master of the new source (the effect below); previous,
+  // the name of a rung left because it couldn't be streamed.
+  const [pendingNotice, setPendingNotice] = useState<{ quality: Quality; why: StepDownWhy; previous?: string; ms: number } | null>(null);
   const noticeTimerRef = useRef<number | undefined>(undefined);
   const stallCountRef = useRef<{ count: number; firstAt: number }>({ count: 0, firstAt: 0 });
   // Wall-clock timestamp of the last auto-downgrade. Prevents
@@ -1072,14 +1073,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         markNotFound();
         return;
       }
-      // A fragment of a direct stream that cannot be loaded - answered 404,
-      // which no retry changes, or failing still once hls.js's own retries
-      // ran out - moves the stream onto the transcode ladder at once (lib/
-      // playback.ts networkFallback), as the stall watcher would once the
-      // playhead stopped: Medium, transcoding forced, the position kept,
-      // the same notice. Asking for the same URL again only ended in
-      // "Stream unreachable".
+      // A fragment that cannot be loaded - answered 404, which no retry
+      // changes, or failing still once hls.js's own retries ran out - is
+      // stepped off at once (lib/playback.ts networkFallback): a direct
+      // stream onto the transcode ladder, as the stall watcher would once
+      // the playhead stopped (Medium, transcoding forced, the same
+      // notice); a rung of the ladder down to the next, saying the one it
+      // left couldn't be streamed. The position is kept. Asking for the
+      // same URL again only ended in "Stream unreachable".
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        const level = hls.levels[Math.max(hls.loadLevel, 0)];
         const fallback = networkFallback({
           mode: infoRef.current?.mode ?? null,
           quality: sourceQ ?? streamQualityRef.current,
@@ -1087,6 +1090,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           details: String(data.details),
           status,
           fatal: !!data.fatal,
+          ladder: ladderRef.current,
+          playing: level ? { uri: level.uri, width: level.width, height: level.height, name: level.name || undefined, q: sourceQ } : null,
         });
         if (fallback.kind === 'transcode') {
           const at = leaveSource(v, keepPosition, () => hls.destroy());
@@ -1094,6 +1099,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           setForceTranscode(true);
           setStreamQuality(fallback.quality);
           setPendingNotice({ quality: fallback.quality, why: fallback.notice, ms: 5000 });
+          recordSwitch(fallback.label, 'stall', `fragment ${status ?? 'not loaded'} @ ${fmt(at)}`);
+          return;
+        }
+        if (fallback.kind === 'step') {
+          const at = leaveSource(v, keepPosition, () => hls.destroy());
+          reportEvent('circuit_breaker', { kind: 'network_step_down', fatal: !!data.fatal, httpStatus: status, lastDetails: data.details, from: sourceQ ?? null, to: fallback.quality });
+          setStreamQuality(fallback.quality);
+          setPendingNotice({ quality: fallback.quality, why: fallback.notice, previous: fallback.previous, ms: 5000 });
           recordSwitch(fallback.label, 'stall', `fragment ${status ?? 'not loaded'} @ ${fmt(at)}`);
           return;
         }
@@ -1296,6 +1309,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         : null,
     [effectiveMode, info, movedLadder, playingLevel],
   );
+  // For hls.js's error handler, which lives as long as its source.
+  const ladderRef = useRef(ladder);
+  ladderRef.current = ladder;
   const chosenRung = ladder ? ladderRow(ladder, streamQuality) : null;
   // A q as the menu names it: a packaged rung by its entry, a transcode
   // rung by the ladder, else the q itself.
@@ -1322,7 +1338,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     if (rung && !rung.known && !playingNow) return;
     const label = rung?.label ?? nameOfQuality(pendingNotice.quality);
     setPendingNotice(null);
-    setQualityNotice(stepDownNotice(label, pendingNotice.why));
+    setQualityNotice(stepDownNotice(label, pendingNotice.why, pendingNotice.previous));
     window.clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = window.setTimeout(() => setQualityNotice(null), pendingNotice.ms);
     // eslint-disable-next-line react-hooks/exhaustive-deps

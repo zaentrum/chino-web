@@ -14,6 +14,7 @@ import {
   packagedQualityMenu,
   playingLabel,
   qualityName,
+  rungName,
   rungOfUri,
   shownQualityName,
   type LadderEntry,
@@ -262,4 +263,14 @@ test("an older server's on-the-fly labels go through the table; an empty one is 
   // chino-stream names no high of an original of unknown size: the word, not a guess.
   const unknown = onTheFlyLadder({ mode: 'transcode', listed: [{ name: 'high', label: '' }, { name: 'medium', label: 'Medium (720p)' }, { name: 'low', label: 'Low (480p)' }] });
   assert.deepEqual(unknown.map((e) => [e.label, e.known]), [['High', false], ['Medium (720p)', true], ['Low (480p)', true]]);
+});
+
+test("a rung's name for a notice: the server's, else what its source plays, else its word", () => {
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: [{ name: 'high', label: '' }, ...ON_THE_FLY_720.slice(1)] });
+  assert.equal(rungName(ladder, 'medium'), 'Medium (720p)');
+  assert.equal(rungName(ladder, 'high'), 'High');
+  assert.equal(rungName(ladder, 'high', { q: 'high', name: 'High (1080p)' }), 'High (1080p)');
+  assert.equal(rungName(ladder, 'high', { q: 'high', width: 1920, height: 800 }), 'High (1080p)');
+  assert.equal(rungName(ladder, 'high', { q: 'low', name: 'Low (480p)' }), 'High', "another source's level");
+  assert.equal(rungName(ladder, 'v1'), null);
 });
