@@ -7,6 +7,7 @@ import { useItem } from '../hooks/useItem';
 import { useSeriesEpisodes } from '../hooks/useSeriesEpisodes';
 import { useSimilarItems } from '../hooks/useSimilarItems';
 import { useContinueWatching } from '../hooks/useContinueWatching';
+import { usePlayTitle } from '../hooks/usePlayTitle';
 import { useCatalogGen } from '../hooks/useCatalogEvents';
 import { AddToListControl, LikedToggle, WatchedToggle } from './TitleActions';
 import { EpisodesList, type EpisodeProgress } from './EpisodesList';
@@ -18,6 +19,8 @@ import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
 import { ratingBadge } from '../lib/ratings';
 import { trailerChoice, trailerPath } from '../lib/trailers';
+import { episodeCode } from '../lib/episodeFiles';
+import { seriesPlayTarget } from '../lib/seriesPlay';
 import { ACTION_FOCUS, ACTION_GAP, ACTION_HEIGHT, OFF_LOOK, PLAY_LOOK } from '../lib/titleActions';
 import { MediaRow } from './MediaRow';
 import { StatusPage } from './StatusPage';
@@ -45,7 +48,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // Episodes are fetched only for type=series — the hook short-circuits
   // when the id is undefined.
   const isSeries = data?.type === 'series';
-  const { seasons } = useSeriesEpisodes(isSeries ? itemId : undefined);
+  const { seasons, loading: seasonsLoading } = useSeriesEpisodes(isSeries ? itemId : undefined);
   // "More like this" — up to 12 recommendations scored on shared
   // genre + cast (tracker #115). Hook returns [] when nothing
   // scored above zero; the row below short-circuits in that case.
@@ -81,6 +84,18 @@ export function DetailPage({ itemId }: DetailPageProps) {
   }, [cwItems]);
   const likes = useLikes();
   const liked = likes.has(itemId);
+
+  // What Play on a series plays - a series has no stream of its own - as
+  // the TV app has it (lib/seriesPlay.ts): the episode the viewer is in,
+  // resumed, or the next one, else S01E01. null while Continue watching or
+  // the episodes are still coming, and for a series with no episodes.
+  const seriesKnown = isSeries && cwItems !== null && !seasonsLoading;
+  const seriesPlay = useMemo(
+    () => (seriesKnown ? seriesPlayTarget(itemId, cwItems, seasons) : null),
+    [seriesKnown, itemId, cwItems, seasons],
+  );
+  // Until then Play looks the episode up itself (usePlayTitle).
+  const { play: playTitle, pending: playPending } = usePlayTitle();
 
   // Watched state: seed from the catalogue payload's watched_at stamp,
   // override locally on toggle so the button reflects the user's most
@@ -162,6 +177,15 @@ export function DetailPage({ itemId }: DetailPageProps) {
     const qp = resume ? `?resume=${resumeSec}` : resumeSec > 30 ? '?startover=1' : '';
     window.location.assign(toApp(`/player/${encodeURIComponent(itemId)}${qp}`));
   };
+  // A series' episode, resumed where the viewer is, or from the start.
+  const goEpisode = (episodeId: string, resumeAt: number | null) => {
+    const qp = resumeAt != null ? `?resume=${resumeAt}` : seriesPlay && seriesPlay.resumeSec > 0 ? '?startover=1' : '';
+    window.location.assign(toApp(`/player/${encodeURIComponent(episodeId)}${qp}`));
+  };
+  const seriesCode =
+    seriesPlay && seriesPlay.season != null && seriesPlay.episode != null
+      ? episodeCode(seriesPlay.season, seriesPlay.episode, seriesPlay.episodeEnd)
+      : null;
 
   const runtimeMin = data.duration_ms ? Math.round(data.duration_ms / 60_000) : 0;
   const runtimeText = runtimeMin
@@ -280,7 +304,47 @@ export function DetailPage({ itemId }: DetailPageProps) {
                 and liked - every control 48 px tall, 8 px apart, a control
                 wrapping as a whole. */}
             <div className={`flex flex-wrap ${ACTION_GAP} mb-6`}>
-              {resumeSec > 30 ? (
+              {isSeries ? (
+                // A series plays an episode: the one the viewer is in
+                // ("Resume S02E03", and start over), the next ("Play
+                // S02E04"), or S01E01.
+                seriesPlay ? (
+                  seriesPlay.resumeSec > 0 ? (
+                    <>
+                      <button
+                        onClick={() => goEpisode(seriesPlay.episodeId, seriesPlay.resumeSec)}
+                        className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                      >
+                        <Play aria-hidden className="w-5 h-5 fill-current" />
+                        {seriesCode ? `Resume ${seriesCode}` : `Resume ${fmtDur(seriesPlay.resumeSec)}`}
+                      </button>
+                      <button
+                        onClick={() => goEpisode(seriesPlay.episodeId, null)}
+                        className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                      >
+                        Start over
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => goEpisode(seriesPlay.episodeId, null)}
+                      className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                    >
+                      <Play aria-hidden className="w-5 h-5 fill-current" />
+                      {seriesCode ? `Play ${seriesCode}` : 'Play'}
+                    </button>
+                  )
+                ) : !seriesKnown ? (
+                  <button
+                    onClick={() => void playTitle(itemId, 'series')}
+                    disabled={playPending}
+                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0 disabled:opacity-60`}
+                  >
+                    <Play aria-hidden className="w-5 h-5 fill-current" />
+                    Play
+                  </button>
+                ) : null
+              ) : resumeSec > 30 ? (
                 <>
                   <button
                     onClick={() => goPlayer(true)}
@@ -296,7 +360,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                     Start over
                   </button>
                 </>
-              ) : !isSeries ? (
+              ) : (
                 <button
                   onClick={() => goPlayer(false)}
                   className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
@@ -304,7 +368,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   <Play aria-hidden className="w-5 h-5 fill-current" />
                   Play
                 </button>
-              ) : null}
+              )}
               {trailer?.local ? (
                 <a
                   href={toApp(trailerPath(itemId, trailer.extra.id))}
