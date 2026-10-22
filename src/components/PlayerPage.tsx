@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
+import { Captions, Check, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
 import Hls from 'hls.js';
 import { PgsRenderer } from 'libpgs';
 // Vite resolves this to an emitted asset URL; the worker file is
@@ -14,7 +14,20 @@ import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
 import { episodeCode, fileNeighbours, type FileEpisode } from '../lib/episodeFiles';
-import { audioChipLabel, audioLabels, audioRenditionFor, autoSubtitleTrack, languageTag, normalizeLang, subtitleLabels } from '../lib/languages';
+import { audioChipLabel, audioLabels, audioRenditionFor, languageTag, normalizeLang } from '../lib/languages';
+import {
+  NO_SUBTITLE,
+  autoSubtitle,
+  playerChooses,
+  serverSubtitleLanguages,
+  subtitleEntries,
+  subtitleMenu,
+  viewerPicks,
+  type SubtitleChoice,
+  type SubtitleEntry,
+} from '../lib/subtitles';
+import { cueCss, shownLines, type CueLine } from '../lib/subtitleLook';
+import { SubtitleOverlay } from './SubtitleOverlay';
 import {
   QUALITY_RUNGS,
   downgradeStep,
@@ -62,9 +75,6 @@ import { StatusPage } from './StatusPage';
 
 interface Subtitle {
   id: string;
-  /** The menu's label, named by language (lib/languages.ts) once the
-   *  sidecar and embedded tracks are merged. */
-  label: string;
   lang: string;
   url: string;
   default?: boolean;
@@ -72,12 +82,18 @@ interface Subtitle {
    *  title of an embedded track), when it has one. */
   title?: string;
   forced?: boolean;
-  // Renderer hint. webvtt/srt go through the native <track> element;
-  // pgs goes through libpgs-js's canvas overlay. Missing means a
-  // text track (backward compatibility with manager-api builds that
-  // pre-date the format column being surfaced).
+  // Renderer hint. webvtt/srt are loaded as a <track> and drawn by the
+  // player (SubtitleOverlay); pgs goes through libpgs-js's canvas overlay.
+  // Missing means a text track (backward compatibility with manager-api
+  // builds that pre-date the format column being surfaced).
   format?: string;
+  /** One of the original file's own streams, not a sidecar. */
+  embedded?: boolean;
 }
+
+// The class of the player's <video>: its ::cue rule (lib/subtitleLook.ts).
+const VIDEO_CLASS = 'chino-player';
+const CUE_CSS = cueCss(VIDEO_CLASS);
 
 // Numeric → name decoders for the diagnostic log. Kept module-level so the
 // effect closure stays small.
@@ -112,7 +128,7 @@ function bufferedRanges(v: HTMLMediaElement): string {
 // A sidecar subtitle as /api/v1/items/<id>/subtitles lists it: the
 // catalog's label is optional, and usually absent.
 interface SubtitlesResponse {
-  subtitles: (Omit<Subtitle, 'label' | 'title'> & { label?: string })[];
+  subtitles: (Omit<Subtitle, 'title' | 'embedded'> & { label?: string })[];
 }
 
 interface TrackInfo {
@@ -359,12 +375,25 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // language are known.
   const [subsSettled, setSubsSettled] = useState(false);
   const [infoSettled, setInfoSettled] = useState(false);
-  // Multi-select: up to 2 simultaneous subtitle tracks (e.g. learner pairs
-  // English + Chinese). Index 0 → native <track mode="showing">, index 1 →
-  // <track mode="hidden"> whose cues are mirrored to a custom overlay
-  // above the native captions area because the browser only renders ONE
-  // showing TextTrack at a time.
-  const [activeSubIds, setActiveSubIds] = useState<string[]>([]);
+  // The subtitle on - one at a time, null for off - and whether the viewer
+  // picked it (lib/subtitles.ts): the player's choice until they do, theirs
+  // for the rest of the playback after.
+  const [subChoice, setSubChoice] = useState<SubtitleChoice>(NO_SUBTITLE);
+  const activeSubId = subChoice.on;
+  // The subtitle languages the server is set up for (GET
+  // /api/v1/subtitles/languages, asked once a session); null until known.
+  const [serverSubLangs, setServerSubLangs] = useState<readonly string[] | null>(null);
+  // "more languages" in the subtitles menu: open or closed.
+  const [moreLangsOpen, setMoreLangsOpen] = useState(false);
+  // What the text subtitle on shows now, as SubtitleOverlay draws it.
+  const [subLines, setSubLines] = useState<CueLine[]>([]);
+  // The browser shows the video itself - picture-in-picture, a phone's
+  // own fullscreen - where the page's overlay is not seen: it draws the
+  // text subtitle then, by the ::cue rule.
+  const [nativeCues, setNativeCues] = useState(false);
+  // How much of the player's bottom the controls cover: a subtitle goes up
+  // above them while they show.
+  const [bottomBarHeight, setBottomBarHeight] = useState(0);
   // Live offset in seconds applied to every cue on the active tracks.
   // Mutating cue.startTime / endTime is destructive, so we track the
   // last-applied delta in a ref and only apply the *difference* on each
@@ -372,9 +401,6 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // multiple nudges without re-fetching the file.
   const [subOffsetSec, setSubOffsetSec] = useState(0);
   const appliedSubOffsetRef = useRef(0);
-  // Cues mirrored from the secondary track on every cuechange. Rendered
-  // by the overlay below the native captions.
-  const [secondaryCueText, setSecondaryCueText] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   // Episode coordinates + resolved series title, so the chrome can show
   // "Series — S01E02 · Episode" for episodes. season/episode come from the
@@ -1369,9 +1395,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             // hook can route PGS to libpgs-js instead of a <track>.
             ...s,
             // The catalog's label, when it has one, is the track's title;
-            // the menu label is the language's name (mergedSubs below).
+            // the menu names the track by its language (subEntries below).
             title: label?.trim() || undefined,
-            label: '',
             // Use the STABLE ?stream= token (not the rotating OIDC bearer):
             // the /play/subs route accepts it (StreamMiddleware), and a stable
             // URL means a silent OIDC renewal doesn't change activePgsSub.url —
@@ -1440,14 +1465,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     return seriesTitle ? `${seriesTitle} — ${code} · ${name}` : `${code} · ${name}`;
   }, [extraTitle, title, episodeMeta, seriesTitle, episodeNav]);
 
-  // Merge sidecar subs (from /subtitles) and embedded subs (from
-  // /play/info.subtitle_tracks) into a single list the menu can render.
-  // Each entry gets a stable id ('emb-N' for embedded, the sidecar's
-  // raw id otherwise) so React reconciles them across renders without
-  // collisions, and a label naming its language - "German", not the
-  // "ger" it is tagged with (lib/languages.ts).
+  // Merge embedded subs (from /play/info.subtitle_tracks) and sidecar subs
+  // (from /subtitles) into a single list: the file's own streams first, in
+  // the file's order, then the sidecars - of two that read the same the
+  // menu shows the file's own (lib/subtitles.ts). Each entry gets a stable
+  // id ('emb-N' for embedded, the sidecar's raw id otherwise) so React
+  // reconciles them across renders without collisions.
   const mergedSubs = useMemo<Subtitle[]>(() => {
-    const out: Subtitle[] = subs.map((s) => ({ ...s }));
+    const out: Subtitle[] = [];
     if (info?.subtitle_tracks && streamToken) {
       const enc = encodeURIComponent(streamToken);
       // No `t=`: under HLS the cues are on the title's own timeline, as
@@ -1474,17 +1499,77 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         out.push({
           id: `emb-${t.index}`,
           lang: t.language || 'und',
-          label: '',
           title: t.title?.trim() || undefined,
           forced: t.forced,
           url: `/api/v1/items/${itemId}/play/subtitles/${t.index}.vtt?stream=${enc}`,
           default: t.default,
+          embedded: true,
         });
       }
     }
-    const labels = subtitleLabels(out);
-    return out.map((s, i) => ({ ...s, label: labels[i] }));
+    out.push(...subs);
+    return out;
   }, [subs, info?.subtitle_tracks, itemId, streamToken]);
+
+  // The subtitles menu (lib/subtitles.ts, the design system's subtitles
+  // pattern): "off"; the viewer's subtitle language, then the server's
+  // other subtitle languages; then "more languages" with the rest of an
+  // original's tracks. Each named by its language, then its kind ("English
+  // · for deaf and hard of hearing"); two that read the same show once.
+  const subEntries = useMemo(() => subtitleEntries(mergedSubs), [mergedSubs]);
+  const subMenu = useMemo(
+    () =>
+      subtitleMenu(subEntries, {
+        preferred: settings.subtitles.preferredLang,
+        serverLanguages: serverSubLangs ?? [],
+        packaged: info?.mode === 'packaged',
+        on: activeSubId,
+      }),
+    [subEntries, settings.subtitles.preferredLang, serverSubLangs, info?.mode, activeSubId],
+  );
+  const activeSub = useMemo<SubtitleEntry<Subtitle> | null>(
+    () => (activeSubId ? subEntries.find((s) => s.id === activeSubId) ?? null : null),
+    [subEntries, activeSubId],
+  );
+  // "more languages" opens closed, unless the subtitle on is among them.
+  useEffect(() => {
+    if (showCaptionsMenu) setMoreLangsOpen(subMenu.more.some((s) => s.id === activeSubId));
+    // Only as the menu opens: a click inside it opens and closes it after.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCaptionsMenu]);
+  // Opened by a click, the list scrolls to "more languages", so what it
+  // opened shows below it.
+  const subListRef = useRef<HTMLDivElement | null>(null);
+  const moreLangsRef = useRef<HTMLButtonElement | null>(null);
+  const openMoreLangs = () => {
+    const opening = !moreLangsOpen;
+    setMoreLangsOpen(opening);
+    if (!opening) return;
+    window.requestAnimationFrame(() => {
+      const list = subListRef.current;
+      const more = moreLangsRef.current;
+      if (list && more) list.scrollTop = more.offsetTop - list.offsetTop;
+    });
+  };
+
+  // The server's subtitle languages, asked once a session: a server
+  // without the route (404) has none, and no answer counts as none for
+  // now. Not for an extra, which has no subtitles.
+  useEffect(() => {
+    if (!token || !calls.title) return;
+    let live = true;
+    void serverSubtitleLanguages(async () => {
+      const r = await fetch('/api/v1/subtitles/languages', { headers: { Authorization: `Bearer ${token}` } });
+      return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+    }).then((langs) => {
+      if (live) setServerSubLangs(langs);
+    });
+    return () => {
+      live = false;
+    };
+    // Once: a renewed bearer asks nothing new.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!token, calls.title]);
 
   // The audio menu's rows, one per /play/info track: named by the language
   // the track is tagged with ("German", "No dialogue" for zxx), by its title
@@ -1506,36 +1591,34 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   }, [info?.audio_tracks]);
   const playingAudio = audioMenu.find((t) => t.index === streamAudioIdx);
 
-  // The subtitles that come on by themselves (lib/languages.ts
-  // autoSubtitleTrack), decided once both track lists and the audio
-  // language are known: OFF, unless the audio is in a language the viewer
-  // has not said they follow - not the subtitle language chosen in
-  // Settings, not the preferred audio language - and then the track in the
-  // Settings subtitle language. Where none would come on, the FORCED track
-  // in the audio's language, if the title has one (a text one before a
-  // PGS one): the lines a film shows in another language than its audio's.
-  // The file's own default flag does not count: it marked German subtitles
-  // on an English film. They follow the audio - a switch to another
-  // language decides again - until the viewer picks in the menu: from then
-  // on the subtitles are theirs for this playback, a track stays on
-  // whatever the audio, and an Off stays off. Multi-select state, but this
-  // only ever seeds one track — a second is the viewer's choice.
-  const subsAutoRef = useRef(true);
+  // The subtitle that comes on by itself (lib/subtitles.ts autoSubtitle),
+  // decided once both track lists and the audio language are known: OFF,
+  // unless the audio is in a language the viewer has not said they follow
+  // - not the subtitle language chosen in Settings, not the preferred audio
+  // language - and then the track in the Settings subtitle language. Where
+  // none would come on, the FORCED track in the audio's language, if the
+  // title has one (a text one before a PGS one): the lines a film shows in
+  // another language than its audio's. Never anything else: the file's own
+  // default flag does not count (it marked German subtitles on an English
+  // film). They follow the audio - a switch to another language decides
+  // again - until the viewer picks in the menu: from then on the subtitle
+  // is theirs for this playback, a track stays on whatever the audio, and
+  // an Off stays off (playerChooses).
   const playingAudioLang = useMemo(() => {
     const tracks = info?.audio_tracks ?? [];
     return (tracks.find((t) => t.index === streamAudioIdx) ?? tracks.find((t) => t.default) ?? tracks[0])?.language;
   }, [info?.audio_tracks, streamAudioIdx]);
   useEffect(() => {
-    if (!subsAutoRef.current || !subsSettled || !infoSettled) return;
-    const id = autoSubtitleTrack(mergedSubs, {
+    if (!subsSettled || !infoSettled) return;
+    const id = autoSubtitle(subMenu, {
       audioLang: playingAudioLang,
       subtitlePref: settings.subtitles.preferredLang,
       audioPref: settings.audio.preferredLang,
     });
     // The same choice again is no change: the tracks, the PGS renderer and
     // the timing offset stay as they are.
-    setActiveSubIds((prev) => (id ? (prev.length === 1 && prev[0] === id ? prev : [id]) : prev.length === 0 ? prev : []));
-  }, [subsSettled, infoSettled, mergedSubs, playingAudioLang, settings.subtitles.preferredLang, settings.audio.preferredLang]);
+    setSubChoice((prev) => playerChooses(prev, id));
+  }, [subsSettled, infoSettled, subMenu, playingAudioLang, settings.subtitles.preferredLang, settings.audio.preferredLang]);
 
   // The menu's old key is not read any more; drop it.
   useEffect(() => {
@@ -1554,49 +1637,59 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   //      whenever new tracks land (e.g. embedded subs arrive after
   //      sidecars) we must reassert the mode — otherwise newly-
   //      mounted tracks default-show themselves.
-  //   3. Default cue position is the bottom of the video, which sits
-  //      on top of our custom controls bar when it's visible. Re-
-  //      anchoring each cue at line 85 (% from top, snapToLines off)
-  //      lifts subtitles into the safe zone above the controls.
-  //
-  // Multi-select: activeSubIds[0] is the primary track and gets
-  // mode="showing" (native rendering). activeSubIds[1] is the secondary
-  // — kept mode="hidden" so its cues populate but the UA doesn't paint
-  // them, then mirrored to the secondaryCueText overlay below.
+  //   3. A file places its cues itself (a line at the top, a position
+  //      at the side, a size). The player draws the subtitle on in its
+  //      own place (SubtitleOverlay), so the track is "hidden": its cues
+  //      load and change, the browser paints none. Only while the browser
+  //      shows the video itself (nativeCues: picture-in-picture, a phone's
+  //      own fullscreen) is it "showing", the ::cue rule its look - and
+  //      every cue is put where the overlay puts it: centred at the
+  //      bottom, within 80 % of the width.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const liftCue = (cue: TextTrackCue) => {
-      const vc = cue as VTTCue;
-      // Only override the UA default ("auto"). If a cue file already
-      // pins a specific line, respect that. Primary track gets lifted
-      // higher to make room for the secondary overlay underneath when
-      // two tracks are active.
-      if (vc.line === 'auto') {
-        vc.snapToLines = false;
-        vc.line = activeSubIds.length > 1 ? 80 : 85;
+    // Only for the browser's drawing: the overlay places the subtitle
+    // itself, and reads where the file put two cues shown at once to keep
+    // them in its order.
+    const placeAll = (track: TextTrack) => {
+      const cues = track.cues;
+      if (!cues || !nativeCues) return;
+      for (let i = 0; i < cues.length; i++) {
+        const c = cues[i] as VTTCue;
+        if (typeof c.line === 'undefined') continue;
+        try {
+          if (c.line !== 'auto') c.line = 'auto';
+          if (!c.snapToLines) c.snapToLines = true;
+          if (c.position !== 'auto') c.position = 'auto';
+          if (c.size !== 80) c.size = 80;
+          if (c.align !== 'center') c.align = 'center';
+          if (c.vertical) c.vertical = '';
+        } catch {
+          /* a cue the browser does not let be moved */
+        }
       }
     };
-    const liftAll = (track: TextTrack) => {
-      const cues = track.cues;
-      if (!cues) return;
-      for (let i = 0; i < cues.length; i++) liftCue(cues[i]);
-    };
-    const primary = activeSubIds[0];
-    const secondary = activeSubIds[1];
+    // Each of the page's tracks placed as its cues load and change, while
+    // the browser draws them.
+    const placing = new Map<TextTrack, () => void>();
     const applyOwn = () => {
       const trackEls = v.querySelectorAll('track');
       for (let i = 0; i < trackEls.length; i++) {
         const trackEl = trackEls[i] as HTMLTrackElement;
-        if (!trackEl.track) continue;
-        if (trackEl.id === primary) {
-          trackEl.track.mode = 'showing';
-        } else if (trackEl.id === secondary) {
-          trackEl.track.mode = 'hidden';
+        const t = trackEl.track;
+        if (!t) continue;
+        if (trackEl.id === activeSubId) {
+          t.mode = nativeCues ? 'showing' : 'hidden';
         } else {
-          trackEl.track.mode = 'disabled';
+          t.mode = 'disabled';
         }
-        liftAll(trackEl.track);
+        placeAll(t);
+        if (!placing.has(t)) {
+          const place = () => placeAll(t);
+          placing.set(t, place);
+          t.addEventListener('cuechange', place);
+          trackEl.addEventListener('load', place);
+        }
       }
     };
     // Where the browser plays HLS itself (Safari without MSE), a master's
@@ -1631,12 +1724,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       muteRenditions();
     };
     apply();
-    const onAdd = (e: TrackEvent) => {
-      apply();
-      if (e.track) {
-        e.track.addEventListener('cuechange', () => liftAll(e.track!));
-      }
-    };
+    const onAdd = () => apply();
     const onChange = () => {
       if (muteRenditions() || performance.now() < settleUntil) applyOwn();
     };
@@ -1645,47 +1733,81 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     return () => {
       v.textTracks.removeEventListener('addtrack', onAdd);
       v.textTracks.removeEventListener('change', onChange);
+      placing.forEach((place, t) => t.removeEventListener('cuechange', place));
+      v.querySelectorAll('track').forEach((el) => {
+        const place = placing.get((el as HTMLTrackElement).track);
+        if (place) el.removeEventListener('load', place);
+      });
     };
-  }, [activeSubIds, mergedSubs]);
+  }, [activeSubId, mergedSubs, nativeCues, !!playUrl]);
 
-  // Secondary-track cue mirror. Read `activeCues` from the hidden
-  // TextTrack on each `cuechange` event and stash the joined text in
-  // state — the overlay renders it. The handler re-binds whenever the
-  // secondary id changes (different track) or the merged list grows
-  // (new <track> element mounted).
+  // What the text subtitle on shows, for SubtitleOverlay: the track's
+  // active cues on every cuechange (and once its cues have loaded), as
+  // lines without the file's styles (lib/subtitleLook.ts shownLines).
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) { setSecondaryCueText(''); return; }
-    const secondary = activeSubIds[1];
-    if (!secondary) { setSecondaryCueText(''); return; }
-    const trackEls = v.querySelectorAll('track');
-    let target: TextTrack | null = null;
-    for (let i = 0; i < trackEls.length; i++) {
-      const trackEl = trackEls[i] as HTMLTrackElement;
-      if (trackEl.id === secondary && trackEl.track) {
-        target = trackEl.track;
-        break;
-      }
+    if (!v || !activeSubId || activeSub?.picture) {
+      setSubLines([]);
+      return;
     }
-    if (!target) { setSecondaryCueText(''); return; }
-    const tt = target;
+    const trackEl = Array.from(v.querySelectorAll('track')).find((el) => el.id === activeSubId) as HTMLTrackElement | undefined;
+    if (!trackEl) {
+      setSubLines([]);
+      return;
+    }
+    const tt = trackEl.track;
     const onChange = () => {
       const cues = tt.activeCues;
-      if (!cues || cues.length === 0) { setSecondaryCueText(''); return; }
-      const parts: string[] = [];
-      for (let i = 0; i < cues.length; i++) {
-        const c = cues[i] as VTTCue;
-        if (c.text) parts.push(c.text);
+      const shown: { text: string; line: number | 'auto'; snapToLines: boolean; startTime: number }[] = [];
+      for (let i = 0; i < (cues?.length ?? 0); i++) {
+        const c = cues![i] as VTTCue;
+        if (c.text) shown.push({ text: c.text, line: c.line, snapToLines: c.snapToLines, startTime: c.startTime });
       }
-      setSecondaryCueText(parts.join('\n'));
+      const lines = shownLines(shown);
+      setSubLines((prev) => (JSON.stringify(prev) === JSON.stringify(lines) ? prev : lines));
     };
     tt.addEventListener('cuechange', onChange);
+    trackEl.addEventListener('load', onChange);
     onChange();
     return () => {
       tt.removeEventListener('cuechange', onChange);
-      setSecondaryCueText('');
+      trackEl.removeEventListener('load', onChange);
+      setSubLines([]);
     };
-  }, [activeSubIds, mergedSubs]);
+  }, [activeSubId, activeSub?.picture, mergedSubs, !!playUrl]);
+
+  // Whether the browser shows the video itself, where the page is not seen:
+  // picture-in-picture, and (Safari) its own fullscreen or picture-in-
+  // picture. The text subtitle on is the browser's to draw then.
+  useEffect(() => {
+    const v = videoRef.current as (HTMLVideoElement & { webkitPresentationMode?: string }) | null;
+    if (!v) return;
+    const update = () => {
+      const pip = typeof document !== 'undefined' && document.pictureInPictureElement === v;
+      const mode = v.webkitPresentationMode;
+      setNativeCues(pip || (!!mode && mode !== 'inline'));
+    };
+    const events = ['enterpictureinpicture', 'leavepictureinpicture', 'webkitpresentationmodechanged', 'webkitbeginfullscreen', 'webkitendfullscreen'];
+    events.forEach((e) => v.addEventListener(e, update));
+    update();
+    return () => events.forEach((e) => v.removeEventListener(e, update));
+    // The <video> mounts with the stream's URL.
+  }, [!!playUrl]);
+
+  // The height the controls take at the bottom, measured as the bar mounts
+  // and whenever it changes: a subtitle goes up above them while they show
+  // (SubtitleOverlay's clear).
+  const bottomBarObserver = useRef<ResizeObserver | null>(null);
+  const bottomBarRef = useCallback((bar: HTMLDivElement | null) => {
+    bottomBarObserver.current?.disconnect();
+    bottomBarObserver.current = null;
+    if (!bar) return;
+    const measure = () => setBottomBarHeight(bar.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    bottomBarObserver.current = new ResizeObserver(measure);
+    bottomBarObserver.current.observe(bar);
+  }, []);
 
   // Apply / re-apply the user-tuned cue time offset to every active
   // track. We mutate cue.startTime / endTime directly because there's
@@ -1714,7 +1836,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     }
     appliedSubOffsetRef.current = 0;
     setSubOffsetSec(0);
-  }, [activeSubIds]);
+  }, [activeSubId]);
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -1733,28 +1855,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     for (let i = 0; i < trackEls.length; i++) {
       const trackEl = trackEls[i] as HTMLTrackElement;
       if (!trackEl.track) continue;
-      if (activeSubIds.includes(trackEl.id)) shift(trackEl.track);
+      if (trackEl.id === activeSubId) shift(trackEl.track);
     }
     appliedSubOffsetRef.current = subOffsetSec;
-  }, [subOffsetSec, activeSubIds]);
+  }, [subOffsetSec, activeSubId]);
 
   // PGS sidecar rendering. libpgs-js owns one renderer per track URL;
   // teardown + recreate when the active PGS subtitle changes (or when
   // no PGS sub is active). The library binds to videoRef's timeupdate
   // / seeked listeners internally, so currentTime sync is automatic.
-  //
-  // Only a single PGS track can render at a time — libpgs's overlay
-  // covers the whole canvas. If the user has selected two PGS subs
-  // (rare), we render activeSubIds[0]; the second goes invisible.
-  // Mixed VTT-on-top-of-PGS dual-tracking still works (VTT goes via
-  // native <track>, PGS goes via canvas, they composite).
-  const activePgsSub = useMemo<Subtitle | null>(() => {
-    for (const id of activeSubIds) {
-      const s = mergedSubs.find((m) => m.id === id);
-      if (s?.format === 'pgs') return s;
-    }
-    return null;
-  }, [activeSubIds, mergedSubs]);
+  // One subtitle at a time: a PGS one on is the only one.
+  const activePgsSub = activeSub?.format === 'pgs' ? activeSub : null;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -1796,28 +1907,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     // renderer is not rebuilt on a transferred canvas.
   }, [activePgsSub?.id, activePgsSub?.url]);
 
-  // Multi-select toggle. Picking the same id twice removes it; picking
-  // a third clears the oldest and slots the new one. Picking `null`
-  // clears everything (the "Off" entry in the picker). A pick here is for
-  // this playback only, like a switch in the audio menu: the default is
-  // what Settings says. (Writing every pick back made one "Off" on a
-  // film the viewer understood switch subtitles off for every foreign
-  // one after it.) Any pick ends the subtitles that come on by themselves
-  // for this playback: an Off, or a forced track turned off, stays off
-  // when the audio changes, and a track picked stays on.
-  const MAX_ACTIVE_SUBS = 2;
+  // A pick in the menu: that subtitle on instead of the one that was - one
+  // at a time - or none for "off". A pick here is for this playback only,
+  // like a switch in the audio menu: the default is what Settings says.
+  // (Writing every pick back made one "Off" on a film the viewer
+  // understood switch subtitles off for every foreign one after it.) Any
+  // pick ends the subtitles that come on by themselves for this playback:
+  // an Off, or a forced track turned off, stays off when the audio
+  // changes, and a track picked stays on (lib/subtitles.ts viewerPicks).
   const chooseSub = (s: Subtitle | null) => {
-    subsAutoRef.current = false;
-    if (s === null) {
-      setActiveSubIds([]);
-      return;
-    }
-    setActiveSubIds((prev) => {
-      const idx = prev.indexOf(s.id);
-      if (idx >= 0) return prev.filter((id) => id !== s.id);
-      if (prev.length >= MAX_ACTIVE_SUBS) return [...prev.slice(1), s.id];
-      return [...prev, s.id];
-    });
+    setSubChoice((prev) => viewerPicks(prev, s?.id ?? null));
   };
 
   // Chrome reveal handling. Desktop: mousemove + keydown each
@@ -3429,7 +3528,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // No `src` attribute — hls.js attaches and drives the source.
         // (On Safari we fall back to native HLS and DO set v.src
         // directly from the useEffect, not via React props.)
-        className="absolute inset-0 w-full h-full chino-player"
+        className={`absolute inset-0 w-full h-full ${VIDEO_CLASS}`}
         crossOrigin="anonymous"
         // `autoPlay` attribute intentionally omitted: the browser's
         // built-in autoplay fires on EVERY src change (including
@@ -3593,35 +3692,29 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           if (lastPointerTypeRef.current === 'mouse') userTogglePlay();
         }}
       >
-        {/* Only render ACTIVE subtitles as <track> elements. Chrome
+        {/* Only the ACTIVE subtitle is a <track> element. Chrome
             prefetches every track on mount regardless of mode, so a
             mkv with 26 embedded subtitle streams would fire 26
             simultaneous ffmpeg subtitle extracts on chino-stream and
-            OOM the pod. Render-on-demand keeps the spawn count
-            bounded (max 2 — the multi-select cap) and the menu still
-            lists every option (mergedSubs feeds the switcher UI
-            elsewhere). Modes are driven by activeSubIds via the
-            effect above; `default` is intentionally omitted. */}
-        {activeSubIds.map((id) => {
-          const s = mergedSubs.find((m) => m.id === id);
-          if (!s) return null;
-          // Bitmap formats (PGS) are rendered via libpgs-js onto
-          // the canvas sibling below — <track> can only carry text
-          // formats. Listing a .sup as a <track src> would have
-          // the browser silently fail to mount the cue list.
-          if (s.format === 'pgs') return null;
-          return (
-            <track
-              key={`${s.id}|${s.url}`}
-              id={s.id}
-              kind="subtitles"
-              src={s.url}
-              srcLang={languageTag(s.lang) || undefined}
-              label={s.label}
-            />
-          );
-        })}
+            OOM the pod. Render-on-demand keeps it to one - one subtitle
+            at a time - and the menu still lists every option (subMenu).
+            Its mode is driven by activeSubId via the effect above;
+            `default` is intentionally omitted. Bitmap formats (PGS) are
+            rendered via libpgs-js onto the canvas sibling below —
+            <track> can only carry text formats. */}
+        {activeSub && !activeSub.picture && (
+          <track
+            key={`${activeSub.id}|${activeSub.url}`}
+            id={activeSub.id}
+            kind="subtitles"
+            src={activeSub.url}
+            srcLang={languageTag(activeSub.lang) || undefined}
+            label={activeSub.label}
+          />
+        )}
       </video>
+      {/* The look of a cue the browser draws itself (lib/subtitleLook.ts). */}
+      <style>{CUE_CSS}</style>
       {/* Sibling canvas for image subtitle rendering. libpgs-js
           positions itself absolute over the video; we keep it inert
           (pointer-events: none) so clicks pass through to the video
@@ -3647,19 +3740,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         />
       )}
 
-      {/* Secondary subtitle overlay. The native <track mode="showing">
-          paints the primary track at line=80; this overlay stacks the
-          secondary track's cues two rows below, matching standard
-          dual-subtitle players (e.g. language-learning apps). */}
-      {secondaryCueText && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-20 text-center px-4"
-          style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-        >
-          <span className="inline-block px-2 py-0.5 rounded bg-black/70 text-white text-base md:text-lg whitespace-pre-line drop-shadow">
-            {secondaryCueText}
-          </span>
-        </div>
+      {/* The text subtitle on, drawn by the player in the one look, over
+          the picture and under the controls; the browser draws it
+          instead while it shows the video itself (nativeCues). */}
+      {!nativeCues && (
+        <SubtitleOverlay
+          videoRef={videoRef}
+          lines={subLines}
+          lang={activeSub ? languageTag(activeSub.lang) : undefined}
+          clear={chromeVisible ? bottomBarHeight : 0}
+        />
       )}
 
       {buffering && !fatalError && (
@@ -3897,6 +3987,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // (and the URL-bar dead-zone when h-dvh is at its 'small'
         // size mid-scroll).
         data-chrome-zone
+        ref={bottomBarRef}
         style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))' }}
         className={`absolute bottom-0 inset-x-0 px-4 pt-4 bg-gradient-to-t from-black/90 via-black/60 to-transparent transition-opacity ${chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
       >
@@ -4200,49 +4291,53 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="relative">
             <button
               onClick={() => toggleMenu('captions')}
-              className={`p-2 transition-colors ${activeSubIds.length > 0 ? 'bg-chino-accent/30 hover:bg-chino-accent/40' : 'bg-white/10 hover:bg-white/20'}`}
+              className={`p-2 transition-colors ${activeSubId ? 'bg-chino-accent/30 hover:bg-chino-accent/40' : 'bg-white/10 hover:bg-white/20'}`}
               title="Subtitles"
+              aria-haspopup="menu"
+              aria-expanded={showCaptionsMenu}
               disabled={mergedSubs.length === 0}
             >
               <Captions className="w-5 h-5" />
             </button>
             {showCaptionsMenu && mergedSubs.length > 0 && (
-              <div className="absolute right-0 bottom-full mb-3 w-72 bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
-                <div className="px-4 pt-2 pb-1 text-xs uppercase tracking-wide text-chino-muted flex items-center justify-between">
-                  <span>Subtitles</span>
-                  <span className="text-[10px] normal-case tracking-normal text-chino-muted/70">
-                    {activeSubIds.length}/{MAX_ACTIVE_SUBS}
-                  </span>
-                </div>
-                {/* Scrollable list — 10+ embedded subtitle streams
-                    used to overflow the player chrome. max-h-72 keeps
-                    the picker capped at ~10 visible rows. */}
-                <div className="max-h-72 overflow-y-auto">
-                  <button
-                    onClick={() => chooseSub(null)}
-                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${activeSubIds.length === 0 ? 'text-chino-accent' : ''}`}
-                  >
-                    None / Off
-                  </button>
-                  {mergedSubs.map((s) => {
-                    const idx = activeSubIds.indexOf(s.id);
-                    const selected = idx >= 0;
-                    return (
+              <div
+                className="absolute right-0 bottom-full mb-3 w-96 max-w-[calc(100vw-2rem)] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
+                role="menu"
+                aria-label="subtitles"
+              >
+                {/* Lowercase, like its items (the design system's
+                    subtitles pattern). */}
+                <div className="px-4 pt-2 pb-1 font-mono text-xs tracking-wide text-chino-muted">subtitles</div>
+                {/* "off", the languages that matter here, then "more
+                    languages" with the rest (subMenu). One subtitle at a
+                    time: a pick replaces the one on. Scrolls where it is
+                    long. */}
+                <div ref={subListRef} className="max-h-[min(24rem,55vh)] overflow-y-auto">
+                  <SubtitleMenuItem label="off" on={!activeSubId} onPick={() => chooseSub(null)} />
+                  {subMenu.top.map((s) => (
+                    <SubtitleMenuItem key={s.id} label={s.label} on={s.id === activeSubId} onPick={() => chooseSub(s)} />
+                  ))}
+                  {subMenu.more.length > 0 && (
+                    <>
                       <button
-                        key={s.id}
-                        onClick={() => chooseSub(s)}
-                        className={`flex w-full items-center gap-2 text-left px-4 py-2 hover:bg-white/10 ${selected ? 'text-chino-accent' : ''}`}
+                        ref={moreLangsRef}
+                        onClick={openMoreLangs}
+                        aria-expanded={moreLangsOpen}
+                        className="flex w-full items-center gap-2 text-left px-4 py-2 hover:bg-white/10"
                       >
-                        <span
+                        <span aria-hidden className="w-4 shrink-0" />
+                        <span className="flex-1">more languages</span>
+                        <ChevronDown
                           aria-hidden
-                          className={`inline-flex items-center justify-center w-4 h-4 rounded-sm border ${selected ? 'bg-chino-accent border-chino-accent text-white' : 'border-white/30'}`}
-                        >
-                          {selected ? (idx === 0 ? '1' : '2') : ''}
-                        </span>
-                        <span className="truncate">{s.label}</span>
+                          className={`w-4 h-4 shrink-0 text-chino-muted transition-transform motion-reduce:transition-none ${moreLangsOpen ? 'rotate-180' : ''}`}
+                        />
                       </button>
-                    );
-                  })}
+                      {moreLangsOpen &&
+                        subMenu.more.map((s) => (
+                          <SubtitleMenuItem key={s.id} label={s.label} on={s.id === activeSubId} onPick={() => chooseSub(s)} />
+                        ))}
+                    </>
+                  )}
                 </div>
                 {/* Cue timing nudge — applies live to the active
                     track(s). Range ±10 s in 0.25 s steps; mutates
@@ -4256,7 +4351,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSubOffsetSec((o) => Math.max(-10, +(o - 0.25).toFixed(2)))}
-                      disabled={activeSubIds.length === 0 || subOffsetSec <= -10}
+                      disabled={!activeSub || activeSub.picture || subOffsetSec <= -10}
                       className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-sm"
                       title="Earlier (−0.25s)"
                     >
@@ -4267,7 +4362,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     </span>
                     <button
                       onClick={() => setSubOffsetSec((o) => Math.min(10, +(o + 0.25).toFixed(2)))}
-                      disabled={activeSubIds.length === 0 || subOffsetSec >= 10}
+                      disabled={!activeSub || activeSub.picture || subOffsetSec >= 10}
                       className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-sm"
                       title="Later (+0.25s)"
                     >
@@ -4275,7 +4370,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     </button>
                     <button
                       onClick={() => setSubOffsetSec(0)}
-                      disabled={activeSubIds.length === 0 || subOffsetSec === 0}
+                      disabled={!activeSub || activeSub.picture || subOffsetSec === 0}
                       className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-xs"
                       title="Reset offset"
                     >
@@ -4471,6 +4566,24 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
 
 /** An extra that is not there: its title, an extra the title does not
  *  list, or a master that answers 400, 404 or 410. */
+/** One entry of the subtitles menu: a subtitle, or "off" - the one on
+ *  checked and in the accent colour. */
+function SubtitleMenuItem({ label, on, onPick }: { label: string; on: boolean; onPick: () => void }) {
+  return (
+    <button
+      role="menuitemradio"
+      aria-checked={on}
+      onClick={onPick}
+      className={`flex w-full items-start gap-2 text-left px-4 py-2 hover:bg-white/10 ${on ? 'text-chino-accent' : ''}`}
+    >
+      <span aria-hidden className="w-4 h-5 shrink-0 inline-flex items-center justify-center">
+        {on ? <Check className="w-4 h-4" /> : null}
+      </span>
+      <span className="flex-1 leading-snug break-words">{label}</span>
+    </button>
+  );
+}
+
 function TrailerNotAvailable({ online }: { online: TrailerRef | null }) {
   return (
     <StatusPage
