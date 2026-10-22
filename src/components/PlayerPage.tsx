@@ -1172,8 +1172,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             });
             // A fallback goes on where the viewer was: the position before
             // the teardown, which sends the media back to 0:00.
+            let at = 0;
             if (fallback.kind === 'give-up') hls.destroy();
-            else leaveSource(v, keepPosition, () => hls.destroy());
+            else at = leaveSource(v, keepPosition, () => hls.destroy());
             if (fallback.kind === 'drop-hevc') {
               setHevcRefused(true);
               // Back to the start's q along with it: a rung picked may not
@@ -1184,9 +1185,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               setActionLabel('This browser can\'t decode HEVC — switching…');
               reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
             } else if (fallback.kind === 'transcode') {
+              // Off the original onto the ladder, as a fragment that can't
+              // be loaded moves it: Medium, the position kept, and the
+              // notice that the original couldn't be streamed once Medium
+              // is named (docs/chino, playback: when the quality changes
+              // by itself).
               setForceTranscode(true);
               setStreamQuality('medium');
-              setActionLabel('Codec issue — switching to transcode…');
+              setPendingNotice({ quality: 'medium', why: 'original-error', ms: 5000 });
+              recordSwitch(`→ Medium (auto, ${infoRef.current?.mode ?? 'unknown'} → transcode)`, 'stall', `media errors @ ${fmt(at)}`);
               reportEvent('circuit_breaker', { kind: 'media_to_transcode', attempts: mediaRecoverCount, lastDetails: data.details });
             } else {
               reportEvent('circuit_breaker', { kind: 'media_terminal', attempts: mediaRecoverCount, lastDetails: data.details });
