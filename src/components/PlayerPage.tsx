@@ -30,10 +30,8 @@ import {
 import { CUES_DRAWN_BY_PAGE, cueCss, shownLines, type CueLine } from '../lib/subtitleLook';
 import { CONTROLS_PACE, SubtitleOverlay } from './SubtitleOverlay';
 import {
-  QUALITY_RUNGS,
   downgradeStep,
   isLadderQuality,
-  labelForQuality,
   leaveSource,
   mediaFallback,
   networkFallback,
@@ -43,8 +41,20 @@ import {
   stepDownNotice,
   type LadderQuality,
   type Quality,
+  type StepDownWhy,
 } from '../lib/playback';
-import { AUTO, autoLabel, chosenQuality, packagedQualityMenu, playingLabel, type PlayQuality, type PlayingLevel } from '../lib/qualities';
+import {
+  AUTO,
+  autoLabel,
+  chosenQuality,
+  ladderRow,
+  ladderRows,
+  onTheFlyLadder,
+  packagedQualityMenu,
+  playingLabel,
+  type PlayQuality,
+  type PlayingLevel,
+} from '../lib/qualities';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../lib/hlsConfig';
 import { withoutCodec } from '../lib/caps';
 import { extraHeading, extraInfo, playerCalls, type MasterAudio, type MasterVariant } from '../lib/playerMode';
@@ -515,6 +525,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   useEffect(() => { streamQualityRef.current = streamQuality; }, [streamQuality]);
   // (legacy qualityMenuOpen/setQualityMenuOpen removed — driven by `openMenu` above.)
   const [qualityNotice, setQualityNotice] = useState<string | null>(null);
+  // A quality change the player made by itself, whose notice waits for the
+  // name of the quality it went to (stepDownNotice): the server's, from
+  // /play/info or the master of the new source (the effect below).
+  const [pendingNotice, setPendingNotice] = useState<{ quality: Quality; why: StepDownWhy; ms: number } | null>(null);
+  const noticeTimerRef = useRef<number | undefined>(undefined);
   const stallCountRef = useRef<{ count: number; firstAt: number }>({ count: 0, firstAt: 0 });
   // Wall-clock timestamp of the last auto-downgrade. Prevents
   // back-to-back downgrades when the new (lower) quality also stalls
@@ -855,10 +870,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // master URL → new playlist load). Safari has native HLS so we
   // bypass hls.js there and set v.src directly.
   const hlsRef = useRef<Hls | null>(null);
-  // The level on screen, for Auto to name it ("Auto · 720p"): hls.js's
+  // The level on screen, for Auto to name it ("Auto · Medium (720p)"), and
+  // a rung on the fly by the name its master gives it: hls.js's
   // LEVEL_SWITCHED, which fires when the fragment playing is of another
-  // level than the one before; where the browser plays HLS itself, the
-  // picture's size.
+  // level than the one before - its URI, size and NAME; where the browser
+  // plays HLS itself, the picture's size. With the q of the source it is of.
   const [playingLevel, setPlayingLevel] = useState<PlayingLevel | null>(null);
 
   // Attach hls.js (or Safari's native HLS) to the <video> element when
@@ -874,6 +890,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     console.log('[hls-effect] SETUP', playUrl.slice(0, 100));
     // A new source: what it plays is not known until it says.
     setPlayingLevel(null);
+    const sourceQ = new URLSearchParams(playUrl.split('?')[1] ?? '').get('q') ?? undefined;
     qoe.source += 1;
     qoe.inflight = { video: null, audio: null };
     // Prefer hls.js (MSE-based) over native HLS — Chrome's
@@ -884,7 +901,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     if (!Hls.isSupported()) {
       if (v.canPlayType('application/vnd.apple.mpegurl')) {
         const onResize = () => {
-          setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight } : null);
+          setPlayingLevel(v.videoHeight > 0 ? { width: v.videoWidth, height: v.videoHeight, q: sourceQ } : null);
           if (v.videoHeight > 0) noteRendition({ height: v.videoHeight, bitrate: null });
         };
         v.addEventListener('resize', onResize);
@@ -985,7 +1002,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     });
     hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
       const level = hls.levels[data.level];
-      setPlayingLevel(level ? { uri: level.uri, width: level.width, height: level.height } : null);
+      setPlayingLevel(level ? { uri: level.uri, width: level.width, height: level.height, name: level.name || undefined, q: sourceQ } : null);
       if (level) noteRendition({ height: level.height || null, bitrate: level.bitrate || null });
     });
     // Playback quality (lib/qoe.ts): how far the source got before its
@@ -1075,8 +1092,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           reportEvent('circuit_breaker', { kind: 'network_to_transcode', fatal: !!data.fatal, httpStatus: status, lastDetails: data.details });
           setForceTranscode(true);
           setStreamQuality(fallback.quality);
-          setQualityNotice(fallback.notice);
-          window.setTimeout(() => setQualityNotice(null), 5000);
+          setPendingNotice({ quality: fallback.quality, why: fallback.notice, ms: 5000 });
           recordSwitch(fallback.label, 'stall', `fragment ${status ?? 'not loaded'} @ ${fmt(at)}`);
           return;
         }
@@ -1229,12 +1245,79 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   );
   const chosenPackaged = packagedMenu ? chosenQuality(packagedMenu, streamQuality) : null;
   // What plays, by the menu's names; on Auto the menu and the button say
-  // it: "Auto · 720p".
+  // it: "Auto · Medium (720p)".
   const playingName = useMemo(() => playingLabel(playingLevel, packagedMenu), [playingLevel, packagedMenu]);
   const onAuto = chosenPackaged?.name === AUTO;
+
+  // The transcode ladder of a direct stream moved onto it: /play/info names
+  // its rungs only for a title it says is transcoded, so it is asked once
+  // more, for the q the stream moved to, and its qualities kept.
+  const [movedLadder, setMovedLadder] = useState<PlayQuality[] | null>(null);
+  const askedLadderRef = useRef(false);
+  useEffect(() => {
+    if (!forceTranscode || !token || !capsParam || !calls.title || askedLadderRef.current) return;
+    if (!info || info.mode === 'transcode' || info.mode === 'packaged') return;
+    askedLadderRef.current = true;
+    const ctrl = new AbortController();
+    const qs = new URLSearchParams({ caps: capsParam, q: isLadderQuality(streamQuality) && streamQuality !== 'high' ? streamQuality : 'medium' });
+    fetch(`/api/v1/items/${itemId}/play/info?${qs.toString()}`, { signal: ctrl.signal, headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? (r.json() as Promise<PlayInfo>) : null))
+      .then((j) => {
+        if (j?.mode === 'transcode' && Array.isArray(j.qualities)) setMovedLadder(j.qualities);
+      })
+      .catch(() => { askedLadderRef.current = false; });
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceTranscode, !!token, capsParam, info?.mode]);
+
+  // The transcode ladder, each rung by the server's name for it (lib/
+  // qualities.ts onTheFlyLadder): /play/info's label, "Original" for a
+  // direct stream's high, or what the rung playing is called in its master.
+  // One row per name in the menu; null off the ladder.
+  const ladder = useMemo(
+    () =>
+      effectiveMode === 'transcode' && info
+        ? onTheFlyLadder({
+            mode: info.mode,
+            listed: info.mode === 'transcode' ? info.qualities : movedLadder,
+            width: info.width,
+            height: info.height,
+            playing: playingLevel,
+          })
+        : null,
+    [effectiveMode, info, movedLadder, playingLevel],
+  );
+  const chosenRung = ladder ? ladderRow(ladder, streamQuality) : null;
+  // A q as the menu names it: a packaged rung by its entry, a transcode
+  // rung by the ladder, else the q itself.
+  const nameOfQuality = (q: Quality): string =>
+    packagedMenu?.find((e) => e.name === q)?.label ??
+    ladder?.find((e) => e.name === q)?.label ??
+    (q === AUTO ? 'Auto' : q);
   const qualityName = chosenPackaged
     ? onAuto ? autoLabel(chosenPackaged.label, playingName) : chosenPackaged.label
-    : labelForQuality(streamQuality);
+    : chosenRung?.label ?? nameOfQuality(streamQuality);
+
+  // The notice of a quality change the player made by itself, once the
+  // quality it went to is named as the server names it: at once where
+  // /play/info names it, else when the new source's master does (the
+  // playing level's NAME), else by what plays.
+  useEffect(() => {
+    if (!pendingNotice) return;
+    if (pendingNotice.quality !== streamQuality) {
+      setPendingNotice(null);
+      return;
+    }
+    const rung = ladder?.find((e) => e.name === pendingNotice.quality);
+    const playingNow = !!playingLevel && playingLevel.q === pendingNotice.quality;
+    if (rung && !rung.known && !playingNow) return;
+    const label = rung?.label ?? nameOfQuality(pendingNotice.quality);
+    setPendingNotice(null);
+    setQualityNotice(stepDownNotice(label, pendingNotice.why));
+    window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = window.setTimeout(() => setQualityNotice(null), pendingNotice.ms);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingNotice, ladder, playingLevel, streamQuality]);
 
   // Stash the playhead for a source about to be rebuilt (pendingSeekRef).
   // At the very start a resume position may still be waiting there for
@@ -3038,10 +3121,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           if (action.forceTranscode !== forceTranscodeRef.current) setForceTranscode(action.forceTranscode);
           if (action.quality !== streamQualityRef.current) setStreamQuality(action.quality);
           setReloadKey((k) => k + 1);
-          if (action.notice) {
-            setQualityNotice(action.notice);
-            window.setTimeout(() => setQualityNotice(null), 5000);
-          }
+          if (action.notice) setPendingNotice({ quality: action.quality, why: action.notice, ms: 5000 });
           recordSwitch(action.label, 'stall', `8s no progress @ ${fmt(action.at)}`);
       }
     }, 2000);
@@ -3112,7 +3192,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     if (s.count < 3) return;
     s.count = 0;
     s.firstAt = 0;
-    const step = downgradeStep({ mode: info.mode, quality: streamQuality, forcedTranscode: forceTranscode });
+    const step = downgradeStep({ mode: info.mode, quality: streamQuality, forcedTranscode: forceTranscode, ladder });
     if (!step) return;
     lastAutoDowngradeAtRef.current = now;
     const wallTime = v?.currentTime ?? 0;
@@ -3125,14 +3205,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       reason: 'bandwidth',
     });
     recordSwitch(
-      onto ? `→ ${labelForQuality(step.quality)} (auto, ${info.mode} → transcode)` : `→ ${labelForQuality(step.quality)}`,
+      onto ? `→ ${nameOfQuality(step.quality)} (auto, ${info.mode} → transcode)` : `→ ${nameOfQuality(step.quality)}`,
       'auto',
       `3 stalls in 30s @ ${fmt(wallTime)}`,
     );
     if (onto) setForceTranscode(true);
     setStreamQuality(step.quality);
-    setQualityNotice(stepDownNotice(step.quality, onto));
-    window.setTimeout(() => setQualityNotice(null), 4000);
+    setPendingNotice({ quality: step.quality, why: step.why, ms: 4000 });
   };
 
   // Verbose diagnostics. Attaches every standard HTMLMediaElement event,
@@ -3443,11 +3522,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // that rung alone). Changing streamQuality flips playUrl, which tears
   // hls.js down and loads the new master; the playhead is kept for
   // hls.js's startPosition and onLoadedMetadata to put back.
-  const switchQuality = (q: Quality, label = labelForQuality(q)) => {
+  const switchQuality = (q: Quality, label = nameOfQuality(q)) => {
     if (q === streamQuality) {
       setOpenMenu(null);
       return;
     }
+    // A pick says nothing: a notice of the player's own change goes with it.
+    setPendingNotice(null);
+    setQualityNotice(null);
     const wallTime = videoRef.current?.currentTime ?? 0;
     setBuffering(true);
     setActionLabel(`Switching to ${label}…`);
@@ -3805,7 +3887,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           </p>
           {effectiveMode === 'transcode' && info && (
             <p className="mt-2 text-white/50 text-xs">
-              Transcoding {info.video_codec.toUpperCase()} → H.264 · {labelForQuality(streamQuality)}
+              Transcoding {info.video_codec.toUpperCase()} → H.264 · {qualityName}
             </p>
           )}
         </div>
@@ -4434,12 +4516,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             )}
           </div>
 
-          {/* The quality menu: the transcode ladder's rungs, or a packaged
-              title's Auto and rungs when it has two or more to choose
-              from. A direct stream and a package of one rendition have
+          {/* The quality menu: the transcode ladder's rungs, one row per
+              name (a 720p original's high and medium are one "Medium
+              (720p)"), or a packaged title's Auto and rungs, when there
+              are two or more names to choose from. A direct stream, a
+              package of one rendition and a ladder of one name have
               nothing to pick - a menu whose clicks change nothing was
               misleading. */}
-          {info && (effectiveMode === 'transcode' || packagedMenu) && (
+          {info && (ladderRows(ladder ?? []).length > 1 || packagedMenu) && (
             <div className="relative">
               <button
                 onClick={() => toggleMenu('quality')}
@@ -4468,9 +4552,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                           ) : null}
                         </MenuChoice>
                       ))
-                    : QUALITY_RUNGS.map((q) => (
-                        <MenuChoice key={q} picked={streamQuality === q} onPick={() => switchQuality(q)}>
-                          {labelForQuality(q)}
+                    : ladderRows(ladder ?? []).map((rung) => (
+                        <MenuChoice
+                          key={rung.name}
+                          picked={chosenRung?.name === rung.name}
+                          onPick={() => (chosenRung?.name === rung.name ? setOpenMenu(null) : switchQuality(rung.name, rung.label))}
+                        >
+                          {rung.label}
                         </MenuChoice>
                       ))}
                 </div>
@@ -4560,6 +4648,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           effectiveMode={effectiveMode}
           streamQuality={streamQuality}
           packagedQuality={chosenPackaged ? qualityName : null}
+          qualityName={qualityName}
           switchHistory={switchHistory}
           videoEl={videoRef.current}
           displayedCurrent={displayedCurrent}
@@ -4741,6 +4830,7 @@ function PlaybackInfoDialog({
   effectiveMode,
   streamQuality,
   packagedQuality,
+  qualityName,
   switchHistory,
   videoEl,
   displayedCurrent,
@@ -4750,8 +4840,10 @@ function PlaybackInfoDialog({
   clientCodecs: { label: string; supported: boolean }[];
   effectiveMode: PlayInfo['mode'];
   streamQuality: Quality;
-  /** What a packaged title's quality menu is on ("Auto · 720p", "480p"); null without a menu. */
+  /** What a packaged title's quality menu is on ("Auto · Medium (720p)", "Low (480p)"); null without a menu. */
   packagedQuality: string | null;
+  /** The quality as the menu names it. */
+  qualityName: string;
   switchHistory: SwitchEntry[];
   videoEl: HTMLVideoElement | null;
   displayedCurrent: number;
@@ -4845,7 +4937,7 @@ function PlaybackInfoDialog({
                   {effectiveMode === 'transcode' ? (
                     <>
                       <dt className="text-chino-muted">Quality</dt>
-                      <dd>{labelForQuality(streamQuality)}</dd>
+                      <dd>{qualityName}</dd>
                       <dt className="text-chino-muted">Encoder</dt>
                       <dd>
                         {info.encoder === 'h264_nvenc'

@@ -13,7 +13,7 @@
 // a direct stream (passthrough, remux) or the transcode ladder's rungs.
 
 import { hasCodec } from './caps.ts';
-import { AUTO } from './qualities.ts';
+import { lowerRung, type LadderEntry } from './qualities.ts';
 
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
 
@@ -35,46 +35,28 @@ export function isLadderQuality(q: Quality): q is LadderQuality {
 }
 
 /**
- * The transcode ladder's rungs as the quality menu names them: the rung's
- * name, and what it is - the picture's size, the source's for High. The
- * menu says both ("Medium (720p)"), a notice of a switch the name.
+ * Why the player changed the quality by itself, which its notice says
+ * (docs/chino, playback: when the quality changes by itself): off the
+ * original because the connection can't keep up with it ('original-stall')
+ * or because it couldn't be streamed ('original-error'), or one step down
+ * between qualities ('step').
  */
-export const LADDER_MENU: Readonly<Record<LadderQuality, { label: string; detail: string }>> = {
-  high: { label: 'High', detail: 'source' },
-  medium: { label: 'Medium', detail: '720p' },
-  low: { label: 'Low', detail: '480p' },
-};
-
-/** A quality as the quality menu says it: a rung of the ladder with what it is, Auto, else a packaged rung's name (the menu has its label). */
-export function labelForQuality(q: Quality): string {
-  if (isLadderQuality(q)) return `${LADDER_MENU[q].label} (${LADDER_MENU[q].detail})`;
-  return q === AUTO ? 'Auto' : q;
-}
-
-/** Why a direct stream moved onto the transcode ladder: the connection could not keep up (a stall), or the original could not be streamed (an error). */
-export type LadderMove = 'stall' | 'error';
+export type StepDownWhy = 'original-stall' | 'original-error' | 'step';
 
 /**
- * The notice of a direct stream moved onto the transcode ladder at quality:
- * the rung by the menu's name for it, and why.
+ * The notice of a quality change the player made by itself, label the
+ * quality it went to as the menu names it - the server's name, "Medium
+ * (720p)" (lib/qualities.ts).
  */
-export function ladderNotice(quality: LadderQuality, why: LadderMove): string {
-  const name = LADDER_MENU[quality].label;
-  return why === 'stall'
-    ? `Switched to ${name} quality: the connection can't keep up with the original.`
-    : `Switched to ${name} quality: the original couldn't be streamed.`;
-}
-
-/**
- * The notice of a step down after repeated stalls (downgradeStep): a direct
- * stream moved onto the ladder (ontoLadder) says the connection can't keep
- * up with the original; a step between encoded qualities names the rung by
- * the menu's label of it ("Low (480p)") and says the connection can't keep
- * up.
- */
-export function stepDownNotice(quality: Quality, ontoLadder: boolean): string {
-  if (ontoLadder && isLadderQuality(quality)) return ladderNotice(quality, 'stall');
-  return `Switched to ${labelForQuality(quality)} quality: the connection can't keep up.`;
+export function stepDownNotice(label: string, why: StepDownWhy): string {
+  switch (why) {
+    case 'original-stall':
+      return `Switched to ${label} quality: the connection can't keep up with the original.`;
+    case 'original-error':
+      return `Switched to ${label} quality: the original couldn't be streamed.`;
+    default:
+      return `Switched to ${label} quality: the connection can't keep up.`;
+  }
 }
 
 /**
@@ -141,8 +123,9 @@ export type StallAction =
   /** Data is buffered past a playhead that does not move: seek to where it
    *  is, which restarts the decoder on what is already there. */
   | { kind: 'nudge'; at: number }
-  /** Rebuild the source and seek it back to `at`. */
-  | { kind: 'reload'; at: number; quality: Quality; forceTranscode: boolean; notice: string | null; label: string };
+  /** Rebuild the source and seek it back to `at`; notice, what the player
+   *  says of it once the quality it goes to is named (stepDownNotice). */
+  | { kind: 'reload'; at: number; quality: Quality; forceTranscode: boolean; notice: StepDownWhy | null; label: string };
 
 /**
  * What the hard-stall watcher does when the playhead has not moved for a
@@ -181,7 +164,7 @@ export function stallAction(s: StallState): StallAction {
     at,
     quality: 'medium',
     forceTranscode: true,
-    notice: ladderNotice('medium', 'stall'),
+    notice: 'original-stall',
     label: `→ Medium (auto, ${s.mode ?? 'unknown'} → transcode)`,
   };
 }
@@ -189,7 +172,7 @@ export function stallAction(s: StallState): StallAction {
 export type NetworkFallback =
   /** Onto the transcode ladder at Medium, at the position, the notice saying
    *  the original could not be streamed. */
-  | { kind: 'transcode'; quality: LadderQuality; notice: string; label: string }
+  | { kind: 'transcode'; quality: LadderQuality; notice: StepDownWhy; label: string }
   /** As before: hls.js retries, then the player asks again or gives up. */
   | { kind: 'keep' };
 
@@ -217,28 +200,33 @@ export function networkFallback(s: {
   const direct = s.mode === 'remux' || s.mode === 'passthrough';
   if (!direct || s.forcedTranscode || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
   if (s.status !== 404 && !s.fatal) return { kind: 'keep' };
-  return { kind: 'transcode', quality: 'medium', notice: ladderNotice('medium', 'error'), label: `→ Medium (auto, ${s.mode} → transcode)` };
+  return { kind: 'transcode', quality: 'medium', notice: 'original-error', label: `→ Medium (auto, ${s.mode} → transcode)` };
 }
 
 /**
  * The step down after repeated buffer underruns, or null when there is no
  * lower step: a packaged title is not stepped down by the player - on Auto
  * hls.js steps through its ladder itself, and a rung the viewer picked
- * stays picked - and Low is the transcode ladder's last rung. A direct
- * stream moves onto the ladder at Medium.
+ * stays picked. On the transcode ladder, the next rung with another name
+ * (lib/qualities.ts lowerRung: a 720p original's high goes to low, past
+ * medium, which encodes the same frame), the fixed ladder's next where the
+ * ladder is not named; none past the last. A direct stream moves onto the
+ * ladder at Medium. why is what its notice says.
  */
 export function downgradeStep(s: {
   mode: PlayMode | null;
   quality: Quality;
   forcedTranscode: boolean;
-}): { quality: Quality; forceTranscode: boolean } | null {
+  /** The on-the-fly ladder, named (lib/qualities.ts onTheFlyLadder). */
+  ladder?: readonly LadderEntry[] | null;
+}): { quality: Quality; forceTranscode: boolean; why: StepDownWhy } | null {
   if (s.mode === 'packaged') return null;
   if (s.mode === 'transcode' || s.forcedTranscode) {
-    const i = isLadderQuality(s.quality) ? QUALITY_RUNGS.indexOf(s.quality) : -1;
-    if (i < 0 || i >= QUALITY_RUNGS.length - 1) return null;
-    return { quality: QUALITY_RUNGS[i + 1], forceTranscode: s.forcedTranscode };
+    if (!isLadderQuality(s.quality)) return null;
+    const next = s.ladder?.length ? lowerRung(s.ladder, s.quality) : QUALITY_RUNGS[QUALITY_RUNGS.indexOf(s.quality) + 1];
+    return next ? { quality: next, forceTranscode: s.forcedTranscode, why: 'step' } : null;
   }
-  return { quality: 'medium', forceTranscode: true };
+  return { quality: 'medium', forceTranscode: true, why: 'original-stall' };
 }
 
 export type MediaFallback =

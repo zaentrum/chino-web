@@ -39,9 +39,9 @@ test("an extra's heading: the title's name and the extra's", () => {
   assert.equal(extraHeading(null, null), '');
 });
 
-test("an extra's quality menu: Auto, then its rungs by size, tallest first, each asked for by its directory", () => {
+test("an extra's quality menu: Auto, then its rungs by the table, tallest first, each asked for by its directory", () => {
   const menu = extraQualities([V480, V720]);
-  assert.deepEqual(menu?.map((e) => [e.name, e.label]), [['auto', 'Auto'], ['v0', '720p'], ['v1', '480p']]);
+  assert.deepEqual(menu?.map((e) => [e.name, e.label]), [['auto', 'Auto'], ['v0', 'Medium (720p)'], ['v1', 'Low (480p)']]);
   assert.equal(menu?.[1].width, 1280);
   assert.equal(menu?.[1].codec, 'avc1.4d401f');
   // The menu a packaged title's /play/info gives: the player's menu, and the
@@ -49,20 +49,32 @@ test("an extra's quality menu: Auto, then its rungs by size, tallest first, each
   const packaged = packagedQualityMenu({ mode: 'packaged', qualities: menu });
   assert.deepEqual(packaged, menu);
   assert.equal(chosenQuality(packaged!, 'auto').label, 'Auto');
-  assert.equal(chosenQuality(packaged!, 'v1').label, '480p');
+  assert.equal(chosenQuality(packaged!, 'v1').label, 'Low (480p)');
   // Auto names the rung that plays, by the variant's directory.
-  assert.equal(playingLabel({ uri: V480.uri, width: 854, height: 480 }, packaged), '480p');
+  assert.equal(playingLabel({ uri: V480.uri, width: 854, height: 480 }, packaged), 'Low (480p)');
+});
+
+test("an extra's rungs are named as its master names them (NAME), one row per name", () => {
+  const scope = { ...V720, width: 1280, height: 536, name: 'Medium (720p)' };
+  assert.deepEqual(extraQualities([scope, { ...V480, name: 'Low (480p)' }])?.map((e) => e.label), ['Auto', 'Medium (720p)', 'Low (480p)']);
+  // An older server's NAME, a height alone, through the same table.
+  assert.deepEqual(extraQualities([{ ...V720, name: '720p' }, V480])?.map((e) => e.label), ['Auto', 'Medium (720p)', 'Low (480p)']);
+  // Two variants of one name (two codecs of one frame) are one row, the better.
+  const hevc = { ...V720, uri: `${base}/v2/playlist.m3u8?stream=tok&q=auto`, bitrate: 1900000, videoCodec: 'hvc1.1.6.L93.B0' };
+  assert.deepEqual(extraQualities([hevc, V720, V480])?.map((e) => e.name), ['auto', 'v0', 'v1']);
+  assert.equal(extraQualities([hevc, V720]), null, 'one name: nothing to choose');
 });
 
 test('no quality menu for one rung or none, or for variants without a directory', () => {
   assert.equal(extraQualities([V720]), null);
   assert.equal(extraQualities([V720, { ...V720, bitrate: 1 }]), null, 'the same rung twice is one');
+  assert.equal(extraQualities([V720, { ...V720, uri: `${base}/v5/playlist.m3u8` }]), null, 'two rungs of one name are one');
   assert.equal(extraQualities([]), null);
   assert.equal(extraQualities([{ uri: 'playlist.m3u8', width: 1280, height: 720 }, { width: 854, height: 480 }]), null);
 });
 
 test('a rung without a size is named by its directory', () => {
-  assert.deepEqual(extraQualities([V720, { uri: `${base}/v1/playlist.m3u8`, bitrate: 500000 }])?.map((e) => e.label), ['Auto', '720p', 'v1']);
+  assert.deepEqual(extraQualities([V720, { uri: `${base}/v1/playlist.m3u8`, bitrate: 500000 }])?.map((e) => e.label), ['Auto', 'Medium (720p)', 'v1']);
 });
 
 test("an extra's audio: one track per language and name, the same sound in two groups once", () => {

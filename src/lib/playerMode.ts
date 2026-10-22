@@ -8,7 +8,7 @@
 // watching. Pure: playerMode.test.ts runs it under node --test.
 
 import { normalizeLang } from './languages.ts';
-import { AUTO, rungOfUri, sizeLabel, type PlayQuality } from './qualities.ts';
+import { AUTO, frameQualityName, rungOfUri, shownQualityName, type PlayQuality } from './qualities.ts';
 
 /** What the player plays: a title, or one of a title's extras. */
 export type PlayerMode = 'title' | 'extra';
@@ -49,6 +49,8 @@ export function extraHeading(titleName: string | null | undefined, extraTitle: s
 /** A variant of an extra's master, as hls.js lists it (a level). */
 export interface MasterVariant {
   uri?: string;
+  /** Its NAME: the server's name for the quality ("Medium (720p)"). */
+  name?: string;
   width?: number;
   height?: number;
   bitrate?: number;
@@ -119,10 +121,13 @@ export function codecName(codec: string | null | undefined): string {
 
 /**
  * An extra's quality menu, from its master's ladder: Auto, then a rung per
- * variant, tallest first, named by its picture size as chino-stream names
- * a title's rungs ("720p"). A rung's name is its directory ("v1"), the ?q=
- * that serves it alone, as for a packaged title. Null for fewer than two
- * rungs: nothing to choose.
+ * name, tallest first, each named as the master names its variant (NAME,
+ * the server's name: "Medium (720p)"; an older server's height alone by the
+ * same table), else by its frame as chino-stream names one (lib/
+ * qualities.ts frameQualityName). Of variants of one name the best stays
+ * (the tallest, then the highest bitrate). A rung's name is its directory
+ * ("v1"), the ?q= that serves it alone, as for a packaged title. Null for
+ * fewer than two names: nothing to choose.
  */
 export function extraQualities(variants: readonly MasterVariant[]): PlayQuality[] | null {
   const rungs: PlayQuality[] = [];
@@ -132,16 +137,23 @@ export function extraQualities(variants: readonly MasterVariant[]): PlayQuality[
     rungs.push({
       name,
       id: name,
-      label: sizeLabel(v.width, v.height) ?? name,
+      label: shownQualityName(v.name) || frameQualityName(v.width, v.height) || name,
       width: v.width,
       height: v.height,
       codec: v.videoCodec,
       bitrate: v.bitrate,
     });
   }
-  if (rungs.length < 2) return null;
   rungs.sort((a, b) => (b.height ?? 0) - (a.height ?? 0) || (b.bitrate ?? 0) - (a.bitrate ?? 0));
-  return [{ name: AUTO, label: 'Auto' }, ...rungs];
+  const seen = new Set<string>();
+  const named = rungs.filter((r) => {
+    const key = r.label.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (named.length < 2) return null;
+  return [{ name: AUTO, label: 'Auto' }, ...named];
 }
 
 /**

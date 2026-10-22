@@ -3,12 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   IN_PLACE_TRIES,
-  LADDER_MENU,
-  QUALITY_RUNGS,
   downgradeStep,
   isLadderQuality,
-  labelForQuality,
-  ladderNotice,
   leaveSource,
   mediaFallback,
   networkFallback,
@@ -17,7 +13,9 @@ import {
   stallAction,
   stepDownNotice,
   type StallState,
+  type StepDownWhy,
 } from './playback.ts';
+import { onTheFlyLadder, type PlayQuality } from './qualities.ts';
 
 const stall = (s: Partial<StallState>): StallState => ({
   mode: 'packaged',
@@ -87,10 +85,28 @@ test('a direct stream moves onto the transcode ladder at Medium - at the same po
 
 test('repeated underruns: no step down for a packaged title; the ladder steps down; Low is the last rung', () => {
   assert.equal(downgradeStep({ mode: 'packaged', quality: 'high', forcedTranscode: false }), null);
-  assert.deepEqual(downgradeStep({ mode: 'transcode', quality: 'high', forcedTranscode: false }), { quality: 'medium', forceTranscode: false });
-  assert.deepEqual(downgradeStep({ mode: 'remux', quality: 'medium', forcedTranscode: true }), { quality: 'low', forceTranscode: true });
+  assert.deepEqual(downgradeStep({ mode: 'transcode', quality: 'high', forcedTranscode: false }), { quality: 'medium', forceTranscode: false, why: 'step' });
+  assert.deepEqual(downgradeStep({ mode: 'remux', quality: 'medium', forcedTranscode: true }), { quality: 'low', forceTranscode: true, why: 'step' });
   assert.equal(downgradeStep({ mode: 'transcode', quality: 'low', forcedTranscode: false }), null);
-  assert.deepEqual(downgradeStep({ mode: 'passthrough', quality: 'high', forcedTranscode: false }), { quality: 'medium', forceTranscode: true });
+  assert.deepEqual(downgradeStep({ mode: 'passthrough', quality: 'high', forcedTranscode: false }), { quality: 'medium', forceTranscode: true, why: 'original-stall' });
+});
+
+// /play/info's on-the-fly qualities, as chino-stream names them.
+const named = (labels: [string, string, string]): PlayQuality[] => ['high', 'medium', 'low'].map((name, i) => ({ name, label: labels[i] }));
+
+test('a step down on a named ladder goes to the next rung with another name', () => {
+  // A 720p original: high and medium encode one frame, "Medium (720p)".
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: named(['Medium (720p)', 'Medium (720p)', 'Low (480p)']) });
+  assert.deepEqual(downgradeStep({ mode: 'transcode', quality: 'high', forcedTranscode: false, ladder }), { quality: 'low', forceTranscode: false, why: 'step' });
+  assert.deepEqual(downgradeStep({ mode: 'transcode', quality: 'medium', forcedTranscode: false, ladder }), { quality: 'low', forceTranscode: false, why: 'step' });
+  assert.equal(downgradeStep({ mode: 'transcode', quality: 'low', forcedTranscode: false, ladder }), null);
+  // A 360p original: one name, nowhere lower.
+  const small = onTheFlyLadder({ mode: 'transcode', listed: named(['Lowest (360p)', 'Lowest (360p)', 'Lowest (360p)']) });
+  assert.equal(downgradeStep({ mode: 'transcode', quality: 'high', forcedTranscode: false, ladder: small }), null);
+  // A direct stream still moves onto the ladder at Medium first, then on by its names.
+  const moved = onTheFlyLadder({ mode: 'remux', listed: named(['High (1080p)', 'Medium (720p)', 'Low (480p)']) });
+  assert.deepEqual(downgradeStep({ mode: 'remux', quality: 'high', forcedTranscode: false, ladder: moved }), { quality: 'medium', forceTranscode: true, why: 'original-stall' });
+  assert.deepEqual(downgradeStep({ mode: 'remux', quality: 'medium', forcedTranscode: true, ladder: moved }), { quality: 'low', forceTranscode: true, why: 'step' });
 });
 
 test('media errors: a packaged title asks again without HEVC, or gives up - never a forced transcode', () => {
@@ -143,37 +159,28 @@ test('a direct stream whose fragment is answered 404 moves onto the ladder at on
     if (a.kind !== 'transcode') continue;
     assert.equal(a.quality, 'medium');
     assert.match(a.label, /→ Medium/);
-    assert.equal(a.notice, "Switched to Medium quality: the original couldn't be streamed.");
+    assert.equal(a.notice, 'original-error');
   }
   assert.equal(fragmentError({ fatal: true }).kind, 'transcode');
 });
 
 test('each move onto the ladder says why: the connection, or the original', () => {
   const stalled = stallAction(stall({ mode: 'remux' }));
-  assert.equal(stalled.kind === 'reload' ? stalled.notice : null, "Switched to Medium quality: the connection can't keep up with the original.");
+  assert.equal(stalled.kind === 'reload' ? stalled.notice : null, 'original-stall');
   const error = fragmentError({});
-  assert.equal(error.kind === 'transcode' ? error.notice : null, "Switched to Medium quality: the original couldn't be streamed.");
-  for (const q of QUALITY_RUNGS) {
-    for (const why of ['stall', 'error'] as const) {
-      const line = ladderNotice(q, why);
-      // A line in the viewer's words: no code, no cause it is not.
-      assert.doesNotMatch(line, /\d/, line);
-      assert.doesNotMatch(line, /unstable connection|adaptive streaming/i, line);
-      assert.match(line, /^Switched to [A-Z][a-z]+ quality: [a-z].*\.$/, line);
-    }
+  assert.equal(error.kind === 'transcode' ? error.notice : null, 'original-error');
+  for (const why of ['original-stall', 'original-error', 'step'] as StepDownWhy[]) {
+    const line = stepDownNotice('Medium (720p)', why);
+    // A line in the viewer's words: no code, no cause it is not.
+    assert.doesNotMatch(line, /\b(404|5\d\d)\b|unstable connection|adaptive streaming/i, line);
+    assert.match(line, /^Switched to Medium \(720p\) quality: [a-z].*\.$/, line);
   }
 });
 
-test('a notice names the rung as the quality menu does, from the menu\'s own entries', () => {
-  for (const q of QUALITY_RUNGS) {
-    const { label, detail } = LADDER_MENU[q];
-    assert.equal(labelForQuality(q), `${label} (${detail})`, q);
-    for (const why of ['stall', 'error'] as const) assert.ok(ladderNotice(q, why).startsWith(`Switched to ${label} quality:`), `${q} ${why}`);
-  }
-  // The menu as it was.
-  assert.deepEqual(QUALITY_RUNGS.map(labelForQuality), ['High (source)', 'Medium (720p)', 'Low (480p)']);
-  assert.equal(labelForQuality('auto'), 'Auto');
-  assert.equal(labelForQuality('v2'), 'v2');
+test("the notices of docs/chino, word for word, the quality by the server's name", () => {
+  assert.equal(stepDownNotice('Medium (720p)', 'original-stall'), "Switched to Medium (720p) quality: the connection can't keep up with the original.");
+  assert.equal(stepDownNotice('Low (480p)', 'original-error'), "Switched to Low (480p) quality: the original couldn't be streamed.");
+  assert.equal(stepDownNotice('Low (480p)', 'step'), "Switched to Low (480p) quality: the connection can't keep up.");
 });
 
 test('a source left for another keeps the position from before its teardown, which sends the media back to 0:00', () => {
@@ -211,26 +218,25 @@ test('only a fragment that failed to load moves a direct stream: a playlist or t
   }
 });
 
-test('a step down between encoded qualities names the rung as the menu does and says the connection cannot keep up', () => {
-  assert.equal(stepDownNotice('low', false), "Switched to Low (480p) quality: the connection can't keep up.");
-  assert.equal(stepDownNotice('medium', false), "Switched to Medium (720p) quality: the connection can't keep up.");
-  for (const q of QUALITY_RUNGS) {
-    const line = stepDownNotice(q, false);
-    // The menu's label, from its own entries; no original in a step between encodings.
-    assert.equal(line, `Switched to ${LADDER_MENU[q].label} (${LADDER_MENU[q].detail}) quality: the connection can't keep up.`, q);
-    assert.doesNotMatch(line, /original|slow connection|—/i, line);
-  }
-});
-
-test('three stalls step a transcode down a rung, and move a direct stream onto the ladder on the stall line', () => {
-  // As the player says it: the step, and whether it moved the stream onto the ladder.
-  const noticeOf = (s: { mode: 'transcode' | 'remux'; quality: 'high' | 'medium'; forcedTranscode: boolean }) => {
-    const step = downgradeStep(s);
+test('three stalls step down a rung, named as the ladder names it, and move a direct stream onto the ladder on the stall line', () => {
+  // As the player says it: the step, by the server's name for the rung it goes to.
+  const noticeOf = (s: { mode: 'transcode' | 'remux'; quality: 'high' | 'medium'; forcedTranscode: boolean }, listed: PlayQuality[]) => {
+    const ladder = onTheFlyLadder({ mode: s.mode, listed });
+    const step = downgradeStep({ ...s, ladder });
     assert.ok(step);
-    return stepDownNotice(step.quality, step.forceTranscode && !s.forcedTranscode);
+    return stepDownNotice(ladder.find((e) => e.name === step.quality)!.label, step.why);
   };
-  assert.equal(noticeOf({ mode: 'transcode', quality: 'medium', forcedTranscode: false }), "Switched to Low (480p) quality: the connection can't keep up.");
-  assert.equal(noticeOf({ mode: 'remux', quality: 'medium', forcedTranscode: true }), "Switched to Low (480p) quality: the connection can't keep up.");
-  assert.equal(noticeOf({ mode: 'remux', quality: 'high', forcedTranscode: false }), ladderNotice('medium', 'stall'));
-  assert.equal(ladderNotice('medium', 'stall'), "Switched to Medium quality: the connection can't keep up with the original.");
+  const full = named(['High (1080p)', 'Medium (720p)', 'Low (480p)']);
+  assert.equal(noticeOf({ mode: 'transcode', quality: 'medium', forcedTranscode: false }, full), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(noticeOf({ mode: 'transcode', quality: 'high', forcedTranscode: false }, full), "Switched to Medium (720p) quality: the connection can't keep up.");
+  assert.equal(noticeOf({ mode: 'remux', quality: 'medium', forcedTranscode: true }, full), "Switched to Low (480p) quality: the connection can't keep up.");
+  assert.equal(
+    noticeOf({ mode: 'remux', quality: 'high', forcedTranscode: false }, full),
+    "Switched to Medium (720p) quality: the connection can't keep up with the original.",
+  );
+  // A 720p original's high steps past medium, which reads the same: the notice names a different picture.
+  assert.equal(
+    noticeOf({ mode: 'transcode', quality: 'high', forcedTranscode: false }, named(['Medium (720p)', 'Medium (720p)', 'Low (480p)'])),
+    "Switched to Low (480p) quality: the connection can't keep up.",
+  );
 });
