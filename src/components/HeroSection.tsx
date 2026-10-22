@@ -15,6 +15,7 @@ import {
   type Sample,
 } from '../lib/heroSwipe';
 import { trailerPath } from '../lib/trailers';
+import { ACTION_FOCUS, ACTION_HEIGHT, OFF_LOOK, PLAY_LOOK } from '../lib/titleActions';
 import { FadeImage } from './FadeImage';
 
 interface HeroSectionProps {
@@ -440,7 +441,20 @@ interface HeroSlideProps {
   onDetail: () => void;
 }
 
+// Below md the picture is the hero's width and ends above its buttons:
+// nothing is drawn over a still (docs/chino, title actions). It leaves the
+// buttons' 48 px, 16 px above them, the hero's padding under them (16 px,
+// 24 from sm) and, with the rotation dots, their 24 px row.
+const PICTURE_OVER_BUTTONS = 'h-[calc(100%-80px)] sm:h-[calc(100%-88px)] md:h-full';
+const PICTURE_OVER_BUTTONS_AND_DOTS = 'h-[calc(100%-104px)] sm:h-[calc(100%-112px)] md:h-full';
+
+/** A hero button: the title actions' height and look, solid. One row on
+ *  any phone, 320 px wide too: Trailer is its icon alone there. */
+const HERO_BUTTON = `${ACTION_HEIGHT} ${ACTION_FOCUS} flex items-center justify-center gap-2 shrink-0 transition-colors text-sm lg:text-base font-medium`;
+const HERO_LABELLED = `${HERO_BUTTON} px-3 sm:px-4 lg:px-6`;
+
 function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlideProps) {
+  const pictureHeight = dots ? PICTURE_OVER_BUTTONS_AND_DOTS : PICTURE_OVER_BUTTONS;
   return (
     <>
       {/* Backdrop — sits on the right edge of the hero. On ultra-wide
@@ -448,12 +462,14 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
           stretching past its natural 16:9 aspect.
           maskImage applies a fade-to-transparent on the image's
           left edge so the image bleeds into the black hero
-          background where the title + buttons sit. */}
+          background where the title + buttons sit, the buttons left of
+          it. On a phone it is the hero's width and ends above the
+          buttons, which sit on the hero's black, not on the picture. */}
       <FadeImage
         src={view.image}
         alt={view.title}
         fallbackTitle={view.title}
-        className="absolute inset-y-0 right-0 w-full md:w-[60%] md:max-w-[1100px] h-full object-cover object-center [mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)]"
+        className={`absolute top-0 right-0 w-full md:w-[55%] md:max-w-[1100px] ${pictureHeight} object-cover object-center [mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)]`}
       />
 
       {/* Trailer iframe — temporarily disabled at user request; the
@@ -463,7 +479,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
           bearing items so the surface is ready. Only on the slide on
           show: a neighbour waiting for a swipe plays nothing. */}
       {TRAILERS_ON_HERO && shown && view.ytKey ? (
-        <div className="absolute inset-y-0 right-0 w-full md:w-[60%] md:max-w-[1100px] flex items-center justify-center pointer-events-none [mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)]">
+        <div className={`absolute top-0 right-0 w-full md:w-[55%] md:max-w-[1100px] ${pictureHeight} flex items-center justify-center pointer-events-none [mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_60%,transparent_100%)]`}>
           <div className="w-full h-full max-w-none aspect-video">
             <iframe
               key={view.ytKey}
@@ -508,7 +524,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
             {view.rating && (
               <>
                 <span className="text-chino-muted">•</span>
-                <span className="px-2 py-0.5 bg-chino-accent text-white rounded">{view.rating}</span>
+                <span className="px-2 py-0.5 bg-chino-accent text-chino-bg">{view.rating}</span>
               </>
             )}
           </div>
@@ -529,39 +545,45 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
         {/* Spacer pushes the controls group to the bottom. */}
         <div className="flex-1" />
 
-        {/* Bottom group: Play + More Info, then the room for the
-            rotation dots. */}
-        <div className="md:mr-auto md:max-w-[45%]">
-          <div className="flex gap-2 md:gap-4">
+        {/* Bottom group: Play, More info and Trailer, then the room for
+            the rotation dots. The title actions' 48 px, 8 px apart, on
+            solid fills - Play dark on the accent, the others the plain
+            surface - and never on the picture: on a phone under it
+            (PICTURE_OVER_BUTTONS); from md left of it, which starts at
+            45 % of the hero, this column ending before that (44 % of the
+            padded width), the buttons wrapping inside it. */}
+        <div className="md:mr-auto md:max-w-[44%]">
+          <div className="flex gap-2 md:flex-wrap">
             <button
               onClick={onPlay}
               disabled={!view.playId || pending}
-              className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
+              className={`${HERO_LABELLED} ${PLAY_LOOK} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              <Play className="w-4 h-4 md:w-5 md:h-5 fill-white" />
+              <Play aria-hidden className="w-4 h-4 lg:w-5 lg:h-5 fill-current" />
               <span>Play</span>
             </button>
             <button
               onClick={onDetail}
               disabled={!view.playId}
-              className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-white/20 hover:bg-white/30 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg backdrop-blur-sm transition-colors text-sm md:text-base"
+              className={`${HERO_LABELLED} ${OFF_LOOK} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              <Info className="w-4 h-4 md:w-5 md:h-5" />
-              <span>More Info</span>
+              <Info aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
+              <span>More info</span>
             </button>
             {view.trailerHref ? (
               <a
                 href={view.trailerHref}
                 {...(view.localTrailer ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
-                className="flex items-center gap-2 px-4 py-2 md:px-6 md:py-3 bg-white/20 hover:bg-white/30 text-white rounded-lg backdrop-blur-sm transition-colors text-sm md:text-base"
+                className={`${HERO_BUTTON} w-12 sm:w-auto sm:px-4 lg:px-6 ${OFF_LOOK}`}
                 title={view.localTrailer ? 'Play the trailer' : 'Watch trailer on YouTube'}
+                aria-label="Trailer"
               >
                 {view.localTrailer ? (
-                  <Clapperboard className="w-4 h-4 md:w-5 md:h-5" />
+                  <Clapperboard aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
                 ) : (
-                  <Youtube className="w-4 h-4 md:w-5 md:h-5" />
+                  <Youtube aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
                 )}
-                <span>Trailer</span>
+                <span aria-hidden className="hidden sm:inline">Trailer</span>
               </a>
             ) : null}
           </div>
