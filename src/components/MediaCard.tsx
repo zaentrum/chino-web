@@ -243,7 +243,8 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                   role="menuitem"
                 >
                   <Check aria-hidden className="w-4 h-4 shrink-0" />
-                  {watched ? 'Mark as unwatched' : 'Mark as watched'}
+                  {/* Its state, in the words of the title page's toggle. */}
+                  {watched ? 'Watched' : 'Mark as watched'}
                 </button>
                 {onRemoveFromContinueWatching && (
                   <button

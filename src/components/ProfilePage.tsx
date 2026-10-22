@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { ArrowLeft, EyeOff, LogOut, Trash2 } from 'lucide-react';
+import { ArrowLeft, LogOut, Trash2 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { FadeImage } from './FadeImage';
+import { WatchedToggle } from './TitleActions';
 import { LoadingState } from './LoadingState';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
 import { toApp } from '../lib/basepath';
@@ -160,8 +161,8 @@ export function ProfilePage() {
           <LoadingState />
         ) : visible.length === 0 ? (
           <p className="text-chino-muted">
-            Nothing watched yet. Watched items will appear here once you finish a movie
-            or episode (or mark one watched via the eye-button on a detail page).
+            Nothing watched yet. A movie or an episode shows here once you finish it, or mark it
+            as watched.
           </p>
         ) : (
           <div className="bg-chino-surface border border-chino-border-2 rounded-lg overflow-hidden divide-y divide-chino-border-2">
@@ -183,11 +184,12 @@ export function ProfilePage() {
 /**
  * One watch-history row: 56px thumbnail (16:9 still for episodes, 2:3
  * poster otherwise), title + meta line, right-aligned watched date and
- * the unwatch (EyeOff) action. The whole row clicks through to the
- * detail page; the EyeOff click is swallowed so it doesn't also open
- * the row. div + role=button (not <button>) so the real unwatch
- * <button> can nest inside without invalid-HTML warnings — same idiom
- * as EpisodesList's EpisodeRow.
+ * the watched toggle, on - the title actions' one look for watched, a
+ * dark check on green (docs/chino, title actions) - whose press takes the
+ * title off the list. The whole row clicks through to the detail page;
+ * the toggle's click is swallowed so it doesn't also open the row. div +
+ * role=button (not <button>) so the real <button> can nest inside
+ * without invalid-HTML warnings — same idiom as EpisodesList's EpisodeRow.
  */
 function HistoryRow({
   entry,
@@ -224,6 +226,8 @@ function HistoryRow({
       tabIndex={0}
       onClick={open}
       onKeyDown={(e) => {
+        // The row's own keys: Enter on the toggle inside it is the toggle's.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           open();
@@ -280,18 +284,7 @@ function HistoryRow({
         <span className="text-xs text-chino-muted shrink-0">{dateLabel}</span>
       ) : null}
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onUnwatch();
-        }}
-        className="w-8 h-8 flex items-center justify-center hover:bg-white/10 transition-colors shrink-0"
-        title="Mark as unwatched"
-        aria-label="Mark as unwatched"
-      >
-        <EyeOff className="w-4 h-4 text-chino-muted" />
-      </button>
+      <WatchedToggle watched onToggle={onUnwatch} />
     </div>
   );
 }
