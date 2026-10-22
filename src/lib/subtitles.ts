@@ -6,7 +6,8 @@
 // A title's subtitles are the streams embedded in its original file
 // (/play/info subtitle_tracks; chino-stream extracts a text one as WebVTT on
 // demand) and its sidecars (GET /items/{id}/subtitles). A packaged title's
-// are its sidecars only, in the server's subtitle languages.
+// are its sidecars, those outside the server's subtitle languages included:
+// its menu is any title's.
 
 import {
   autoSubtitleTrack,
@@ -101,8 +102,6 @@ export interface SubtitleMenuOptions {
   /** The subtitle languages the server is set up for, its order; none from
    *  an older server. */
   serverLanguages: readonly string[];
-  /** The title plays from its package, not its original file. */
-  packaged: boolean;
   /** The id of the subtitle on, if any. */
   on?: string | null;
 }
@@ -187,13 +186,14 @@ function standsForBoth<T extends SubtitleSource>(
  * foreign-language parts only, then the ones the platform made ("· AI").
  * Then "more languages" with the rest, by language in the order each first
  * comes, a language's regions and scripts with it, each language's kinds
- * the same way; a track in no language in its place.
+ * the same way; a track in no language in its place. A packaged title is
+ * no different: a package keeps the tracks outside the server's languages,
+ * and they are under "more languages" as an original's are.
  *
- * Without "more languages": a packaged title, which carries the server's
- * languages only, and a title on a server set up for no subtitle languages
- * (an empty list, or an older server without the route), where "off" and
- * "more languages" alone would hide every track behind a click - their
- * tracks are all listed on top: the viewer's language first, then the rest
+ * Without "more languages" only on a server set up for no subtitle
+ * languages (an empty list, or an older server without the route), where
+ * "off" and "more languages" alone would hide every track behind a click -
+ * the tracks are all listed on top: the viewer's language first, then the rest
  * in the file's order, by language as above. A language's tracks stay
  * together, the AI ones included, and a language with its region or script
  * counts as that language: where the ones on top leave out a region or a
@@ -209,7 +209,7 @@ function standsForBoth<T extends SubtitleSource>(
  */
 export function subtitleMenu<T extends SubtitleSource>(
   entries: readonly SubtitleEntry<T>[],
-  { preferred, serverLanguages, packaged, on }: SubtitleMenuOptions,
+  { preferred, serverLanguages, on }: SubtitleMenuOptions,
 ): SubtitleMenu<T> {
   const firstOf = new Map<string, SubtitleEntry<T>>();
   for (const e of entries) {
@@ -232,7 +232,7 @@ export function subtitleMenu<T extends SubtitleSource>(
     if (group.length) blocks.push({ base: normalizeLang(w), entries: byKind(group) });
   }
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
-  const noMore = packaged || !serverLanguages.some((l) => languageTag(l));
+  const noMore = !serverLanguages.some((l) => languageTag(l));
   if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: rest.flatMap((g) => g.entries) };
   // All on top: the rest of a language on top right after its last block
   // there, the other languages after them in the file's order.

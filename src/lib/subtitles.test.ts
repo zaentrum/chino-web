@@ -38,7 +38,7 @@ const ORIGINAL: SubtitleSource[] = [
 const labels = (list: readonly { label: string }[]) => list.map((e) => e.label);
 
 function menu(tracks: readonly SubtitleSource[], opts: Partial<Parameters<typeof subtitleMenu>[1]> = {}) {
-  return subtitleMenu(subtitleEntries(tracks), { preferred: 'eng', serverLanguages: SERVER, packaged: false, ...opts });
+  return subtitleMenu(subtitleEntries(tracks), { preferred: 'eng', serverLanguages: SERVER, ...opts });
 }
 
 test('the menu: the viewer\'s language, then the server\'s, then "more languages" with the rest', () => {
@@ -166,22 +166,27 @@ test('no server languages: the preferred language first, then the file\'s order;
   ]);
 });
 
-test('a packaged title: the server\'s languages, no "more languages"', () => {
+test('a packaged title follows the general rule: the viewer\'s language, the server\'s, then "more languages" for the rest', () => {
+  // A package's sidecars: the server's languages, and the tracks it kept
+  // outside them.
   const packaged: SubtitleSource[] = [
     { id: 'de', lang: 'de' },
+    { id: 'fr', lang: 'fr' },
     { id: 'en', lang: 'en' },
+    { id: 'ja', lang: 'ja' },
     { id: 'zh', lang: 'zh-Hans' },
+    { id: 'de-ai', lang: 'de', title: 'AI' },
   ];
-  const m = menu(packaged, { packaged: true });
-  assert.deepEqual(m.more, []);
-  assert.deepEqual(labels(m.top), ['English', 'German', 'Chinese (Simplified)']);
-  // Whatever else one brings is listed on top after them.
-  assert.deepEqual(labels(menu([...packaged, { id: 'fr', lang: 'fr' }], { packaged: true }).top), [
-    'English',
-    'German',
-    'Chinese (Simplified)',
-    'French',
-  ]);
+  const m = menu(packaged);
+  assert.deepEqual(labels(m.top), ['English', 'German', 'German · AI', 'Chinese (Simplified)']);
+  assert.deepEqual(labels(m.more), ['French', 'Japanese']);
+  // Only the server's languages: nothing more to open.
+  assert.deepEqual(menu(packaged.filter((t) => t.lang !== 'fr' && t.lang !== 'ja')).more, []);
+  // A server with no subtitle languages lists a package's tracks all on
+  // top, as an original's: the viewer's language first, then their order.
+  const none = menu(packaged, { serverLanguages: [] });
+  assert.deepEqual(none.more, []);
+  assert.deepEqual(labels(none.top), ['English', 'German', 'German · AI', 'French', 'Japanese', 'Chinese (Simplified)']);
 });
 
 test('tracks that would read the same show once: the file\'s own before a sidecar, else the first in the file', () => {
