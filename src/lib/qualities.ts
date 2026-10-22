@@ -7,7 +7,8 @@
 // playback: quality names): "Ultra (2160p)", "High (1080p)", "Medium (720p)",
 // "Low (480p)", "Lowest (360p)"; a height between two steps the lower step's
 // name with its own height ("Medium (900p)"); "Original" for the original
-// played as it is. The name is the label of an entry of /play/info's
+// played as it is. A frame is named by its step (namedHeight): its height,
+// or the height its width stands for at 16:9, whichever is larger. The name is the label of an entry of /play/info's
 // qualities and the NAME of a variant in a master (hls.js reads it as a
 // level's name). The apps show it as given; an older server's height alone
 // ("720p") is named by the same table here, and a frame that comes with no
@@ -76,28 +77,29 @@ export function qualityName(height: number | null | undefined): string | null {
 const SIZE_CLASSES = [240, 360, 480, 540, 576, 720, 1080, 1440, 2160, 4320];
 
 /**
- * The height a w×h frame is named by, as chino-stream's namedHeight has it:
- * that of the 16:9 frame it fills - its own height, unless it is wider than
- * 16:9: then the 16:9 frame as wide's, so a 2.39:1 film's 1920x800 is 1080p
- * and its 3840x1606 2160p. A frame up to 10% wider than that counts as the
- * 16:9 frame of a standard height it is no taller than (DCI 4096x2160 is
- * 2160p), and so does one up to 3% narrower, a standard frame cropped at the
- * sides (1916x800 is 1080p); else the 16:9 frame of its own height (1666x900
- * is 900p). A width not known leaves the height; 0 without a height.
+ * The height a w×h frame is named by, its step (docs/chino, playback:
+ * quality names), as chino-stream's namedHeight has it: its own height, or
+ * the height its width stands for at 16:9, whichever is larger - so a 2.39:1
+ * film's 1920x800 is 1080p and its 3840x1606 2160p. A step up to 10% above a
+ * standard height (SIZE_CLASSES), in a frame no taller than it, counts as
+ * that height (DCI 4096x2160 is 2160p, 2048x858 1080p), and so does one up to
+ * 3% below it, a standard frame cropped at the sides (1916x800 is 1080p). Any
+ * other frame wider than 16:9 is named by the height its width stands for:
+ * 1666x900 is 937p, 1728x720 972p. A width not known leaves the height; 0
+ * without a height.
  */
 export function namedHeight(width: number | null | undefined, height: number | null | undefined): number {
   const h = typeof height === 'number' && Number.isFinite(height) ? Math.round(height) : 0;
   if (h <= 0) return 0;
   const w = typeof width === 'number' && Number.isFinite(width) && width > 0 ? Math.round(width) : 0;
-  const full = w > 0 ? Math.max(h, Math.floor((w * 9 + 8) / 16)) : h;
-  if (full === h) return h;
+  const step = w > 0 ? Math.max(h, Math.floor((w * 9 + 8) / 16)) : h;
+  if (step === h) return h;
   for (let i = SIZE_CLASSES.length - 1; i >= 0; i--) {
     const c = SIZE_CLASSES[i];
-    if (c >= h && c <= full && full * 10 <= c * 11) return c;
+    if (c >= h && c <= step && step * 10 <= c * 11) return c;
   }
-  for (const c of SIZE_CLASSES) if (c > full && full * 100 >= c * 97) return c;
-  if (full * 10 <= h * 11) return h;
-  return full;
+  for (const c of SIZE_CLASSES) if (c > step && step * 100 >= c * 97) return c;
+  return step;
 }
 
 /** A frame's name, as chino-stream names a frame: the table's name of its

@@ -65,6 +65,15 @@ test("an extra's rungs are named as its master names them (NAME), one row per na
   assert.equal(extraQualities([hevc, V720]), null, 'one name: nothing to choose');
 });
 
+test("an extra's variant without a NAME is named by its step, as the spec's rule has it", () => {
+  // A scope trailer's rungs: 1728x720 is no standard frame (972p), 1916x800
+  // a 1080p one cropped at the sides.
+  const scope720 = { ...V720, width: 1728, height: 720 };
+  const scope1080 = { ...V720, uri: `${base}/v2/playlist.m3u8?stream=tok&q=auto`, width: 1916, height: 800, bitrate: 5000000 };
+  assert.deepEqual(extraQualities([scope1080, scope720, V480])?.map((e) => e.label), ['Auto', 'High (1080p)', 'Medium (972p)', 'Low (480p)']);
+  assert.deepEqual(extraQualities([{ ...V720, width: 1666, height: 900 }, V480])?.map((e) => e.label), ['Auto', 'Medium (937p)', 'Low (480p)']);
+});
+
 test('no quality menu for one rung or none, or for variants without a directory', () => {
   assert.equal(extraQualities([V720]), null);
   assert.equal(extraQualities([V720, { ...V720, bitrate: 1 }]), null, 'the same rung twice is one');
