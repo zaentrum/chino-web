@@ -94,51 +94,252 @@ export function languageTag(code: unknown): string {
   }
 }
 
-/** The language's name in the given UI locales ("ger" → "German"); the code
- *  itself when Intl does not know it; "No dialogue" for "zxx", "Multiple
- *  languages" for "mul", "Other language" for "mis", "Unknown" for none. */
+/** The language, script and region of a canonical tag (languageTag) - what a
+ *  name says; a variant, an extension or a private use names nothing
+ *  ("de-1901" is "de", "en-US-x-custom" "en-US"). */
+function namedTag(tag: string): string {
+  const [lang, ...rest] = tag.split('-');
+  let script = '';
+  let region = '';
+  for (const sub of rest) {
+    if (sub.length === 1) break;
+    if (!script && !region && /^[A-Za-z]{4}$/.test(sub)) script = sub;
+    else if (!region && /^([A-Za-z]{2}|\d{3})$/.test(sub)) region = sub;
+  }
+  return [lang, script, region].filter(Boolean).join('-');
+}
+
+// One Intl.DisplayNames per locale and form, made once: a menu names many
+// tracks.
+const DISPLAY_NAMES = new Map<string, Intl.DisplayNames | null>();
+
+function displayNames(locales: readonly string[], form: 'standard' | 'dialect'): Intl.DisplayNames | null {
+  const key = `${locales.join(',')}|${form}`;
+  if (!DISPLAY_NAMES.has(key)) {
+    let names: Intl.DisplayNames | null = null;
+    try {
+      names = new Intl.DisplayNames([...locales], { type: 'language', languageDisplay: form, fallback: 'none' });
+    } catch {
+      /* no Intl.DisplayNames, or a locale it refuses */
+    }
+    DISPLAY_NAMES.set(key, names);
+  }
+  return DISPLAY_NAMES.get(key) ?? null;
+}
+
+/** What Intl calls a tag in the locales, or '' when it has no name for it. */
+function intlName(tag: string, locales: readonly string[], form: 'standard' | 'dialect'): string {
+  try {
+    return displayNames(locales, form)?.of(tag) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** The language's name in the given UI locales, with the script and the
+ *  region the code names in brackets after it, as the design system's word
+ *  list writes them ("ger" → "German", "zh-Hans" → "Chinese (Simplified)",
+ *  "pt-BR" → "Portuguese (Brazil)", "zh-Hant-TW" → "Chinese (Traditional,
+ *  Taiwan)"); the code itself when Intl does not know it; "No dialogue" for
+ *  "zxx", "Multiple languages" for "mul", "Other language" for "mis",
+ *  "Unknown" for none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
   const notOne = NOT_ONE_LANGUAGE.get(primarySubtag(code));
   if (notOne) return notOne;
   const tag = languageTag(code);
   if (!tag) return UNKNOWN_LANGUAGE;
-  try {
-    const name = new Intl.DisplayNames([...locales], { type: 'language', fallback: 'none' }).of(tag);
-    if (name) return name;
-  } catch {
-    /* no Intl.DisplayNames, or a tag it refuses */
-  }
+  const name = intlName(namedTag(tag), locales, 'standard');
+  if (name) return name;
   return typeof code === 'string' ? code.trim() : tag;
 }
 
-export interface SubtitleTrackInfo {
+/** What a subtitle label is told about one track. */
+export interface SubtitleLabelInput {
   /** The language code as the track is tagged. */
   lang?: string;
   /** The track's own title, from the file or the catalog, when it has one. */
   title?: string;
+  /** Forced: only the lines in another language than the audio's. A title
+   *  that says so counts too. */
   forced?: boolean;
+  /** For the deaf and hard of hearing, where the player knows it other than
+   *  by the title; a title that says so (isSdhSubtitle) counts too. */
+  sdh?: boolean;
+}
+
+/** What a forced subtitle is, after its language ("English · foreign-language
+ *  parts only"): the lines a film shows in another language than its
+ *  audio's, not the dialogue. */
+export const FORCED_SUBTITLE_KIND = 'foreign-language parts only';
+
+/** What a subtitle for the deaf and hard of hearing is, after its language
+ *  ("English · for deaf and hard of hearing"). */
+export const SDH_SUBTITLE_KIND = 'for deaf and hard of hearing';
+
+// What a track's own title may say of a forced subtitle. No lookbehind (an
+// older Safari cannot parse one): the character before is captured and put
+// back.
+const FORCED_WORDS =
+  /(^|[^A-Za-z])(foreign[ -]language parts( only)?|foreign parts( only)?|forced( narrative| subtitles?| subs)?)(?![A-Za-z])/gi;
+
+// What a track's own title may say of a subtitle for the deaf and hard of
+// hearing - the words isSdhSubtitle reads, and the phrases they are part of.
+const SDH_PHRASES =
+  /(^|[^A-Za-z])((for )?(the )?deaf( and | & | ?\/ ?)hard[ -]of[ -]hearing|(for )?(the )?hard[ -]of[ -]hearing|(for )?(the )?hearing[ -]impaired|closed[ -]captions?|SDH|CC|HoH|deaf)(?![A-Za-z])/gi;
+
+const SDH_WORDS = /(^|[^A-Za-z])(SDH|CC|HoH|closed[ -]captions?|hearing[ -]impaired|hard[ -]of[ -]hearing|deaf)([^A-Za-z]|$)/i;
+
+/** Whether a subtitle's title says it is for the deaf and hard of hearing
+ *  ("English SDH", "English (CC)", "for deaf and hard of hearing"). */
+export function isSdhSubtitle(title: string | undefined | null): boolean {
+  return !!title && SDH_WORDS.test(title);
+}
+
+/** Whether a subtitle's title says it is forced ("German (Forced)",
+ *  "foreign-language parts only"). */
+export function saysForced(title: string | undefined | null): boolean {
+  if (!title) return false;
+  FORCED_WORDS.lastIndex = 0;
+  const found = FORCED_WORDS.test(title);
+  FORCED_WORDS.lastIndex = 0;
+  return found;
+}
+
+// A number a server gave a title to keep it unique in its group ("English
+// (2)"); the menu shows what reads the same once.
+const TRAILING_NUMBER = /\s*\(\d+\)$/;
+const SEPARATOR_RUN = /\s*([·\-–—:,|/])(\s*[·\-–—:,|/])+\s*/g;
+const SEPARATOR_AFTER_OPEN = /([(\[])\s*[·\-–—:,|/]+\s*/g;
+const SEPARATOR_BEFORE_CLOSE = /\s*[·\-–—:,|/]+\s*([)\]])/g;
+const EMPTY_BRACKETS = /\(\s*\)|\[\s*\]/g;
+const EDGE_SEPARATORS = /^[\s\-–—:·,|/]+|[\s\-–—:·,|/]+$/g;
+// Where a title's parts meet: "Chinese (Simplified) · 中文", "German - Deutsch".
+const PART_SEPARATOR = /\s*[·|/–—]\s*|\s+-\s+|\s*:\s+|\s*,\s+/;
+
+/** A track's own title without what it says of the track's kind - forced,
+ *  for the deaf and hard of hearing - or a number that only kept it unique:
+ *  "English SDH" is "English", "German (Forced)" "German", "SDH" nothing. */
+function titleWithoutKind(title: string): string {
+  return title
+    .replace(TRAILING_NUMBER, '')
+    .replace(FORCED_WORDS, '$1 ')
+    .replace(SDH_PHRASES, '$1 ')
+    .replace(EMPTY_BRACKETS, ' ')
+    .replace(SEPARATOR_AFTER_OPEN, '$1')
+    .replace(SEPARATOR_BEFORE_CLOSE, '$1')
+    .replace(EMPTY_BRACKETS, ' ')
+    .replace(SEPARATOR_RUN, ' $1 ')
+    .replace(/\s+/g, ' ')
+    .replace(EDGE_SEPARATORS, '');
+}
+
+// What a language calls itself where Intl does not say it so (the phone
+// app's table): a title that is only one of these says nothing the
+// language's name does not.
+const ENDONYMS: Record<string, readonly string[]> = {
+  af: ['afrikaans'], ar: ['العربية', 'عربي'], bg: ['български'], bn: ['বাংলা'], ca: ['català'],
+  cs: ['čeština', 'česky'], da: ['dansk'], de: ['deutsch'], el: ['ελληνικά'], en: ['english'],
+  es: ['español', 'castellano'], et: ['eesti'], eu: ['euskara'], fa: ['فارسی'], fi: ['suomi'],
+  fr: ['français'], ga: ['gaeilge'], gl: ['galego'], he: ['עברית'], hi: ['हिन्दी'], hr: ['hrvatski'],
+  hu: ['magyar'], id: ['bahasa indonesia'], is: ['íslenska'], it: ['italiano'], ja: ['日本語'],
+  ko: ['한국어'], lt: ['lietuvių'], lv: ['latviešu'], mk: ['македонски'], ms: ['bahasa melayu'],
+  nb: ['norsk bokmål', 'norsk'], nl: ['nederlands'], nn: ['norsk nynorsk', 'nynorsk'], no: ['norsk'],
+  pl: ['polski'], pt: ['português'], ro: ['română'], ru: ['русский'], sk: ['slovenčina'],
+  sl: ['slovenščina'], sq: ['shqip'], sr: ['српски', 'srpski'], sv: ['svenska'], th: ['ไทย'],
+  tr: ['türkçe'], uk: ['українська'], vi: ['tiếng việt'],
+  zh: ['中文', '汉语', '漢語', '简体中文', '繁體中文', '简体', '繁體', '國語', '普通话', '粵語'],
+};
+
+// The locales a language's name is looked up in: the languages a library
+// is likely to carry, each naming every other.
+const NAME_LOCALES = [...new Set([...Object.values(T_TO_1), 'fil', 'zh-Hans', 'zh-Hant'])];
+
+const LANGUAGE_NAMES = new Map<string, Set<string>>();
+
+/** Every name of the code's language - in English, in itself, in the other
+ *  languages a library carries, with and without its script and region -
+ *  lower-cased: "Deutsch", "Allemand" and "German" for "ger"; "中文" and
+ *  "简体中文" for "zh-Hans". */
+function languageNames(code: unknown): Set<string> {
+  const tag = namedTag(languageTag(code));
+  const cached = LANGUAGE_NAMES.get(tag);
+  if (cached) return cached;
+  const names = new Set<string>();
+  const base = normalizeLang(code);
+  if (base) {
+    const tags = [...new Set([tag, base])];
+    for (const locale of [...new Set([...tags, ...NAME_LOCALES])]) {
+      for (const t of tags) {
+        for (const form of ['standard', 'dialect'] as const) {
+          const name = intlName(t, [locale], form);
+          if (name) names.add(name.toLocaleLowerCase());
+        }
+      }
+    }
+    for (const t of tags) names.add(languageName(t).toLowerCase());
+    for (const own of ENDONYMS[base] ?? []) names.add(own);
+  }
+  LANGUAGE_NAMES.set(tag, names);
+  return names;
+}
+
+/** Whether a title only names the track's language again, in any language
+ *  ("Deutsch", "中文", "English", "eng" on a German, Chinese, English
+ *  track), or names no language as a code ("und"). */
+function namesLanguage(title: string, lang: string | undefined): boolean {
+  const t = title.trim();
+  if (!t) return false;
+  return sameLanguageCode(t, lang) || languageNames(lang).has(t.toLocaleLowerCase());
+}
+
+/** A title without its parts that only name the track's language again:
+ *  "Chinese (Simplified) · 中文" on Chinese is "", "German · Commentary" on
+ *  German "Commentary", "Chinese (中文)" "Chinese". */
+function withoutLanguageNames(title: string, lang: string | undefined): string {
+  const t = title
+    .replace(/\(([^()]*)\)|\[([^\[\]]*)\]/g, (whole, a, b) => (namesLanguage(a ?? b ?? '', lang) ? ' ' : whole))
+    .replace(/\s+/g, ' ')
+    .trim();
+  const parts = t.split(PART_SEPARATOR).filter((p) => p.trim() !== '');
+  const kept = parts.filter((p) => !namesLanguage(p, lang));
+  return kept.length === parts.length ? t : kept.join(' · ');
 }
 
 /**
- * The subtitle menu's labels, one per track, in order: the language's name
- * ("German", "No dialogue" for zxx), the track's title when it says more
- * than that ("English · SDH"), "(forced)" for a forced track; a track tagged
- * with no language by its title, else "Unknown"; and where two tracks would
- * still read the same, a number for the second and later ones ("German (2)").
+ * One subtitle's label: the language's name, its script or region in it
+ * ("German", "Chinese (Simplified)", "No dialogue" for zxx); the track's own
+ * title where it says more than that ("English · Commentary", "German ·
+ * AI") - not the parts of it that only name the language again, in any
+ * language ("Deutsch", "中文") - or alone for a track tagged with no
+ * language, else "Unknown"; then its kind in words - "foreign-language parts
+ * only" for a forced one, "for deaf and hard of hearing" for one with sound
+ * described, both in that order. A title that says the kind itself
+ * ("English SDH", "[CC]", "German (forced)") says it once, in these words.
+ * The phone app's subtitleLabel: the same track has the same name there.
  */
-export function subtitleLabels(tracks: readonly SubtitleTrackInfo[], locales: readonly string[] = ['en']): string[] {
-  const labels = tracks.map((t) => {
-    const name = languageName(t.lang, locales);
-    const title = (t.title ?? '').trim();
-    let label = name;
-    if (title && title.toLowerCase() !== name.toLowerCase() && !sameLanguageCode(title, t.lang)) {
-      if (!hasLanguage(t.lang)) label = title;
-      else label = title.toLowerCase().includes(name.toLowerCase()) ? title : `${name} · ${title}`;
-    }
-    if (t.forced && !/forced/i.test(label)) label += ' (forced)';
-    return label;
-  });
-  return numbered(labels);
+export function subtitleLabel(track: SubtitleLabelInput): string {
+  const raw = (track.title ?? '').trim();
+  const forced = !!track.forced || saysForced(raw);
+  const sdh = !!track.sdh || isSdhSubtitle(raw);
+  const title = withoutLanguageNames(titleWithoutKind(raw), track.lang);
+  const name = languageName(track.lang);
+  const lower = title.toLowerCase();
+  let label: string;
+  if (!title || lower === name.toLowerCase() || namesLanguage(title, track.lang)) label = name;
+  else if (!hasLanguage(track.lang)) label = title;
+  else if (lower.includes(name.toLowerCase())) label = title;
+  // "English" on a British English track: the name says it already.
+  else if (name.toLowerCase().includes(lower)) label = name;
+  else label = `${name} · ${title}`;
+  const kinds = [forced ? FORCED_SUBTITLE_KIND : '', sdh ? SDH_SUBTITLE_KIND : ''].filter(Boolean);
+  return [label, ...kinds].join(' · ');
+}
+
+/** The subtitle labels, one per track, in order (subtitleLabel); where two
+ *  tracks would still read the same, a number for the second and later ones
+ *  ("German (2)"). */
+export function subtitleLabels(tracks: readonly SubtitleLabelInput[]): string[] {
+  return numbered(tracks.map(subtitleLabel));
 }
 
 /** The labels, the second and later of the ones that read the same
@@ -330,8 +531,15 @@ const IMAGE_SUBTITLE_FORMATS = new Set([
   'pgs', 'hdmv_pgs_subtitle', 'pgssub', 'vobsub', 'dvdsub', 'dvd_subtitle', 'dvb', 'dvbsub', 'dvb_subtitle', 'xsub',
 ]);
 
+/** Whether a subtitle format (a sidecar's format, an embedded stream's
+ *  codec) is pictures, not text: PGS and the other bitmap formats. None
+ *  given is text. */
+export function isPictureSubtitle(format: string | undefined | null): boolean {
+  return IMAGE_SUBTITLE_FORMATS.has((format ?? '').trim().toLowerCase());
+}
+
 function isTextSubtitle(t: { format?: string }): boolean {
-  return !IMAGE_SUBTITLE_FORMATS.has((t.format ?? '').trim().toLowerCase());
+  return !isPictureSubtitle(t.format);
 }
 
 /** The forced track in the language of the audio playing, or null - the
