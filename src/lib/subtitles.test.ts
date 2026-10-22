@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NO_SUBTITLE,
+  SUBTITLE_SETTING_TEXT,
   autoSubtitle,
   forgetServerSubtitleLanguages,
   languagesFromResponse,
@@ -359,6 +360,32 @@ test('the player decides until the viewer picks; their pick holds for the rest o
   const off = viewerPicks(c, null);
   assert.equal(playerChooses(off, 'emb-3'), off);
   assert.equal(playerChooses(off, 'emb-3').on, null);
+});
+
+test('the Settings text: the same words as every chino app, and as the rule does it', () => {
+  assert.equal(
+    SUBTITLE_SETTING_TEXT,
+    "Subtitles in the language you pick here come on when a title's audio is in another language. " +
+      'Otherwise, only the foreign-language parts get subtitles, where a title has them. ' +
+      "A choice in the player applies only to what's playing now.",
+  );
+  // It compares with the audio that plays: no "or your audio language".
+  assert.doesNotMatch(SUBTITLE_SETTING_TEXT, /audio language/);
+  // What it says is what the player does. The language picked comes on
+  // for audio in another language...
+  const tracks: SubtitleSource[] = [
+    { id: 'en', lang: 'eng' },
+    { id: 'en-forced', lang: 'eng', forced: true },
+    { id: 'de', lang: 'ger' },
+  ];
+  assert.equal(autoSubtitle(menu(tracks), { audioLang: 'ger', subtitlePref: 'eng' }), 'en');
+  // ...otherwise only the foreign-language parts, where the title has them...
+  assert.equal(autoSubtitle(menu(tracks), { audioLang: 'eng', subtitlePref: 'eng' }), 'en-forced');
+  assert.equal(autoSubtitle(menu(tracks.slice(2)), { audioLang: 'ger', subtitlePref: 'ger' }), null);
+  // ...and a choice in the player holds for what is playing only: the next
+  // playback starts from NO_SUBTITLE and the setting again.
+  assert.equal(playerChooses(viewerPicks(NO_SUBTITLE, null), 'en').on, null);
+  assert.deepEqual(playerChooses(NO_SUBTITLE, 'en'), { on: 'en', picked: false });
 });
 
 test('every entry in the menu\'s order', () => {

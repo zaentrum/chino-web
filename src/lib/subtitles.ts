@@ -22,6 +22,14 @@ import {
   type SubtitleDefaults,
 } from './languages.ts';
 
+/** The text under Settings' subtitle language, the same in every chino app
+ *  (docs/chino, subtitles: the setting) - what autoSubtitle does, and how
+ *  long a pick in the player holds (playerChooses, viewerPicks). */
+export const SUBTITLE_SETTING_TEXT =
+  "Subtitles in the language you pick here come on when a title's audio is in another language. " +
+  'Otherwise, only the foreign-language parts get subtitles, where a title has them. ' +
+  "A choice in the player applies only to what's playing now.";
+
 /** One subtitle a title has. */
 export interface SubtitleSource {
   id: string;

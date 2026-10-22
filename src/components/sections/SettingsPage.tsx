@@ -3,6 +3,7 @@ import { Bug } from 'lucide-react';
 import { useSettings, DEFAULT_SETTINGS } from '../../lib/settings';
 import { BugReportDialog } from '../BugReportDialog';
 import { feedbackAvailable } from '../../lib/runtimeConfig';
+import { SUBTITLE_SETTING_TEXT } from '../../lib/subtitles';
 
 /**
  * Client-side settings page. All values live in localStorage; the
@@ -72,10 +73,7 @@ export function SettingsPage() {
         />
       </Section>
 
-      <Section
-        title="Subtitles"
-        subtitle="Subtitles stay off while a title's audio is in this language or your audio language. When it is in another, they come on in this language where the title has them. Otherwise, and when this is Off, subtitles for foreign-language parts only, in the language you listen in, come on by themselves. The player's subtitle menu changes them for the current playback only."
-      >
+      <Section title="Subtitles" subtitle={SUBTITLE_SETTING_TEXT}>
         <ChipRow
           label="Preferred language"
           value={settings.subtitles.preferredLang}
