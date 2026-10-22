@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, Check, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
+import { Captions, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
 import Hls from 'hls.js';
 import { PgsRenderer } from 'libpgs';
 // Vite resolves this to an emitted asset URL; the worker file is
@@ -4316,17 +4316,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 {audioChipLabel(playingAudio?.language)}
               </button>
               {audioMenuOpen && (
-                <div className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
+                <div
+                  className="absolute right-0 bottom-full mb-2 min-w-[220px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
+                  role="menu"
+                  aria-label="audio"
+                >
                   <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>audio</div>
                   {audioMenu.map((t) => (
-                    <button
-                      key={t.index}
-                      onClick={() => switchAudio(t.index)}
-                      className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamAudioIdx === t.index ? 'text-chino-accent' : ''}`}
-                    >
+                    <MenuChoice key={t.index} picked={streamAudioIdx === t.index} onPick={() => switchAudio(t.index)}>
                       {t.label}
                       <span className="ml-2 text-xs text-chino-muted">{t.detail}</span>
-                    </button>
+                    </MenuChoice>
                   ))}
                 </div>
               )}
@@ -4360,9 +4360,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     time: a pick replaces the one on. Scrolls where it is
                     long. */}
                 <div ref={subListRef} className="max-h-[min(24rem,55vh)] overflow-y-auto">
-                  <SubtitleMenuItem label="off" on={!activeSubId} onPick={() => chooseSub(null)} />
+                  <MenuChoice picked={!activeSubId} onPick={() => chooseSub(null)}>
+                    off
+                  </MenuChoice>
                   {subMenu.top.map((s) => (
-                    <SubtitleMenuItem key={s.id} label={s.label} on={s.id === activeSubId} onPick={() => chooseSub(s)} />
+                    <MenuChoice key={s.id} picked={s.id === activeSubId} onPick={() => chooseSub(s)}>
+                      {s.label}
+                    </MenuChoice>
                   ))}
                   {subMenu.more.length > 0 && (
                     <>
@@ -4381,7 +4385,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                       </button>
                       {moreLangsOpen &&
                         subMenu.more.map((s) => (
-                          <SubtitleMenuItem key={s.id} label={s.label} on={s.id === activeSubId} onPick={() => chooseSub(s)} />
+                          <MenuChoice key={s.id} picked={s.id === activeSubId} onPick={() => chooseSub(s)}>
+                            {s.label}
+                          </MenuChoice>
                         ))}
                     </>
                   )}
@@ -4442,29 +4448,29 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 <Settings className="w-5 h-5" />
               </button>
               {qualityMenuOpen && (
-                <div className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50">
+                <div
+                  className="absolute right-0 bottom-full mb-2 min-w-[240px] bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
+                  role="menu"
+                  aria-label="quality"
+                >
                   <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>quality</div>
                   {packagedMenu
                     ? packagedMenu.map((entry) => (
-                        <button
+                        <MenuChoice
                           key={entry.name}
-                          onClick={() => pickPackagedQuality(entry)}
-                          className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${chosenPackaged?.name === entry.name ? 'text-chino-accent' : ''}`}
+                          picked={chosenPackaged?.name === entry.name}
+                          onPick={() => pickPackagedQuality(entry)}
                         >
                           {entry.label}
                           {entry.name === AUTO && onAuto && playingName ? (
                             <span className="text-chino-muted"> · {playingName}</span>
                           ) : null}
-                        </button>
+                        </MenuChoice>
                       ))
                     : QUALITY_RUNGS.map((q) => (
-                        <button
-                          key={q}
-                          onClick={() => switchQuality(q)}
-                          className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${streamQuality === q ? 'text-chino-accent' : ''}`}
-                        >
+                        <MenuChoice key={q} picked={streamQuality === q} onPick={() => switchQuality(q)}>
                           {labelForQuality(q)}
-                        </button>
+                        </MenuChoice>
                       ))}
                 </div>
               )}
@@ -4493,18 +4499,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               >
                 <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>speed</div>
                 {PLAYBACK_RATES.map((rate) => (
-                  <button
+                  <MenuChoice
                     key={rate}
-                    role="menuitem"
-                    onClick={() => {
+                    picked={playbackRate === rate}
+                    onPick={() => {
                       setPlaybackRate(rate);
                       setOpenMenu(null);
                       reportEvent('playback_rate_change', { rate });
                     }}
-                    className={`block w-full text-left px-4 py-2 hover:bg-white/10 ${playbackRate === rate ? 'text-chino-accent' : ''}`}
                   >
                     {rate === 1 ? 'Normal (1x)' : `${rate}x`}
-                  </button>
+                  </MenuChoice>
                 ))}
               </div>
             )}
@@ -4610,20 +4615,23 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
   return <PlayerPage itemId={itemId} extra={extra} />;
 }
 
-/** One entry of the subtitles menu: a subtitle, or "off" - the one on
- *  checked and in the accent colour. */
-function SubtitleMenuItem({ label, on, onPick }: { label: string; on: boolean; onPick: () => void }) {
+/** One row of a menu of one choice - subtitles, audio, quality, speed: the
+ *  picked one in the accent blue with a small filled dot before it, the
+ *  others with the dot's place empty; no checkboxes (docs/chino, playback:
+ *  the player's menus). The dot is 8 px and square, as the design system's
+ *  corners and the hero's dots are. */
+function MenuChoice({ picked, onPick, children }: { picked: boolean; onPick: () => void; children: ReactNode }) {
   return (
     <button
       role="menuitemradio"
-      aria-checked={on}
+      aria-checked={picked}
       onClick={onPick}
-      className={`flex w-full items-start gap-2 text-left px-4 py-2 hover:bg-white/10 ${on ? 'text-chino-accent' : ''}`}
+      className={`flex w-full items-start gap-2 text-left px-4 py-2 hover:bg-white/10 ${picked ? 'text-chino-accent' : ''}`}
     >
       <span aria-hidden className="w-4 h-5 shrink-0 inline-flex items-center justify-center">
-        {on ? <Check className="w-4 h-4" /> : null}
+        {picked ? <span className="w-2 h-2 bg-current" /> : null}
       </span>
-      <span className="flex-1 leading-snug break-words">{label}</span>
+      <span className="flex-1 leading-snug break-words">{children}</span>
     </button>
   );
 }
