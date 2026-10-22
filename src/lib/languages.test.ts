@@ -65,6 +65,13 @@ test('names by Intl.DisplayNames, in the UI language', () => {
   assert.equal(languageName(undefined), 'Unknown');
   // A code Intl has no name for is shown as it came.
   assert.equal(languageName('qaa'), 'qaa');
+  // "tl" is Tagalog, as ISO 639 and the phone app's table call it (Intl
+  // says Filipino); "fil" is Filipino.
+  assert.equal(languageName('tl'), 'Tagalog');
+  assert.equal(languageName('tgl'), 'Tagalog');
+  assert.equal(languageName('tl-PH'), 'Tagalog (Philippines)');
+  assert.equal(languageName('fil'), 'Filipino');
+  assert.equal(subtitleLabel({ lang: 'tgl', title: 'Tagalog' }), 'Tagalog');
 });
 
 test('a script or a region stays in the name, in brackets after the language, as the word list writes it', () => {

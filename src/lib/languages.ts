@@ -136,19 +136,29 @@ function intlName(tag: string, locales: readonly string[], form: 'standard' | 'd
   }
 }
 
+// The English names ISO 639 and the phone app's table give where Intl gives
+// another: CLDR folds "tl" into "fil" and calls it Filipino.
+const ENGLISH_NAMES: Record<string, string> = { tl: 'Tagalog' };
+
 /** The language's name in the given UI locales, with the script and the
  *  region the code names in brackets after it, as the design system's word
  *  list writes them ("ger" → "German", "zh-Hans" → "Chinese (Simplified)",
  *  "pt-BR" → "Portuguese (Brazil)", "zh-Hant-TW" → "Chinese (Traditional,
- *  Taiwan)"); the code itself when Intl does not know it; "No dialogue" for
- *  "zxx", "Multiple languages" for "mul", "Other language" for "mis",
- *  "Unknown" for none. */
+ *  Taiwan)", "tl" → "Tagalog"); the code itself when Intl does not know it;
+ *  "No dialogue" for "zxx", "Multiple languages" for "mul", "Other
+ *  language" for "mis", "Unknown" for none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
   const notOne = NOT_ONE_LANGUAGE.get(primarySubtag(code));
   if (notOne) return notOne;
   const tag = languageTag(code);
   if (!tag) return UNKNOWN_LANGUAGE;
   const name = intlName(namedTag(tag), locales, 'standard');
+  const english = ENGLISH_NAMES[normalizeLang(code)];
+  if (english && /^en(-|$)/i.test(locales[0] ?? '')) {
+    // Its script and region as Intl names them, after the word list's name.
+    const intlBase = intlName(normalizeLang(code), locales, 'standard');
+    return name && intlBase && name.startsWith(intlBase) ? english + name.slice(intlBase.length) : english;
+  }
   if (name) return name;
   return typeof code === 'string' ? code.trim() : tag;
 }
