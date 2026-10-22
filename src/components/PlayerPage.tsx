@@ -1082,6 +1082,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
         const fallback = networkFallback({
           mode: infoRef.current?.mode ?? null,
+          quality: sourceQ ?? streamQualityRef.current,
           forcedTranscode: forceTranscodeRef.current,
           details: String(data.details),
           status,
@@ -1165,6 +1166,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           if (mediaRecoverCount > 3) {
             const fallback = mediaFallback({
               mode: infoRef.current?.mode ?? null,
+              quality: sourceQ ?? streamQualityRef.current,
               forcedTranscode: forceTranscodeRef.current,
               caps: capsParamRef.current.split(','),
             });

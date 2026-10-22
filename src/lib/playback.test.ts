@@ -110,12 +110,12 @@ test('a step down on a named ladder goes to the next rung with another name', ()
 });
 
 test('media errors: a packaged title asks again without HEVC, or gives up - never a forced transcode', () => {
-  assert.deepEqual(mediaFallback({ mode: 'packaged', forcedTranscode: false, caps: ['avc', 'hvc', 'aac'] }), { kind: 'drop-hevc' });
-  assert.deepEqual(mediaFallback({ mode: 'packaged', forcedTranscode: false, caps: ['avc', 'aac'] }), { kind: 'give-up' });
-  assert.deepEqual(mediaFallback({ mode: 'passthrough', forcedTranscode: false, caps: ['avc'] }), { kind: 'transcode' });
-  assert.deepEqual(mediaFallback({ mode: null, forcedTranscode: false, caps: [] }), { kind: 'transcode' });
-  assert.deepEqual(mediaFallback({ mode: 'remux', forcedTranscode: true, caps: [] }), { kind: 'give-up' });
-  assert.deepEqual(mediaFallback({ mode: 'transcode', forcedTranscode: false, caps: [] }), { kind: 'give-up' });
+  assert.deepEqual(mediaFallback({ mode: 'packaged', quality: 'high', forcedTranscode: false, caps: ['avc', 'hvc', 'aac'] }), { kind: 'drop-hevc' });
+  assert.deepEqual(mediaFallback({ mode: 'packaged', quality: 'high', forcedTranscode: false, caps: ['avc', 'aac'] }), { kind: 'give-up' });
+  assert.deepEqual(mediaFallback({ mode: 'passthrough', quality: 'high', forcedTranscode: false, caps: ['avc'] }), { kind: 'transcode' });
+  assert.deepEqual(mediaFallback({ mode: null, quality: 'high', forcedTranscode: false, caps: [] }), { kind: 'transcode' });
+  assert.deepEqual(mediaFallback({ mode: 'remux', quality: 'medium', forcedTranscode: true, caps: [] }), { kind: 'give-up' });
+  assert.deepEqual(mediaFallback({ mode: 'transcode', quality: 'high', forcedTranscode: false, caps: [] }), { kind: 'give-up' });
 });
 
 test('a packaged title on a rung the viewer picked, or on Auto, is rebuilt on it - and never stepped down by the player', () => {
@@ -134,7 +134,7 @@ test('the transcode rungs are the ladder qualities; auto and a rung name are not
 });
 
 test('media errors on a packaged title asked with an HEVC height cap still ask again without HEVC', () => {
-  assert.deepEqual(mediaFallback({ mode: 'packaged', forcedTranscode: false, caps: ['avc', 'hvc:1080', 'aac'] }), { kind: 'drop-hevc' });
+  assert.deepEqual(mediaFallback({ mode: 'packaged', quality: 'high', forcedTranscode: false, caps: ['avc', 'hvc:1080', 'aac'] }), { kind: 'drop-hevc' });
 });
 
 test('a packaged q on a title now served on the fly goes back to high; anything else stays', () => {
@@ -150,7 +150,7 @@ test('a packaged q on a title now served on the fly goes back to high; anything 
 });
 
 const fragmentError = (s: Partial<Parameters<typeof networkFallback>[0]>) =>
-  networkFallback({ mode: 'remux', forcedTranscode: false, details: 'fragLoadError', status: 404, fatal: false, ...s });
+  networkFallback({ mode: 'remux', quality: 'high', forcedTranscode: false, details: 'fragLoadError', status: 404, fatal: false, ...s });
 
 test('a direct stream whose fragment is answered 404 moves onto the ladder at once, saying the original could not be streamed', () => {
   for (const mode of ['remux', 'passthrough'] as const) {
@@ -206,7 +206,7 @@ test('a direct stream waits for hls.js\'s own retries on any other failure to lo
 });
 
 test('a packaged title, a transcode, one already moved and a mode not known keep their handling of a fragment that failed', () => {
-  for (const s of [{ mode: 'packaged' as const }, { mode: 'transcode' as const }, { mode: null }, { forcedTranscode: true }]) {
+  for (const s of [{ mode: 'packaged' as const }, { mode: 'transcode' as const }, { mode: null }, { forcedTranscode: true, quality: 'medium' }]) {
     assert.deepEqual(fragmentError(s), { kind: 'keep' }, JSON.stringify(s));
     assert.deepEqual(fragmentError({ ...s, fatal: true, status: 503 }), { kind: 'keep' }, JSON.stringify(s));
   }
@@ -239,4 +239,34 @@ test('three stalls step down a rung, named as the ladder names it, and move a di
     noticeOf({ mode: 'transcode', quality: 'high', forcedTranscode: false }, named(['Medium (720p)', 'Medium (720p)', 'Low (480p)'])),
     "Switched to Low (480p) quality: the connection can't keep up.",
   );
+});
+
+test('the Original picked again after a move onto the ladder is left as the original is, with its notice', () => {
+  // A remux moved onto Medium, then the viewer picks "Original" (q=high),
+  // which chino-stream stream-copies: forceTranscode stays on.
+  const moved = { mode: 'remux' as const, quality: 'high', forcedTranscode: true };
+  const ladder = onTheFlyLadder({ mode: 'remux', listed: named(['High (1080p)', 'Medium (720p)', 'Low (480p)']) });
+  assert.equal(ladder[0].label, 'Original');
+  const step = downgradeStep({ ...moved, ladder });
+  assert.deepEqual(step, { quality: 'medium', forceTranscode: true, why: 'original-stall' });
+  assert.equal(
+    stepDownNotice(ladder.find((e) => e.name === step!.quality)!.label, step!.why),
+    "Switched to Medium (720p) quality: the connection can't keep up with the original.",
+  );
+  // A hard stall, a fragment that can't be loaded, a decoder that refuses it: onto Medium, as from the original.
+  const stalled = stallAction(stall(moved));
+  assert.equal(stalled.kind, 'reload');
+  if (stalled.kind === 'reload') {
+    assert.equal(stalled.quality, 'medium');
+    assert.equal(stalled.forceTranscode, true);
+    assert.equal(stalled.notice, 'original-stall');
+  }
+  const error = fragmentError({ forcedTranscode: true });
+  assert.equal(error.kind, 'transcode');
+  assert.equal(error.kind === 'transcode' ? error.notice : null, 'original-error');
+  assert.deepEqual(mediaFallback({ ...moved, caps: ['avc'] }), { kind: 'transcode' });
+  // On the ladder's own rungs it is a step between qualities, as before.
+  assert.deepEqual(downgradeStep({ ...moved, quality: 'medium', ladder }), { quality: 'low', forceTranscode: true, why: 'step' });
+  assert.equal(stallAction(stall({ ...moved, quality: 'medium', bufferedAheadSec: 1 })).kind, 'nudge');
+  assert.deepEqual(mediaFallback({ ...moved, quality: 'medium', caps: ['avc'] }), { kind: 'give-up' });
 });

@@ -13,7 +13,7 @@
 // a direct stream (passthrough, remux) or the transcode ladder's rungs.
 
 import { hasCodec } from './caps.ts';
-import { lowerRung, type LadderEntry } from './qualities.ts';
+import { lowerRung, playsOriginal, type LadderEntry } from './qualities.ts';
 
 export type PlayMode = 'passthrough' | 'remux' | 'transcode' | 'packaged';
 
@@ -83,6 +83,18 @@ export function onTheFlyQuality(mode: PlayMode | null | undefined, q: Quality): 
   return 'high';
 }
 
+/**
+ * Whether what plays at q is on the transcode ladder: a transcode, or a
+ * direct stream the player moved onto it - unless the viewer picked the
+ * Original again there (high), which chino-stream stream-copies, so the
+ * original plays as it is. What leaves the original steps down as the
+ * original does, with its own notice, forced move or not.
+ */
+export function onTranscodeLadder(mode: PlayMode | null | undefined, quality: Quality, forcedTranscode: boolean): boolean {
+  if (mode === 'transcode') return true;
+  return forcedTranscode && !playsOriginal(mode, quality);
+}
+
 /** Tries in place before a stalled stream is rebuilt. */
 export const IN_PLACE_TRIES = 3;
 
@@ -137,11 +149,12 @@ export type StallAction =
  * the rung the viewer picked), never a forced transcode, and at the same
  * position. A direct stream (passthrough, remux, or a mode not known yet)
  * moves onto the server's transcode ladder at Medium, which can step the
- * bitrate down - at the same position too.
+ * bitrate down - at the same position too; so does the Original picked
+ * again after such a move (onTranscodeLadder).
  */
 export function stallAction(s: StallState): StallAction {
   const at = Math.max(0, s.positionSec || 0);
-  const onLadder = s.mode === 'transcode' || s.forcedTranscode;
+  const onLadder = onTranscodeLadder(s.mode, s.quality, s.forcedTranscode);
   if (s.mode === 'packaged' || onLadder) {
     const inPlace: StallAction =
       s.bufferedAheadSec >= 0.5
@@ -186,19 +199,22 @@ const FRAGMENT_LOAD_ERRORS: readonly string[] = ['fragLoadError', 'fragLoadTimeO
  * moves onto the transcode ladder at once. Any other failure to load its
  * fragments (a 5xx, a timeout, no answer) does so once hls.js's own retries
  * have run out - the error turned fatal. The move is the stall watcher's -
- * Medium, transcoding forced, the position kept - its notice its own. A
+ * Medium, transcoding forced, the position kept - its notice its own; so
+ * does the Original picked again after such a move (onTranscodeLadder). A
  * packaged title, a transcode (already on the ladder) and a mode not known
  * yet keep the handling they had.
  */
 export function networkFallback(s: {
   mode: PlayMode | null;
+  /** The q of the source whose fragment failed. */
+  quality: Quality;
   forcedTranscode: boolean;
   details: string;
   status: number | null;
   fatal: boolean;
 }): NetworkFallback {
   const direct = s.mode === 'remux' || s.mode === 'passthrough';
-  if (!direct || s.forcedTranscode || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
+  if (!direct || onTranscodeLadder(s.mode, s.quality, s.forcedTranscode) || !FRAGMENT_LOAD_ERRORS.includes(s.details)) return { kind: 'keep' };
   if (s.status !== 404 && !s.fatal) return { kind: 'keep' };
   return { kind: 'transcode', quality: 'medium', notice: 'original-error', label: `→ Medium (auto, ${s.mode} → transcode)` };
 }
@@ -211,7 +227,9 @@ export function networkFallback(s: {
  * (lib/qualities.ts lowerRung: a 720p original's high goes to low, past
  * medium, which encodes the same frame), the fixed ladder's next where the
  * ladder is not named; none past the last. A direct stream moves onto the
- * ladder at Medium. why is what its notice says.
+ * ladder at Medium, and so does the Original picked again after such a
+ * move: what it leaves is the original, and its notice says so. why is what
+ * its notice says.
  */
 export function downgradeStep(s: {
   mode: PlayMode | null;
@@ -221,7 +239,7 @@ export function downgradeStep(s: {
   ladder?: readonly LadderEntry[] | null;
 }): { quality: Quality; forceTranscode: boolean; why: StepDownWhy } | null {
   if (s.mode === 'packaged') return null;
-  if (s.mode === 'transcode' || s.forcedTranscode) {
+  if (onTranscodeLadder(s.mode, s.quality, s.forcedTranscode)) {
     if (!isLadderQuality(s.quality)) return null;
     const next = s.ladder?.length ? lowerRung(s.ladder, s.quality) : QUALITY_RUNGS[QUALITY_RUNGS.indexOf(s.quality) + 1];
     return next ? { quality: next, forceTranscode: s.forcedTranscode, why: 'step' } : null;
@@ -242,10 +260,17 @@ export type MediaFallback =
  * server would serve the same packaged files - but when the request
  * advertised HEVC it is asked for again without it, which the server
  * answers with a stream the browser does decode. A transcode that still
- * fails has nowhere further to go.
+ * fails has nowhere further to go; the Original picked again after a move
+ * onto the ladder goes back onto it (onTranscodeLadder).
  */
-export function mediaFallback(s: { mode: PlayMode | null; forcedTranscode: boolean; caps: readonly string[] }): MediaFallback {
+export function mediaFallback(s: {
+  mode: PlayMode | null;
+  /** The q of the source that failed. */
+  quality: Quality;
+  forcedTranscode: boolean;
+  caps: readonly string[];
+}): MediaFallback {
   if (s.mode === 'packaged') return hasCodec(s.caps, 'hvc') ? { kind: 'drop-hevc' } : { kind: 'give-up' };
-  if (s.mode === 'transcode' || s.forcedTranscode) return { kind: 'give-up' };
+  if (onTranscodeLadder(s.mode, s.quality, s.forcedTranscode)) return { kind: 'give-up' };
   return { kind: 'transcode' };
 }
