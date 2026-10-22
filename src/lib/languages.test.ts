@@ -486,22 +486,26 @@ test('mul is "Multiple languages", mis "Other language" - and neither a language
   assert.deepEqual(subtitleLabels([{ lang: 'mul' }, { lang: 'mis', title: 'Signs' }]), ['Multiple languages', 'Other language · Signs']);
 });
 
-test('subtitles default off when the audio is in the viewer\'s language', () => {
-  assert.equal(defaultSubtitleLang({ audioLang: 'eng', subtitlePref: 'eng', audioPref: 'eng' }), null);
+test('subtitles default off when the audio is in the chosen subtitle language', () => {
+  assert.equal(defaultSubtitleLang({ audioLang: 'eng', subtitlePref: 'eng' }), null);
   assert.equal(defaultSubtitleLang({ audioLang: 'en', subtitlePref: 'eng' }), null);
   // Tagged the other way round: still the same language.
   assert.equal(defaultSubtitleLang({ audioLang: 'ger', subtitlePref: 'deu' }), null);
 });
 
 test('subtitles come on, in the chosen language, when the audio is in another', () => {
-  assert.equal(defaultSubtitleLang({ audioLang: 'fre', subtitlePref: 'eng', audioPref: 'eng' }), 'en');
-  assert.equal(defaultSubtitleLang({ audioLang: 'jpn', subtitlePref: 'deu', audioPref: 'orig' }), 'de');
+  assert.equal(defaultSubtitleLang({ audioLang: 'fre', subtitlePref: 'eng' }), 'en');
+  assert.equal(defaultSubtitleLang({ audioLang: 'jpn', subtitlePref: 'deu' }), 'de');
 });
 
-test('the audio in the language the viewer prefers to listen to needs no subtitles either', () => {
-  // German dubs preferred, English subtitles: a German track is followed.
-  assert.equal(defaultSubtitleLang({ audioLang: 'ger', subtitlePref: 'eng', audioPref: 'deu' }), null);
-  assert.equal(defaultSubtitleLang({ audioLang: 'jpn', subtitlePref: 'eng', audioPref: 'deu' }), 'en');
+test('the rule compares with the audio that plays, never with the preferred audio language', () => {
+  // German dubs preferred, English subtitles, the German audio playing: it
+  // is another language than English, so English comes on.
+  assert.equal(defaultSubtitleLang({ audioLang: 'ger', subtitlePref: 'eng' }), 'en');
+  // What Settings say of the audio is no input: the same answer with it.
+  const withAudioSetting = { audioLang: 'ger', subtitlePref: 'eng', audioPref: 'deu' } as Parameters<typeof defaultSubtitleLang>[0];
+  assert.equal(defaultSubtitleLang(withAudioSetting), 'en');
+  assert.equal(defaultSubtitleTrack([{ id: 'en', lang: 'eng' }], withAudioSetting), 'en');
 });
 
 test('never with subtitles set Off, nor when the audio\'s language is unknown', () => {
@@ -534,17 +538,17 @@ test('forced subtitles in the audio\'s language come on where no subtitles would
     { id: 'de', lang: 'ger' },
     { id: 'de-forced', lang: 'deu', forced: true },
   ];
-  const viewer = { subtitlePref: 'eng', audioPref: 'eng' };
-  // English audio, an English viewer: no subtitles by the rule - its forced ones.
+  const viewer = { subtitlePref: 'eng' };
+  // English audio, English subtitles in Settings: no subtitles by the rule - its forced ones.
   assert.equal(defaultSubtitleTrack(tracks, { ...viewer, audioLang: 'eng' }), null);
   assert.equal(autoSubtitleTrack(tracks, { ...viewer, audioLang: 'eng' }), 'en-forced');
-  // German dubs preferred, English subtitles: both followed, each with its own forced track -
+  // The German audio playing: another language, so the full English ones -
   // asked again when the viewer switches the audio.
-  const dubs = { subtitlePref: 'eng', audioPref: 'deu' };
-  assert.equal(autoSubtitleTrack(tracks, { ...dubs, audioLang: 'ger' }), 'de-forced');
-  assert.equal(autoSubtitleTrack(tracks, { ...dubs, audioLang: 'en' }), 'en-forced');
-  // Subtitles off in Settings: the forced track still, part of the film.
+  assert.equal(autoSubtitleTrack(tracks, { ...viewer, audioLang: 'ger' }), 'en');
+  assert.equal(autoSubtitleTrack(tracks, { ...viewer, audioLang: 'en' }), 'en-forced');
+  // Subtitles off in Settings: the forced track in the audio's language still, part of the film.
   assert.equal(autoSubtitleTrack(tracks, { subtitlePref: 'off', audioLang: 'eng' }), 'en-forced');
+  assert.equal(autoSubtitleTrack(tracks, { subtitlePref: 'off', audioLang: 'ger' }), 'de-forced');
 });
 
 test('full subtitles where the rule picks them, before any forced track', () => {
@@ -554,9 +558,9 @@ test('full subtitles where the rule picks them, before any forced track', () => 
     { id: 'en-forced', lang: 'eng', forced: true },
   ];
   // French audio, an English viewer: the full English subtitles, not the French forced ones.
-  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'eng', audioPref: 'eng' }), 'en');
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'eng' }), 'en');
   // The viewer switches to the English audio: the forced English ones instead.
-  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng', audioPref: 'eng' }), 'en-forced');
+  assert.equal(autoSubtitleTrack(tracks, { audioLang: 'eng', subtitlePref: 'eng' }), 'en-forced');
   // As before, a forced track in the Settings language where it is the only one in it.
   assert.equal(autoSubtitleTrack([tracks[0], tracks[2]], { audioLang: 'fre', subtitlePref: 'eng' }), 'en-forced');
 });

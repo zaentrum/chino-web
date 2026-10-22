@@ -312,10 +312,10 @@ test('a language takes its regions and scripts only where they agree', () => {
 
 test('what comes on by itself: the preferred language where the audio is in another, its plain track, the file\'s own', () => {
   const m = menu(ORIGINAL, { preferred: 'ger' });
-  assert.equal(autoSubtitle(m, { audioLang: 'jpn', subtitlePref: 'ger', audioPref: 'orig' }), 'emb-8');
+  assert.equal(autoSubtitle(m, { audioLang: 'jpn', subtitlePref: 'ger' }), 'emb-8');
   // English audio, English subtitles in Settings: not the full English
   // ones - nothing, as the file has no English forced track.
-  assert.equal(autoSubtitle(menu(ORIGINAL), { audioLang: 'eng', subtitlePref: 'eng', audioPref: 'eng' }), null);
+  assert.equal(autoSubtitle(menu(ORIGINAL), { audioLang: 'eng', subtitlePref: 'eng' }), null);
   // Only for deaf and hard of hearing in that language: that one.
   const sdhOnly = menu([{ id: 'sdh', lang: 'eng', title: 'SDH' }, { id: 'de', lang: 'ger' }]);
   assert.equal(autoSubtitle(sdhOnly, { audioLang: 'fre', subtitlePref: 'eng' }), 'sdh');

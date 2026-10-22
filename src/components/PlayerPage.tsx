@@ -1615,9 +1615,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // The subtitle that comes on by itself (lib/subtitles.ts autoSubtitle),
   // decided once both track lists and the audio language are known: OFF,
-  // unless the audio is in a language the viewer has not said they follow
-  // - not the subtitle language chosen in Settings, not the preferred audio
-  // language - and then the track in the Settings subtitle language. Where
+  // unless the audio playing is in another language than the subtitle
+  // language chosen in Settings - compared with the audio that plays, never
+  // the preferred audio language - and then the track in it. Where
   // none would come on, the FORCED track in the audio's language, if the
   // title has one (a text one before a PGS one): the lines a film shows in
   // another language than its audio's. Never anything else: the file's own
@@ -1635,12 +1635,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     const id = autoSubtitle(subMenu, {
       audioLang: playingAudioLang,
       subtitlePref: settings.subtitles.preferredLang,
-      audioPref: settings.audio.preferredLang,
     });
     // The same choice again is no change: the tracks, the PGS renderer and
     // the timing offset stay as they are.
     setSubChoice((prev) => playerChooses(prev, id));
-  }, [subsSettled, infoSettled, subMenu, playingAudioLang, settings.subtitles.preferredLang, settings.audio.preferredLang]);
+  }, [subsSettled, infoSettled, subMenu, playingAudioLang, settings.subtitles.preferredLang]);
 
   // The menu's old key is not read any more; drop it.
   useEffect(() => {

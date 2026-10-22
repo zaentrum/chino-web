@@ -234,13 +234,14 @@ export function menuEntries<T extends SubtitleSource>(menu: SubtitleMenu<T>): Su
 /**
  * The subtitle that comes on by itself, or null for off: the viewer's
  * preferred subtitle language (Settings) where the title has it and the
- * audio is in another language - not the language they chose, nor the audio
- * language they prefer - its first track in the menu that is not the
- * foreign-language parts only, or its foreign-language parts only where the
- * title has no other track in it (the phone app's defaultSubtitleTrack
- * too); else the foreign-language parts only in the language of the audio
- * playing, a text one before a picture one. Never another language, and
- * never a track because it comes first or a file flags it default.
+ * audio playing is in another language - compared with the audio that
+ * plays, never the audio language they prefer - its first track in the menu
+ * that is not the foreign-language parts only, or its foreign-language
+ * parts only where the title has no other track in it (the phone app's
+ * defaultSubtitleTrack too); else the foreign-language parts only in the
+ * language of the audio playing, a text one before a picture one. Never
+ * another language, and never a track because it comes first or a file
+ * flags it default.
  */
 export function autoSubtitle(menu: SubtitleMenu, defaults: SubtitleDefaults): string | null {
   return autoSubtitleTrack(menuEntries(menu), defaults);

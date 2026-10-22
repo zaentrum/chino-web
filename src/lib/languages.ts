@@ -747,23 +747,21 @@ export interface SubtitleDefaults {
   audioLang?: string | null;
   /** Settings → Subtitles: a language, or 'off'. */
   subtitlePref?: string | null;
-  /** Settings → Audio: a language, or 'orig' (the title's own). */
-  audioPref?: string | null;
 }
 
 /**
  * The language subtitles come on in by themselves, or null for off - the
- * default. They come on only when the audio is in a language the viewer has
- * not said they follow: not the subtitle language they chose, not the audio
- * language they prefer. Never with subtitles set Off, and never when the
- * audio's language is not known.
+ * default. They come on, in the subtitle language chosen in Settings, when
+ * the audio playing is in another language (docs/chino, subtitles: what
+ * switches on by itself). The rule compares with the audio that plays,
+ * never with the audio language the viewer prefers. Never with subtitles
+ * set Off, and never when the audio's language is not known.
  */
-export function defaultSubtitleLang({ audioLang, subtitlePref, audioPref }: SubtitleDefaults): string | null {
+export function defaultSubtitleLang({ audioLang, subtitlePref }: SubtitleDefaults): string | null {
   if (!subtitlePref || subtitlePref.trim().toLowerCase() === 'off') return null;
   const want = normalizeLang(subtitlePref);
   const audio = normalizeLang(audioLang);
   if (!want || !audio || audio === want) return null;
-  if (audioPref && audioPref !== 'orig' && normalizeLang(audioPref) === audio) return null;
   return want;
 }
 
@@ -819,12 +817,12 @@ export interface AutoSubtitles extends SubtitleDefaults {
 
 /**
  * The subtitle that comes on by itself, or null: the one defaultSubtitleTrack
- * picks - a full track in the Settings language, for audio in a language
- * the viewer does not follow - else, where none would come on (the audio is
- * in the viewer's own language, or subtitles are off in Settings), the
- * forced track in the audio's language, which is part of the film rather
- * than subtitles to read along. Asked again whenever the audio's language
- * changes. Nothing after the viewer's Off in the player.
+ * picks - a full track in the Settings language, for audio playing in
+ * another language - else, where none would come on (the audio is in that
+ * language, or subtitles are off in Settings), the forced track in the
+ * audio's language, which is part of the film rather than subtitles to read
+ * along. Asked again whenever the audio's language changes. Nothing after
+ * the viewer's Off in the player.
  */
 export function autoSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean; format?: string }>(
   tracks: readonly T[],
