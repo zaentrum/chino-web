@@ -100,13 +100,26 @@ export function subtitlePlace(picture: Rect, boxHeight: number, clear = 0): Subt
   };
 }
 
+/** The value of a video's `data-cues` while the player draws its subtitle
+ *  itself (SubtitleOverlay), not the browser. */
+export const CUES_DRAWN_BY_PAGE = 'page';
+
 /** The ::cue rule for a video element of `className`: the look, for when
  *  the browser draws a cue itself. Its text size is relative to the
  *  browser's own, 5 % of the video's height: 5.33 % of it. A file's own
- *  styles inside a cue (italics, bold, colours, classes) go too. */
+ *  styles inside a cue (italics, bold, colours, classes) go too. While the
+ *  player draws the subtitle (data-cues="page"), a cue the browser shows
+ *  anyway - a track it turned on by itself, one kept showing for a
+ *  picture-in-picture window - is drawn invisible: one subtitle on screen. */
 export function cueCss(className: string): string {
   const video = `video.${className}`;
   return [
+    `${video}[data-cues="${CUES_DRAWN_BY_PAGE}"]::cue {`,
+    '  visibility: hidden;',
+    '  color: transparent;',
+    '  background: transparent;',
+    '  text-shadow: none;',
+    '}',
     `${video}::cue {`,
     `  color: ${SUBTITLE_COLOR};`,
     '  background: transparent;',

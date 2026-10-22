@@ -26,7 +26,7 @@ import {
   type SubtitleChoice,
   type SubtitleEntry,
 } from '../lib/subtitles';
-import { cueCss, shownLines, type CueLine } from '../lib/subtitleLook';
+import { CUES_DRAWN_BY_PAGE, cueCss, shownLines, type CueLine } from '../lib/subtitleLook';
 import { SubtitleOverlay } from './SubtitleOverlay';
 import {
   QUALITY_RUNGS,
@@ -94,6 +94,23 @@ interface Subtitle {
 // The class of the player's <video>: its ::cue rule (lib/subtitleLook.ts).
 const VIDEO_CLASS = 'chino-player';
 const CUE_CSS = cueCss(VIDEO_CLASS);
+
+/**
+ * Whether the subtitle's track stays "showing" while the player draws it:
+ * in Firefox, which has no picture-in-picture API - nothing tells the page
+ * the video is in a window of its own - and whose picture-in-picture window
+ * shows the text track that is showing, nothing of the page. Its cues are
+ * drawn invisible on the page (cueCss), so the window has the subtitle and
+ * the page shows it once. Elsewhere the track is "hidden" until the
+ * browser shows the video itself (nativeCues).
+ */
+function keepsTrackShowing(): boolean {
+  try {
+    return !('pictureInPictureEnabled' in document) && /\bFirefox\//.test(navigator.userAgent);
+  } catch {
+    return false;
+  }
+}
 
 // Numeric → name decoders for the diagnostic log. Kept module-level so the
 // effect closure stays small.
@@ -1644,10 +1661,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   //      shows the video itself (nativeCues: picture-in-picture, a phone's
   //      own fullscreen) is it "showing", the ::cue rule its look - and
   //      every cue is put where the overlay puts it: centred at the
-  //      bottom, within 80 % of the width.
+  //      bottom, within 80 % of the width. In Firefox it is "showing"
+  //      throughout, its cues invisible on the page, for the
+  //      picture-in-picture window it may open (keepsTrackShowing).
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    const shownMode: TextTrackMode = nativeCues || keepsTrackShowing() ? 'showing' : 'hidden';
+    const modeFor = (trackEl: HTMLTrackElement): TextTrackMode => (trackEl.id === activeSubId ? shownMode : 'disabled');
     // Only for the browser's drawing: the overlay places the subtitle
     // itself, and reads where the file put two cues shown at once to keep
     // them in its order.
@@ -1678,11 +1699,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         const trackEl = trackEls[i] as HTMLTrackElement;
         const t = trackEl.track;
         if (!t) continue;
-        if (trackEl.id === activeSubId) {
-          t.mode = nativeCues ? 'showing' : 'hidden';
-        } else {
-          t.mode = 'disabled';
-        }
+        const mode = modeFor(trackEl);
+        if (t.mode !== mode) t.mode = mode;
         placeAll(t);
         if (!placing.has(t)) {
           const place = () => placeAll(t);
@@ -1712,11 +1730,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     };
     // Natively, with a master's renditions there, WebKit also sorts the
     // text tracks out by itself just after one is added - the sidecar the
-    // viewer picked comes out of it off. So for a moment after a track is
-    // added the sidecars are put back as picked whenever the tracks change,
-    // and at any time a rendition that came on goes off again (a sidecar
-    // turned off later with nothing on instead - the viewer's Off in the
-    // browser's own controls - is left off).
+    // viewer picked comes out of it off - and again whenever it learns the
+    // audio's language, which may be seconds later: it may turn the page's
+    // own track on to "showing". So for a moment after a track is added the
+    // sidecars are put back as picked whenever the tracks change, and at
+    // any time a rendition that came on goes off again. While the player
+    // draws the subtitle (no nativeCues) its own track is put back at any
+    // time too: the page has no caption controls of the browser's, so no
+    // change is the viewer's. While the browser shows the video itself, a
+    // sidecar turned off later with nothing on instead - the viewer's Off
+    // in the browser's own controls - is left off.
     let settleUntil = 0;
     const apply = () => {
       settleUntil = performance.now() + 1000;
@@ -1725,8 +1748,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     };
     apply();
     const onAdd = () => apply();
+    const ownMoved = () =>
+      Array.from(v.querySelectorAll('track')).some((el) => {
+        const trackEl = el as HTMLTrackElement;
+        return !!trackEl.track && trackEl.track.mode !== modeFor(trackEl);
+      });
     const onChange = () => {
-      if (muteRenditions() || performance.now() < settleUntil) applyOwn();
+      if (muteRenditions() || performance.now() < settleUntil || (!nativeCues && ownMoved())) applyOwn();
     };
     v.textTracks.addEventListener('addtrack', onAdd);
     v.textTracks.addEventListener('change', onChange);
@@ -3529,6 +3557,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // (On Safari we fall back to native HLS and DO set v.src
         // directly from the useEffect, not via React props.)
         className={`absolute inset-0 w-full h-full ${VIDEO_CLASS}`}
+        // Who draws the text subtitle: the player (SubtitleOverlay), and a
+        // cue the browser shows anyway is invisible (lib/subtitleLook.ts
+        // cueCss); else the browser.
+        data-cues={nativeCues ? 'browser' : CUES_DRAWN_BY_PAGE}
         crossOrigin="anonymous"
         // `autoPlay` attribute intentionally omitted: the browser's
         // built-in autoplay fires on EVERY src change (including

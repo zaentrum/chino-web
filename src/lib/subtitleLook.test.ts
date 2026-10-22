@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CUES_DRAWN_BY_PAGE,
   SUBTITLE_COLOR,
   SUBTITLE_FONT,
   SUBTITLE_OUTLINE,
@@ -108,4 +109,15 @@ test('the browser\'s own cues look the same: white, the same outline, no box, th
   const shadows = SUBTITLE_OUTLINE.split(', ');
   assert.equal(shadows.length, 8);
   for (const s of shadows) assert.match(s, /^-?[\d.]+em -?[\d.]+em 0 #000$/);
+});
+
+test('while the player draws the subtitle, a cue the browser shows anyway is invisible', () => {
+  const css = cueCss('chino-player');
+  const rule = css.match(/video\.chino-player\[data-cues="page"\]::cue \{([^}]*)\}/);
+  assert.ok(rule, 'a rule for the page-drawn state');
+  assert.match(rule![1], /visibility: hidden;/);
+  assert.match(rule![1], /color: transparent;/);
+  assert.match(rule![1], /background: transparent;/);
+  assert.match(rule![1], /text-shadow: none;/);
+  assert.equal(CUES_DRAWN_BY_PAGE, 'page');
 });
