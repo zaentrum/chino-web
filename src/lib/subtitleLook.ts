@@ -10,7 +10,9 @@
 // and the last one ends 8 % of the picture's height above the picture's
 // bottom edge - inside the picture, on a scope film too, never cut at an
 // edge. What a file brings - its colours, boxes, fonts, sizes and places -
-// is ignored.
+// is ignored, but for its italics, which mean something (a voice from off
+// screen, a song, a thought), and its ruby, the readings over Japanese and
+// Chinese characters.
 //
 // The player draws a text subtitle itself (SubtitleOverlay); where the
 // browser draws it instead (picture-in-picture, a phone's own fullscreen),
@@ -104,13 +106,19 @@ export function subtitlePlace(picture: Rect, boxHeight: number, clear = 0): Subt
  *  itself (SubtitleOverlay), not the browser. */
 export const CUES_DRAWN_BY_PAGE = 'page';
 
+// The tags a WebVTT cue's text may have: class, italics, bold, underline,
+// ruby and its reading, voice, language - and a span, which a converter
+// may leave.
+const CUE_TAGS = ['c', 'i', 'b', 'u', 'ruby', 'rt', 'v', 'lang', 'span'];
+
 /** The ::cue rule for a video element of `className`: the look, for when
  *  the browser draws a cue itself. Its text size is relative to the
  *  browser's own, 5 % of the video's height: 5.33 % of it. A file's own
- *  styles inside a cue (italics, bold, colours, classes) go too. While the
- *  player draws the subtitle (data-cues="page"), a cue the browser shows
- *  anyway - a track it turned on by itself, one kept showing for a
- *  picture-in-picture window - is drawn invisible: one subtitle on screen. */
+ *  styles inside a cue (bold, underline, colours, classes) go too; its
+ *  italics stay, as its ruby does. While the player draws the subtitle
+ *  (data-cues="page"), a cue the browser shows anyway - a track it turned
+ *  on by itself, one kept showing for a picture-in-picture window - is
+ *  drawn invisible: one subtitle on screen. */
 export function cueCss(className: string): string {
   const video = `video.${className}`;
   return [
@@ -131,19 +139,23 @@ export function cueCss(className: string): string {
     '  text-decoration: none;',
     `  text-shadow: ${SUBTITLE_OUTLINE};`,
     '}',
-    `${video}::cue(b), ${video}::cue(i), ${video}::cue(u), ${video}::cue(c), ${video}::cue(v), ${video}::cue(span) {`,
+    // No font-style here: what is inside italics stays italic.
+    `${CUE_TAGS.map((tag) => `${video}::cue(${tag})`).join(', ')} {`,
     '  color: inherit;',
     '  background: transparent;',
-    '  font-style: normal;',
     '  font-weight: 400;',
     '  text-decoration: none;',
+    '}',
+    `${video}::cue(i) {`,
+    '  font-style: italic;',
     '}',
   ].join('\n');
 }
 
 /** A piece of a subtitle's line: text, or text with its reading above it
- *  (ruby: a Japanese subtitle's furigana). */
-export type CuePiece = { text: string } | { base: string; ruby: string };
+ *  (ruby: a Japanese subtitle's furigana); `italic` where the file sets it
+ *  in italics. */
+export type CuePiece = { text: string; italic?: true } | { base: string; ruby: string; italic?: true };
 
 /** One line of a subtitle, in pieces. */
 export type CueLine = CuePiece[];
@@ -162,46 +174,64 @@ function decodeEntities(text: string): string {
 
 /**
  * A cue's text (WebVTT cue text) as the lines the player draws: its words
- * and line breaks, nothing else - the tags that style it (italics, bold,
- * underline, classes, voices, karaoke times) go, and so do the override
- * blocks a converted ASS subtitle may still carry ("{\an8}"). Ruby stays: a
- * reading is part of the language. Empty lines go.
+ * and line breaks, its italics, and its ruby - a reading is part of the
+ * language - nothing else: the tags that style it otherwise (bold,
+ * underline, classes and their colours, voices, karaoke times) go, and so
+ * do the override blocks a converted ASS subtitle may still carry
+ * ("{\an8}"), but for the italics they switch ("{\i1}", "{\i0}"). Empty
+ * lines go.
  */
 export function cueLines(text: string): CueLine[] {
   const lines: CueLine[] = [[]];
-  let ruby: { base: string; ruby: string } | null = null;
+  let ruby: { base: string; ruby: string; italic?: true } | null = null;
   let inRt = false;
-  const add = (s: string) => {
+  // Open <i> tags, and an ASS block's italics.
+  let italics = 0;
+  let assItalic = false;
+  const italic = () => italics > 0 || assItalic;
+  const addText = (s: string, slanted: boolean) => {
     if (!s) return;
-    if (ruby) {
-      if (inRt) ruby.ruby += s;
-      else ruby.base += s;
-      return;
-    }
     const line = lines[lines.length - 1];
     const last = line[line.length - 1];
-    if (last && 'text' in last) last.text += s;
-    else line.push({ text: s });
+    if (last && 'text' in last && !!last.italic === slanted) last.text += s;
+    else line.push(slanted ? { text: s, italic: true } : { text: s });
   };
-  const source = text.replace(/\r\n?/g, '\n').replace(/\{\\[^}]*\}/g, '');
-  const tokens = source.match(/<[^>]*>|[^<]+/g) ?? [];
+  const add = (s: string) => {
+    if (!s) return;
+    if (!ruby) return addText(s, italic());
+    if (inRt) ruby.ruby += s;
+    else {
+      ruby.base += s;
+      if (italic()) ruby.italic = true;
+    }
+  };
+  const source = text.replace(/\r\n?/g, '\n');
+  const tokens = source.match(/<[^>]*>|\{\\[^}]*\}|[^<{]+|[<{]/g) ?? [];
   for (const token of tokens) {
-    if (token.startsWith('<')) {
+    if (token.startsWith('{\\')) {
+      // An ASS override block: the last \i in it says it, \i1 on, \i0 off.
+      const switches = [...token.matchAll(/\\i([01])(?![0-9])/g)];
+      if (switches.length) assItalic = switches[switches.length - 1][1] === '1';
+      continue;
+    }
+    if (token.startsWith('<') && token.length > 1) {
       const tag = /^<\s*(\/?)\s*([a-z]+)/i.exec(token);
       if (!tag) continue;
       const [, close, name] = tag;
       const n = name.toLowerCase();
       if (n === 'ruby') {
-        if (!close) ruby = { base: '', ruby: '' };
+        if (!close) ruby = italic() ? { base: '', ruby: '', italic: true } : { base: '', ruby: '' };
         else if (ruby) {
-          const r: { base: string; ruby: string } = ruby;
+          const r: { base: string; ruby: string; italic?: true } = ruby;
           ruby = null;
           inRt = false;
-          if (r.ruby.trim()) lines[lines.length - 1].push({ base: r.base, ruby: r.ruby });
-          else add(r.base);
+          if (r.ruby.trim()) lines[lines.length - 1].push(r);
+          else addText(r.base, !!r.italic);
         }
       } else if (n === 'rt') {
         inRt = !close && !!ruby;
+      } else if (n === 'i') {
+        italics = close ? Math.max(0, italics - 1) : italics + 1;
       }
       continue;
     }
@@ -215,7 +245,7 @@ export function cueLines(text: string): CueLine[] {
   return lines
     .map((line) =>
       line
-        .map((p) => ('text' in p ? { text: p.text.replace(/[ \t]+/g, ' ') } : p))
+        .map((p) => ('text' in p ? { ...p, text: p.text.replace(/[ \t]+/g, ' ') } : p))
         .filter((p) => ('text' in p ? p.text !== '' : true)),
     )
     .map((line) => {

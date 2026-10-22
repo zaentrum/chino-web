@@ -66,21 +66,40 @@ test('the picture\'s size not known yet: the whole player; no player, no place',
   assert.deepEqual(pictureRect(0, 0, 1920, 1080), { left: 0, top: 0, width: 0, height: 0 });
 });
 
-test('a cue\'s words and line breaks, without the file\'s styles', () => {
-  assert.deepEqual(cueLines('<i>One line</i>\n<b>and</b> <u>another</u>'), [[{ text: 'One line' }], [{ text: 'and another' }]]);
-  assert.deepEqual(cueLines('<c.yellow.bg_blue>Coloured</c> <v Speaker>voice</v>'), [[{ text: 'Coloured voice' }]]);
-  // An ASS override block a converter left in, and a karaoke time.
-  assert.deepEqual(cueLines('{\\an8}{\\i1}At the top<00:00:01.500> later'), [[{ text: 'At the top later' }]]);
+test('a cue\'s words and line breaks, without the file\'s styles but its italics', () => {
+  assert.deepEqual(cueLines('<i>One line</i>\n<b>and</b> <u>another</u>'), [[{ text: 'One line', italic: true }], [{ text: 'and another' }]]);
+  assert.deepEqual(cueLines('<c.yellow.bg_blue>Coloured</c> <v Speaker>voice</v> <lang de>Wort</lang>'), [[{ text: 'Coloured voice Wort' }]]);
+  // An ASS override block a converter left in, and a karaoke time: the
+  // place goes, the italics it switches on stay.
+  assert.deepEqual(cueLines('{\\an8}At the top<00:00:01.500> later'), [[{ text: 'At the top later' }]]);
+  assert.deepEqual(cueLines('{\\an8\\i1}Sung{\\i0} said'), [[{ text: 'Sung', italic: true }, { text: ' said' }]]);
   assert.deepEqual(cueLines('Fish &amp; chips &lt;3&gt; &#x4E2D;&#25991;'), [[{ text: 'Fish & chips <3> 中文' }]]);
   // Empty lines and spaces at the ends go.
   assert.deepEqual(cueLines('\n  First  \n\n Second\r\n'), [[{ text: 'First' }], [{ text: 'Second' }]]);
   assert.deepEqual(cueLines('<i></i>'), []);
 });
 
+test('italics stay - a voice from off screen, a song, a thought - and every other style goes', () => {
+  assert.deepEqual(cueLines('<i>Off screen,</i> on screen'), [[{ text: 'Off screen,', italic: true }, { text: ' on screen' }]]);
+  // Italics over two lines are italic on both.
+  assert.deepEqual(cueLines('<i>A first sung line\na second one</i>'), [
+    [{ text: 'A first sung line', italic: true }],
+    [{ text: 'a second one', italic: true }],
+  ]);
+  // Bold, a colour or a class inside or around them: the italics alone.
+  assert.deepEqual(cueLines('<b><i>Thought</i></b>'), [[{ text: 'Thought', italic: true }]]);
+  assert.deepEqual(cueLines('<i.loud><c.yellow>One</c> <b>thought</b></i>'), [[{ text: 'One thought', italic: true }]]);
+  // An <i> never closed ends with the cue; a close without an open is nothing.
+  assert.deepEqual(cueLines('</i>Plain <i>slanted'), [[{ text: 'Plain ' }, { text: 'slanted', italic: true }]]);
+});
+
 test('a reading over its characters (ruby) stays', () => {
   assert.deepEqual(cueLines('<ruby>漢字<rt>かんじ</rt></ruby>のテスト'), [[{ base: '漢字', ruby: 'かんじ' }, { text: 'のテスト' }]]);
   // A ruby without a reading is its text.
   assert.deepEqual(cueLines('<ruby>漢字</ruby>です'), [[{ text: '漢字です' }]]);
+  // In italics, it stays in italics.
+  assert.deepEqual(cueLines('<i><ruby>漢字<rt>かんじ</rt></ruby>です</i>'), [[{ base: '漢字', ruby: 'かんじ', italic: true }, { text: 'です', italic: true }]]);
+  assert.deepEqual(cueLines('<i><ruby>漢字</ruby></i>'), [[{ text: '漢字', italic: true }]]);
 });
 
 test('two cues at once: one subtitle, top to bottom as the file placed them, else as they began', () => {
@@ -109,6 +128,24 @@ test('the browser\'s own cues look the same: white, the same outline, no box, th
   const shadows = SUBTITLE_OUTLINE.split(', ');
   assert.equal(shadows.length, 8);
   for (const s of shadows) assert.match(s, /^-?[\d.]+em -?[\d.]+em 0 #000$/);
+});
+
+test('the browser\'s own cues keep a file\'s italics, and nothing else of its styles', () => {
+  const css = cueCss('chino-player');
+  const rule = (selector: RegExp) => css.match(new RegExp(`${selector.source} \\{([^}]*)\\}`))?.[1] ?? '';
+  // Italics: italic.
+  assert.match(rule(/video\.chino-player::cue\(i\)/), /font-style: italic;/);
+  // Bold, underline, classes, voices, ruby: the cue's colour, no box, no
+  // weight, no line - and no font-style of their own, so what is inside
+  // italics stays italic.
+  const tags = css.match(/^(video\.chino-player::cue\(c\).*) \{$/m)?.[1] ?? '';
+  for (const tag of ['c', 'i', 'b', 'u', 'v', 'lang', 'ruby', 'rt']) assert.ok(tags.includes(`::cue(${tag})`), tag);
+  const reset = rule(/video\.chino-player::cue\(c\)[^{]*/);
+  assert.match(reset, /color: inherit;/);
+  assert.match(reset, /background: transparent;/);
+  assert.match(reset, /font-weight: 400;/);
+  assert.match(reset, /text-decoration: none;/);
+  assert.doesNotMatch(reset, /font-style/);
 });
 
 test('while the player draws the subtitle, a cue the browser shows anyway is invisible', () => {

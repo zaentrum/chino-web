@@ -33,8 +33,9 @@ interface Sizes {
  * A text subtitle, drawn by the player in the one look (lib/subtitleLook.ts):
  * white with a black outline, no box, 5.33 % of the picture's height,
  * centred within 80 % of the picture's width, 8 % of its height above its
- * bottom edge - above the controls while they show. It follows the picture
- * as the window, the element or the picture's size changes.
+ * bottom edge - above the controls while they show. Italics and ruby stay
+ * as the file sets them. It follows the picture as the window, the element
+ * or the picture's size changes.
  */
 export function SubtitleOverlay({ videoRef, lines, lang, clear }: SubtitleOverlayProps) {
   const [sizes, setSizes] = useState<Sizes>({ boxWidth: 0, boxHeight: 0, videoWidth: 0, videoHeight: 0 });
@@ -92,11 +93,12 @@ export function SubtitleOverlay({ videoRef, lines, lang, clear }: SubtitleOverla
     >
       {lines.map((line, i) => (
         <span key={i} dir="auto" className="block [text-wrap:balance]">
+          {/* The file's italics and ruby stay; nothing else of its styles. */}
           {line.map((piece, j) =>
             'text' in piece ? (
-              <span key={j}>{piece.text}</span>
+              piece.italic ? <i key={j}>{piece.text}</i> : <span key={j}>{piece.text}</span>
             ) : (
-              <ruby key={j}>
+              <ruby key={j} className={piece.italic ? 'italic' : undefined}>
                 {piece.base}
                 <rt>{piece.ruby}</rt>
               </ruby>

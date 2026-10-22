@@ -1776,7 +1776,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // What the text subtitle on shows, for SubtitleOverlay: the track's
   // active cues on every cuechange (and once its cues have loaded), as
-  // lines without the file's styles (lib/subtitleLook.ts shownLines).
+  // lines without the file's styles but its italics and ruby
+  // (lib/subtitleLook.ts shownLines).
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !activeSubId || activeSub?.picture) {
