@@ -37,14 +37,14 @@ export function StatusPage({ title, message, onRetry, link }: StatusPageProps) {
               href={link.href}
               target="_blank"
               rel="noopener noreferrer"
-              className={`${btn} ${onRetry ? 'bg-white/10 hover:bg-white/20' : 'bg-chino-accent hover:bg-chino-accent/80'} text-white`}
+              className={`${btn} ${onRetry ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-chino-accent hover:bg-chino-accent/80 text-chino-bg'}`}
             >
               {link.icon}
               {link.label}
             </a>
           ) : null}
           {onRetry ? (
-            <button type="button" onClick={onRetry} className={`${btn} bg-chino-accent hover:bg-chino-accent/80 text-white`}>
+            <button type="button" onClick={onRetry} className={`${btn} bg-chino-accent hover:bg-chino-accent/80 text-chino-bg`}>
               <RotateCw className="w-4 h-4" aria-hidden />
               Try again
             </button>

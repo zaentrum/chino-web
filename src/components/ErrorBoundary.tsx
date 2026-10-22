@@ -47,7 +47,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, ErrorBound
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
+            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
           >
             Reload
           </button>

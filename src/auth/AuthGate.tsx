@@ -71,7 +71,7 @@ export function AuthGate({ children }: AuthGateProps) {
               forgetAccountDeleted();
               void auth.signinRedirect();
             }}
-            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
+            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
           >
             Sign In
           </button>
@@ -95,7 +95,7 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="flex gap-2 justify-center">
             <button
               onClick={() => auth.signinRedirect()}
-              className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
+              className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
             >
               Try again
             </button>

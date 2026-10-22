@@ -218,7 +218,7 @@ export function BugReportDialog({
               <button
                 onClick={submit}
                 disabled={phase === 'submitting'}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 text-sm text-white font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 text-sm text-chino-bg font-medium"
               >
                 {phase === 'submitting' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 Submit report

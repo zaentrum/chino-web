@@ -232,7 +232,7 @@ export function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
                 // aria-disabled, not disabled: the button keeps its focus
                 // (and stays findable) while it cannot act.
                 aria-disabled={!confirmed || deleting}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-red hover:bg-chino-red/80 aria-disabled:opacity-50 aria-disabled:hover:bg-chino-red aria-disabled:cursor-not-allowed text-sm text-white font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-red hover:bg-chino-red/80 aria-disabled:opacity-50 aria-disabled:hover:bg-chino-red aria-disabled:cursor-not-allowed text-sm text-chino-bg font-medium"
               >
                 {deleting ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : null}
                 Delete Account

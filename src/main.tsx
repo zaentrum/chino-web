@@ -49,7 +49,7 @@ function BootstrapError({ message, onRetry }: { message: string; onRetry: () => 
         </div>
         <button
           onClick={onRetry}
-          className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white rounded-lg font-medium"
+          className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
         >
           Retry
         </button>

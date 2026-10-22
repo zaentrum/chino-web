@@ -171,7 +171,7 @@ function Chip({
       onClick={onClick}
       className={`shrink-0 px-3 py-1 text-xs border transition-colors ${
         active
-          ? 'bg-chino-accent border-chino-accent text-white'
+          ? 'bg-chino-accent border-chino-accent text-chino-bg'
           : 'bg-chino-surface border-chino-border text-chino-text hover:bg-chino-surface-2'
       }`}
     >

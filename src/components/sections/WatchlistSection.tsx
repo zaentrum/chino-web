@@ -262,7 +262,7 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
             <button
               onClick={() => void submitRename()}
               disabled={busy}
-              className="p-2 bg-chino-accent hover:bg-chino-accent/80 text-white disabled:opacity-50"
+              className="p-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg disabled:opacity-50"
               title="Save name"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -420,7 +420,7 @@ export function WatchlistSection() {
             <button
               onClick={() => void submitCreate()}
               disabled={busy}
-              className="p-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white disabled:opacity-50"
+              className="p-1.5 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg disabled:opacity-50"
               title="Create list"
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}

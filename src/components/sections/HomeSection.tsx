@@ -133,7 +133,7 @@ export function HomeSection({ onNavigate }: HomeSectionProps) {
           <button
             type="button"
             onClick={retryCatalog}
-            className="px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium"
+            className="px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg text-sm font-medium"
           >
             Try again
           </button>

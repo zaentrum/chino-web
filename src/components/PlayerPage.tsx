@@ -3960,7 +3960,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           }}
           className="absolute inset-0 flex items-center justify-center bg-black/40"
         >
-          <span className="px-6 py-3 bg-chino-accent text-white font-medium shadow-xl">
+          <span className="px-6 py-3 bg-chino-accent text-chino-bg font-medium shadow-xl">
             Click to start
           </span>
         </button>
@@ -4034,7 +4034,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => skipSegment('intro')}
-              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
+              className="px-3 py-1.5 bg-chino-accent hover:brightness-110 text-chino-bg text-sm font-medium flex items-center gap-1"
             >
               <SkipForward className="w-4 h-4" />
               Skip now
@@ -4074,9 +4074,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(nextEp.id)}?binge=1`))}
-              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
+              className="px-3 py-1.5 bg-chino-accent hover:brightness-110 text-chino-bg text-sm font-medium flex items-center gap-1"
             >
-              <Play className="w-4 h-4 fill-white" />
+              <Play className="w-4 h-4 fill-current" />
               Play now {autoNextSec != null ? `(${autoNextSec})` : ''}
             </button>
             <button
@@ -4120,7 +4120,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="mt-3 flex items-center gap-2">
             <button
               onClick={goToNextEpisode}
-              className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium flex items-center gap-1"
+              className="px-3 py-1.5 bg-chino-accent hover:brightness-110 text-chino-bg text-sm font-medium flex items-center gap-1"
             >
               <SkipForward className="w-4 h-4" />
               Next episode {previewNextSec != null ? `in ${previewNextSec}s` : ''}
@@ -4819,7 +4819,7 @@ function PlaybackFailure({
         <button
           type="button"
           onClick={onRetry}
-          className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium"
+          className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-chino-bg font-medium"
         >
           Try again
         </button>

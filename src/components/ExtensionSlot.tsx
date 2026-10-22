@@ -107,7 +107,7 @@ function SlotButtons({ slot, vars = {} }: ExtensionSlotProps) {
       {buttons.map((b) => {
         const Icon = SLOT_ICONS[b.icon];
         const cls =
-          'px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-white font-medium flex items-center gap-2';
+          'px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-chino-bg font-medium flex items-center gap-2';
         if (b.kind === 'link') {
           return (
             <a key={b.key} href={b.href} className={cls}>

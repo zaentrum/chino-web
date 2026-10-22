@@ -75,7 +75,7 @@ export function UpdateAvailable() {
       </div>
       <button
         onClick={apply}
-        className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-white text-sm font-medium"
+        className="px-3 py-1.5 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg text-sm font-medium"
       >
         Reload
       </button>
