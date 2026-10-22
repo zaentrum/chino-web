@@ -241,31 +241,37 @@ test('tracks that read the same: the one on stays, whichever it is; a text one b
   assert.equal(subtitleEntries(pictures)[0].picture, true);
 });
 
-test('a track tagged with no language is none of a language\'s, whatever its title says: one in the language stands for it', () => {
+test('a track tagged with no language that reads as one: the file\'s own, else the first, shows - in the language of its twin', () => {
   // The file's untagged track titled "English", then a French one, then an
-  // English sidecar: they read the same, and show once - the English one,
-  // on top, which comes on by itself. No "English (2)".
+  // English sidecar: they read the same, and show once - the file's own,
+  // timed to it, with the sidecar's language: on top, and on by itself.
+  // No "English (2)".
   const tracks: SubtitleSource[] = [
     { id: 'emb-2', lang: 'und', title: 'English', embedded: true },
     { id: 'emb-3', lang: 'fre', embedded: true },
     { id: 's1', lang: 'en' },
   ];
   const m = menu(tracks);
-  assert.deepEqual(m.top.map((e) => e.id), ['s1']);
+  assert.deepEqual(m.top.map((e) => [e.id, e.label, e.tag]), [['emb-2', 'English', 'en']]);
   assert.deepEqual(m.more.map((e) => [e.id, e.label]), [['emb-3', 'French']]);
-  assert.equal(autoSubtitle(m, { audioLang: 'fre', subtitlePref: 'eng' }), 's1');
+  assert.equal(autoSubtitle(m, { audioLang: 'fre', subtitlePref: 'eng' }), 'emb-2');
+  // The same without the server's languages, and with no preferred language.
+  assert.deepEqual(menu(tracks, { serverLanguages: [] }).top.map((e) => e.id), ['emb-2', 'emb-3']);
+  assert.deepEqual(menuEntries(menu(tracks, { preferred: 'off' })).map((e) => e.id), ['emb-2', 'emb-3']);
+  // The sidecar on: it stays, whichever it is.
+  assert.deepEqual(menu(tracks, { on: 's1' }).top.map((e) => e.id), ['s1']);
   // Alone, it is listed by its title, in its place in the file.
   assert.deepEqual(menu(tracks.slice(0, 2)).more.map((e) => [e.id, e.label]), [['emb-2', 'English'], ['emb-3', 'French']]);
-  // Two of the file's own, the untagged one first: the tagged one still.
+  // Two of the file's own, the untagged one first: the first, in English.
   const both = menu([{ id: 'emb-2', lang: 'und', title: 'English', embedded: true }, { id: 'emb-3', lang: 'eng', embedded: true }]);
-  assert.deepEqual(both.top.map((e) => e.id), ['emb-3']);
-  assert.equal(autoSubtitle(both, { audioLang: 'fre', subtitlePref: 'eng' }), 'emb-3');
-  // The foreign-language parts only, too: English audio, the tagged forced track.
+  assert.deepEqual(both.top.map((e) => [e.id, e.tag]), [['emb-2', 'en']]);
+  assert.equal(autoSubtitle(both, { audioLang: 'fre', subtitlePref: 'eng' }), 'emb-2');
+  // The foreign-language parts only, too: English audio, the file's own forced track.
   const forced = menu([
     { id: 'emb-4', lang: 'und', title: 'English Forced', embedded: true },
     { id: 's2', lang: 'eng', forced: true },
   ]);
-  assert.equal(autoSubtitle(forced, { audioLang: 'eng', subtitlePref: 'off' }), 's2');
+  assert.equal(autoSubtitle(forced, { audioLang: 'eng', subtitlePref: 'off' }), 'emb-4');
   // Untagged tracks that read the same are one.
   assert.equal(menu([{ id: 'a', lang: 'und', title: 'Signs' }, { id: 'b', lang: '', title: 'Signs' }]).more.length, 1);
 });
@@ -336,7 +342,6 @@ test('titles that are codes with a region or a script: two regions, two scripts 
   ]);
   assert.deepEqual(menuEntries(twice).map((e) => [e.id, e.label]), [['emb-2', 'Portuguese (Brazil)']]);
 });
-
 
 test('a language takes its regions and scripts only where they agree', () => {
   assert.equal(sameLanguage('en', 'en-GB'), true);

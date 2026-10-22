@@ -150,21 +150,32 @@ function byLanguage<E extends SubtitleEntry>(list: readonly E[]): { base: string
 
 /**
  * Which of two tracks that read the same the menu shows, `a` the one that
- * comes first: the one on; else one in a language before one in none,
- * which reads as a language only by its title ("English" on an "und"
- * track) - the one in the language is listed with it and comes on by it;
- * else the file's own before a sidecar; else a text one before a picture
- * one; else the first.
+ * comes first: the one on; else the file's own, timed to this file, before
+ * a sidecar; else a text one before a picture one; else the first - tagged
+ * with a language or not (standsForBoth gives it its twin's).
  */
 function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefined): SubtitleEntry {
   if (on) {
     if (b.id === on) return b;
     if (a.id === on) return a;
   }
-  if (!!a.tag !== !!b.tag) return a.tag ? a : b;
   if (!!a.embedded !== !!b.embedded) return a.embedded ? a : b;
   if (a.picture !== b.picture) return a.picture ? b : a;
   return a;
+}
+
+/** The one the menu shows of two that read the same (better), in the
+ *  language of both: where it is tagged with none and reads as one only by
+ *  its title ("English" on an "und" track), it takes the other's tag, so it
+ *  is listed with that language and comes on by it. */
+function standsForBoth<T extends SubtitleSource>(
+  a: SubtitleEntry<T>,
+  b: SubtitleEntry<T>,
+  on: string | null | undefined,
+): SubtitleEntry<T> {
+  const kept = better(a, b, on) as SubtitleEntry<T>;
+  const other = kept === a ? b : a;
+  return !kept.tag && other.tag ? { ...kept, tag: other.tag, lang: other.lang } : kept;
 }
 
 /**
@@ -191,10 +202,10 @@ function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefine
  *
  * Tracks that would read the same show once, where the first of them was,
  * and are never numbered ("English (2)"): the file's own before one the
- * server adds, otherwise the first in the file (better). A track tagged
- * with no language is none of a language's, whatever its title says
- * ("English" on an "und" track): where it reads the same as one in that
- * language, that one stands for both.
+ * server adds, otherwise the first in the file (better). The one shown
+ * stands for the others: a track tagged with no language that reads as
+ * one by its title ("English" on an "und" track) takes the language of a
+ * twin tagged with it, is listed with that language and comes on by it.
  */
 export function subtitleMenu<T extends SubtitleSource>(
   entries: readonly SubtitleEntry<T>[],
@@ -203,7 +214,7 @@ export function subtitleMenu<T extends SubtitleSource>(
   const firstOf = new Map<string, SubtitleEntry<T>>();
   for (const e of entries) {
     const seen = firstOf.get(e.label);
-    firstOf.set(e.label, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
+    firstOf.set(e.label, seen ? standsForBoth(seen, e, on) : e);
   }
   const unique = [...firstOf.values()];
   const pref = preferred?.trim() ?? '';

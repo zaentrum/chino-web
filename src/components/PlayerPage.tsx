@@ -18,6 +18,7 @@ import { audioChipLabel, audioLabels, audioRenditionFor, normalizeLang } from '.
 import {
   NO_SUBTITLE,
   autoSubtitle,
+  menuEntries,
   playerChooses,
   serverSubtitleLanguages,
   subtitleEntries,
@@ -1549,9 +1550,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       }),
     [subEntries, settings.subtitles.preferredLang, serverSubLangs, info?.mode, activeSubId],
   );
+  // The subtitle on, as the menu lists it: a track tagged with no language
+  // there takes the language of the twin it stands for (its <track
+  // srclang>, the overlay's lang).
   const activeSub = useMemo<SubtitleEntry<Subtitle> | null>(
-    () => (activeSubId ? subEntries.find((s) => s.id === activeSubId) ?? null : null),
-    [subEntries, activeSubId],
+    () =>
+      activeSubId
+        ? menuEntries(subMenu).find((s) => s.id === activeSubId) ?? subEntries.find((s) => s.id === activeSubId) ?? null
+        : null,
+    [subMenu, subEntries, activeSubId],
   );
   // "more languages" opens closed, unless the subtitle on is among them.
   useEffect(() => {
