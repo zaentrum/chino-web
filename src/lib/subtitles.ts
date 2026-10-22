@@ -118,6 +118,28 @@ function kindRank(e: SubtitleEntry): number {
   return e.ai ? 3 : e.forced ? 2 : e.sdh ? 1 : 0;
 }
 
+/** The tracks of one language by their kinds (kindRank), each kind in the
+ *  order they come. */
+function byKind<E extends SubtitleEntry>(group: readonly E[]): E[] {
+  return [...group].sort((a, b) => kindRank(a) - kindRank(b));
+}
+
+/** The tracks by language, in the order each language first comes: a
+ *  language's tracks together, its regions and scripts with it ("zh-Hant"
+ *  and "zh-Hans" with "zh"), by their kinds. A track in no language is on
+ *  its own, in its place. */
+function byLanguage<E extends SubtitleEntry>(list: readonly E[]): { base: string; entries: E[] }[] {
+  const groups = new Map<string, { base: string; entries: E[] }>();
+  list.forEach((e, i) => {
+    const base = normalizeLang(e.tag);
+    const key = base || `\u0000${i}`;
+    const group = groups.get(key);
+    if (group) group.entries.push(e);
+    else groups.set(key, { base, entries: [e] });
+  });
+  return [...groups.values()].map((g) => ({ base: g.base, entries: byKind(g.entries) }));
+}
+
 /**
  * Which of two tracks that read the same the menu shows, `a` the one that
  * comes first: the one on; else one in a language before one in none,
@@ -139,19 +161,25 @@ function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefine
 
 /**
  * The subtitles menu of a title's tracks, given in the order they come (the
- * file's own streams first, then its sidecars). On top: the viewer's subtitle
- * language (Settings; "off" names none), then each other subtitle language
- * the server is set up for; each language's tracks plain first, then for
- * deaf and hard of hearing, then foreign-language parts only, then the ones
- * the platform made ("· AI"), as the phone app lists them. Then "more
- * languages" with the rest, by language in the order they come, each
- * language's kinds the same way, tracks in no language last.
+ * file's own streams first, in the file's order, then its sidecars). On
+ * top: the viewer's subtitle language (Settings; "off" names none), then
+ * each other subtitle language the server is set up for; each language's
+ * tracks plain first, then for deaf and hard of hearing, then
+ * foreign-language parts only, then the ones the platform made ("· AI").
+ * Then "more languages" with the rest, by language in the order each first
+ * comes, a language's regions and scripts with it, each language's kinds
+ * the same way; a track in no language in its place.
  *
  * Without "more languages": a packaged title, which carries the server's
  * languages only, and a title on a server set up for no subtitle languages
  * (an empty list, or an older server without the route), where "off" and
  * "more languages" alone would hide every track behind a click - their
- * tracks are all listed on top, the viewer's language first.
+ * tracks are all listed on top: the viewer's language first, then the rest
+ * in the file's order, by language as above. A language's tracks stay
+ * together, the AI ones included, and a language with its region or script
+ * counts as that language: where the ones on top leave out a region or a
+ * script ("zh-Hant" beside a viewer's "zh-Hans"), those follow right after
+ * them - "Chinese (Simplified) · AI" after "Chinese".
  *
  * Tracks that would read the same show once, where the first of them was,
  * and are never numbered ("English (2)"): the file's own before one the
@@ -170,11 +198,6 @@ export function subtitleMenu<T extends SubtitleSource>(
     firstOf.set(e.label, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
   }
   const unique = [...firstOf.values()];
-  const ordered = (list: readonly SubtitleEntry<T>[]) => {
-    const groups = new Map<string, SubtitleEntry<T>[]>();
-    for (const e of list) groups.set(e.tag, [...(groups.get(e.tag) ?? []), e]);
-    return [...groups.values()].flatMap((g) => [...g].sort((a, b) => kindRank(a) - kindRank(b)));
-  };
   const pref = preferred?.trim() ?? '';
   const wanted: string[] = [];
   for (const w of [...(pref && pref.toLowerCase() !== 'off' ? [pref] : []), ...serverLanguages]) {
@@ -182,16 +205,25 @@ export function subtitleMenu<T extends SubtitleSource>(
     if (tag && !wanted.some((x) => languageTag(x) === tag)) wanted.push(w);
   }
   const placed = new Set<SubtitleEntry<T>>();
-  const top: SubtitleEntry<T>[] = [];
+  // On top, one block per language asked for.
+  const blocks: { base: string; entries: SubtitleEntry<T>[] }[] = [];
   for (const w of wanted) {
     const group = unique.filter((e) => !placed.has(e) && sameLanguage(w, e.tag));
     group.forEach((e) => placed.add(e));
-    top.push(...ordered(group));
+    if (group.length) blocks.push({ base: normalizeLang(w), entries: byKind(group) });
   }
-  const rest = unique.filter((e) => !placed.has(e));
-  const others = [...ordered(rest.filter((e) => e.tag)), ...rest.filter((e) => !e.tag)];
+  const rest = byLanguage(unique.filter((e) => !placed.has(e)));
   const noMore = packaged || !serverLanguages.some((l) => languageTag(l));
-  return noMore ? { top: [...top, ...others], more: [] } : { top, more: others };
+  if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: rest.flatMap((g) => g.entries) };
+  // All on top: the rest of a language on top right after its last block
+  // there, the other languages after them in the file's order.
+  for (const group of rest) {
+    let at = -1;
+    if (group.base) for (let i = 0; i < blocks.length; i++) if (blocks[i].base === group.base) at = i;
+    if (at >= 0) blocks.splice(at + 1, 0, group);
+    else blocks.push(group);
+  }
+  return { top: blocks.flatMap((b) => b.entries), more: [] };
 }
 
 /** Every entry of the menu, in its order. */
