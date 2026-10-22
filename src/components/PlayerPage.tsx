@@ -14,7 +14,7 @@ import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
 import { episodeCode, fileNeighbours, type FileEpisode } from '../lib/episodeFiles';
-import { audioChipLabel, audioLabels, audioRenditionFor, languageTag, normalizeLang } from '../lib/languages';
+import { audioChipLabel, audioLabels, audioRenditionFor, normalizeLang } from '../lib/languages';
 import {
   NO_SUBTITLE,
   autoSubtitle,
@@ -3708,7 +3708,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             id={activeSub.id}
             kind="subtitles"
             src={activeSub.url}
-            srcLang={languageTag(activeSub.lang) || undefined}
+            srcLang={activeSub.tag || undefined}
             label={activeSub.label}
           />
         )}
@@ -3747,7 +3747,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         <SubtitleOverlay
           videoRef={videoRef}
           lines={subLines}
-          lang={activeSub ? languageTag(activeSub.lang) : undefined}
+          lang={activeSub?.tag || undefined}
           clear={chromeVisible ? bottomBarHeight : 0}
         />
       )}

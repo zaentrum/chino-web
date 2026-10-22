@@ -153,6 +153,16 @@ export function languageName(code: unknown, locales: readonly string[] = ['en'])
   return typeof code === 'string' ? code.trim() : tag;
 }
 
+/** The script of a canonical tag ("Hans" of "zh-Hans-CN"), or ''. */
+export function scriptOf(tag: string): string {
+  return tag.split('-').slice(1).find((s) => /^[A-Za-z]{4}$/.test(s)) ?? '';
+}
+
+/** The region of a canonical tag ("BR" of "pt-BR", "419"), or ''. */
+export function regionOf(tag: string): string {
+  return tag.split('-').slice(1).find((s) => /^([A-Za-z]{2}|\d{3})$/.test(s)) ?? '';
+}
+
 /** What a subtitle label is told about one track. */
 export interface SubtitleLabelInput {
   /** The language code as the track is tagged. */
@@ -247,8 +257,95 @@ const ENDONYMS: Record<string, readonly string[]> = {
   pl: ['polski'], pt: ['português'], ro: ['română'], ru: ['русский'], sk: ['slovenčina'],
   sl: ['slovenščina'], sq: ['shqip'], sr: ['српски', 'srpski'], sv: ['svenska'], th: ['ไทย'],
   tr: ['türkçe'], uk: ['українська'], vi: ['tiếng việt'],
-  zh: ['中文', '汉语', '漢語', '简体中文', '繁體中文', '简体', '繁體', '國語', '普通话', '粵語'],
+  zh: ['中文', '汉语', '漢語'],
 };
+
+// The words a Chinese track's title gives its script in. They say more than
+// "Chinese": the track is named and listed by its script ("Chinese
+// (Simplified)"), as a track tagged with it is.
+const CHINESE_SCRIPTS: Record<string, string> = {
+  简体中文: 'Hans', 簡體中文: 'Hans', 简体: 'Hans', 簡體: 'Hans', 简中: 'Hans', 簡中: 'Hans', chs: 'Hans', simplified: 'Hans',
+  繁體中文: 'Hant', 繁体中文: 'Hant', 繁體: 'Hant', 繁体: 'Hant', 繁中: 'Hant', cht: 'Hant', traditional: 'Hant',
+};
+
+// The spoken Chinese a title may name: it says something "Chinese" does
+// not, in the word list's words ("Chinese · Cantonese").
+const CHINESE_VARIETIES: Record<string, string> = {
+  粵語: 'Cantonese', 粤语: 'Cantonese', 廣東話: 'Cantonese', 广东话: 'Cantonese',
+  國語: 'Mandarin', 国语: 'Mandarin', 普通話: 'Mandarin', 普通话: 'Mandarin',
+};
+
+// What a title may call a language's region other than by the region's
+// name: "Español Latino" is Spanish (Latin America).
+const REGION_WORDS: Record<string, Record<string, string>> = {
+  es: { latino: '419', latinoamericano: '419', latam: '419' },
+  fr: { canadien: 'CA', québécois: 'CA', québec: 'CA' },
+  pt: { brasileiro: 'BR', europeu: 'PT' },
+};
+
+// The regions a title may name, for Intl to name: the phone app's table's,
+// and the rest of Latin America.
+const REGION_CODES = [
+  'US', 'GB', 'AU', 'CA', 'NZ', 'IE', 'IN', 'ZA', 'SG', 'PH', 'MY', 'NG', 'KE', 'BR', 'PT', 'AO', 'MZ',
+  'ES', 'MX', 'AR', 'CO', 'CL', 'PE', 'VE', 'UY', 'CU', 'BO', 'EC', 'PY', 'DO', 'GT', 'HN', 'NI', 'PA',
+  'SV', 'CR', 'PR', '419', 'FR', 'BE', 'CH', 'LU', 'MC', 'DE', 'AT', 'LI', 'NL', 'SR', 'IT', 'SM',
+  'CN', 'TW', 'HK', 'MO', 'JP', 'KR', 'KP', 'MN', 'RU', 'UA', 'BY', 'KZ', 'UZ', 'SE', 'FI', 'NO', 'DK',
+  'IS', 'EE', 'LV', 'LT', 'PL', 'CZ', 'SK', 'HU', 'RO', 'MD', 'BG', 'RS', 'ME', 'BA', 'HR', 'SI', 'MK',
+  'AL', 'XK', 'GR', 'CY', 'TR', 'GE', 'AM', 'AZ', 'IL', 'SA', 'EG', 'AE', 'MA', 'DZ', 'TN', 'LB', 'JO',
+  'IQ', 'SY', 'KW', 'QA', 'BH', 'OM', 'YE', 'LY', 'SD', 'IR', 'AF', 'PK', 'BD', 'LK', 'NP', 'TH', 'VN',
+  'ID', 'KH', 'LA', 'MM', '150',
+];
+
+/** Lower-cased, without its accents: "Latinoamérica" is "latinoamerica". */
+function folded(text: string): string {
+  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase().trim();
+}
+
+const REGION_NAMES_IN = new Map<string, Map<string, string>>();
+
+/** The regions by their names in one locale, long and short, folded. */
+function regionNamesIn(locale: string): Map<string, string> {
+  const cached = REGION_NAMES_IN.get(locale);
+  if (cached) return cached;
+  const regions = new Map<string, string>();
+  for (const style of ['long', 'short'] as const) {
+    let names: Intl.DisplayNames | null = null;
+    try {
+      names = new Intl.DisplayNames([locale], { type: 'region', style, fallback: 'none' });
+    } catch {
+      /* no Intl.DisplayNames, or a locale it refuses */
+    }
+    for (const code of names ? REGION_CODES : []) {
+      let name: string | undefined;
+      try {
+        name = names?.of(code);
+      } catch {
+        /* a code it refuses */
+      }
+      if (name && !regions.has(folded(name))) regions.set(folded(name), code);
+    }
+  }
+  REGION_NAMES_IN.set(locale, regions);
+  return regions;
+}
+
+const REGIONS = new Map<string, Map<string, string>>();
+
+/** The regions a title may name for the language `base` (normalizeLang), by
+ *  their names in the language itself and in English, folded: "españa" →
+ *  "ES", "latinoamerica" → "419", "brasil" → "BR". Made once per language,
+ *  when a title asks. */
+function regionsOf(base: string): Map<string, string> {
+  const cached = REGIONS.get(base);
+  if (cached) return cached;
+  const regions = new Map<string, string>();
+  for (const locale of base === 'zh' ? ['zh-Hans', 'zh-Hant', 'en'] : [base, 'en']) {
+    for (const [name, code] of regionNamesIn(locale)) if (!regions.has(name)) regions.set(name, code);
+  }
+  for (const [word, code] of Object.entries(REGION_WORDS[base] ?? {})) regions.set(folded(word), code);
+  REGIONS.set(base, regions);
+  return regions;
+}
 
 // The locales a language's name is looked up in: the languages a library
 // is likely to carry, each naming every other.
@@ -292,41 +389,187 @@ function namesLanguage(title: string, lang: string | undefined): boolean {
   return sameLanguageCode(t, lang) || languageNames(lang).has(t.toLocaleLowerCase());
 }
 
-/** A title without its parts that only name the track's language again:
- *  "Chinese (Simplified) · 中文" on Chinese is "", "German · Commentary" on
- *  German "Commentary", "Chinese (中文)" "Chinese". */
-function withoutLanguageNames(title: string, lang: string | undefined): string {
-  const t = title
-    .replace(/\(([^()]*)\)|\[([^\[\]]*)\]/g, (whole, a, b) => (namesLanguage(a ?? b ?? '', lang) ? ' ' : whole))
-    .replace(/\s+/g, ' ')
-    .trim();
-  const parts = t.split(PART_SEPARATOR).filter((p) => p.trim() !== '');
-  const kept = parts.filter((p) => !namesLanguage(p, lang));
-  return kept.length === parts.length ? t : kept.join(' · ');
+// A bracket in a title: round, square, or the full-width round ones of a
+// Chinese or Japanese title.
+const BRACKETED = /\(([^()]*)\)|\[([^\[\]]*)\]|（([^（）]*)）/g;
+const MASKED_BRACKET = /\u0001(\d+)\u0002/g;
+
+/** What a piece of a title says of the track's language. */
+type Says = { language: true } | { script: string } | { region: string } | { words: string };
+
+/** What a piece of a title - a part, a bracket, words of one - says of the
+ *  track's language: that it is the language ("Deutsch", "中文"), its script
+ *  ("简体"), its region ("Latinoamérica"), a Chinese variety in the word
+ *  list's words ("粵語": "Cantonese"); null for none of these. Words inside a
+ *  longer piece name the language by a name, never by a code: "und" is a
+ *  German word. */
+function pieceSays(text: string, code: string | undefined, whole: boolean): Says | null {
+  const t = text.trim();
+  if (!t) return null;
+  const lower = t.toLocaleLowerCase();
+  if (whole ? namesLanguage(t, code) : languageNames(code).has(lower)) return { language: true };
+  const base = normalizeLang(code);
+  if (base === 'zh') {
+    const script = CHINESE_SCRIPTS[lower];
+    if (script) return { script };
+    const words = CHINESE_VARIETIES[t];
+    if (words) return { words };
+  }
+  const region = base ? regionsOf(base).get(folded(t)) : undefined;
+  return region ? { region } : null;
+}
+
+/**
+ * A title read for the track tagged `code`: the title without what only
+ * names the language again, and the script and the region it names that
+ * the tag agrees with. A part, or a bracket, that is the language's name,
+ * script or region goes whole ("Chinese (Simplified) · 中文", "Español
+ * (Latinoamérica)"); inside one with other words only the language's names
+ * go ("Deutsch Kommentar" is "Kommentar") - not the label's own name, which
+ * says it once ("English Commentary") - and a region stays a word. Nothing
+ * read, the title as it was.
+ */
+function readParts(title: string, code: string | undefined): { title: string; script: string; region: string } {
+  const tag = namedTag(languageTag(code));
+  const own = { script: scriptOf(tag), region: regionOf(tag) };
+  const found = { script: '', region: '' };
+  const display = languageName(code).toLocaleLowerCase();
+  let changed = false;
+  const agrees = (kind: 'script' | 'region', value: string) =>
+    (!own[kind] || own[kind] === value) && (!found[kind] || found[kind] === value);
+  // What is left of a piece; null for nothing.
+  const readPiece = (text: string): string | null => {
+    const t = text.trim();
+    if (!t) return null;
+    const whole = pieceSays(t, code, true);
+    if (whole) {
+      if ('language' in whole) {
+        changed = true;
+        return null;
+      }
+      if ('script' in whole && agrees('script', whole.script)) {
+        found.script = whole.script;
+        changed = true;
+        return null;
+      }
+      if ('region' in whole && agrees('region', whole.region)) {
+        found.region = whole.region;
+        changed = true;
+        return null;
+      }
+      if ('words' in whole) {
+        changed = true;
+        return whole.words;
+      }
+    }
+    const words = t.split(/\s+/);
+    if (words.length < 2) return t;
+    // The longest run of words from each place on that says something.
+    const runs: { text: string; says: Says | null }[] = [];
+    for (let i = 0; i < words.length; ) {
+      let says: Says | null = null;
+      let j = words.length;
+      for (; j > i; j--) {
+        says = pieceSays(words.slice(i, j).join(' '), code, false);
+        if (says) break;
+      }
+      if (says) {
+        runs.push({ text: words.slice(i, j).join(' '), says });
+        i = j;
+      } else {
+        runs.push({ text: words[i], says: null });
+        i++;
+      }
+    }
+    const plain = runs.some((r) => r.says === null);
+    const kept: string[] = [];
+    for (const { text: run, says } of runs) {
+      if (!says) kept.push(run);
+      else if ('language' in says) {
+        if (plain && run.toLocaleLowerCase() === display) kept.push(run);
+        else changed = true;
+      } else if ('script' in says && agrees('script', says.script)) {
+        found.script = says.script;
+        changed = true;
+      } else if ('region' in says && !plain && agrees('region', says.region)) {
+        found.region = says.region;
+        changed = true;
+      } else if ('words' in says) {
+        kept.push(says.words);
+        changed = true;
+      } else kept.push(run);
+    }
+    return kept.length ? kept.join(' ') : null;
+  };
+  // The title's parts, split where they meet outside a bracket.
+  const brackets: string[] = [];
+  const masked = title.replace(BRACKETED, (_, a?: string, b?: string, c?: string) => {
+    brackets.push(a ?? b ?? c ?? '');
+    return `\u0001${brackets.length - 1}\u0002`;
+  });
+  const kept: string[] = [];
+  for (const part of masked.split(PART_SEPARATOR)) {
+    const inner: string[] = [];
+    const main = part.replace(MASKED_BRACKET, (_, i: string) => {
+      inner.push(brackets[Number(i)]);
+      return ' ';
+    });
+    const pieces = [readPiece(main.replace(/\s+/g, ' ')), ...inner.map(readPiece)].filter((p): p is string => p !== null);
+    if (pieces.length) kept.push([pieces[0], ...pieces.slice(1).map((p) => `(${p})`)].join(' '));
+  }
+  return { title: changed ? kept.join(' · ') : title, ...found };
+}
+
+/** A track's language as its tag and its own title say it - the tag, with
+ *  the script and the region the title names where the tag names none
+ *  ("chi" titled "繁體中文" is "zh-Hant", "spa" titled "Español
+ *  (Latinoamérica)" "es-419") - and the title without what only names that
+ *  language again. A track in no language is read as it is. */
+function readTitle(title: string, code: string | undefined): { code: string | undefined; title: string } {
+  const base = normalizeLang(code);
+  if (!base || !title) return { code, title };
+  const first = readParts(title, code);
+  const tag = namedTag(languageTag(code));
+  const script = scriptOf(tag) || first.script;
+  const region = regionOf(tag) || first.region;
+  if (script === scriptOf(tag) && region === regionOf(tag)) return { code, title: first.title };
+  const refined = [base, script, region].filter(Boolean).join('-');
+  return { code: refined, title: readParts(title, refined).title };
+}
+
+/** The language a subtitle is in, as a BCP 47 tag: its code's, with the
+ *  script and the region its own title names where the code names none
+ *  ("chi" titled "繁體中文" is "zh-Hant"), as subtitleLabel names it; ''
+ *  for none. What the menu lists the track by. */
+export function subtitleLanguage(track: { lang?: string; title?: string }): string {
+  return languageTag(readTitle(titleWithoutKind((track.title ?? '').trim()), track.lang).code);
 }
 
 /**
  * One subtitle's label: the language's name, its script or region in it
- * ("German", "Chinese (Simplified)", "No dialogue" for zxx); the track's own
- * title where it says more than that ("English · Commentary", "German ·
- * AI") - not the parts of it that only name the language again, in any
- * language ("Deutsch", "中文") - or alone for a track tagged with no
- * language, else "Unknown"; then its kind in words - "foreign-language parts
- * only" for a forced one, "for deaf and hard of hearing" for one with sound
- * described, both in that order. A title that says the kind itself
- * ("English SDH", "[CC]", "German (forced)") says it once, in these words.
- * The phone app's subtitleLabel: the same track has the same name there.
+ * ("German", "Chinese (Simplified)", "No dialogue" for zxx) - a script or a
+ * region the track's own title gives, where its tag names none, too
+ * ("Chinese (Traditional)" for "繁體中文", "Spanish (Latin America)" for
+ * "Español (Latinoamérica)"); the track's own title where it says more than
+ * that ("English · Commentary", "German · AI", "Chinese · Cantonese") - not
+ * the words of it that only name the language again, in any language
+ * ("Deutsch", "中文") - or alone for a track tagged with no language, else
+ * "Unknown"; then its kind in words - "foreign-language parts only" for a
+ * forced one, "for deaf and hard of hearing" for one with sound described,
+ * both in that order. A title that says the kind itself ("English SDH",
+ * "[CC]", "German (forced)") says it once, in these words. The phone app's
+ * subtitleLabel: the same track has the same name there.
  */
 export function subtitleLabel(track: SubtitleLabelInput): string {
   const raw = (track.title ?? '').trim();
   const forced = !!track.forced || saysForced(raw);
   const sdh = !!track.sdh || isSdhSubtitle(raw);
-  const title = withoutLanguageNames(titleWithoutKind(raw), track.lang);
-  const name = languageName(track.lang);
+  const { code: lang, title } = readTitle(titleWithoutKind(raw), track.lang);
+  const name = languageName(lang);
   const lower = title.toLowerCase();
   let label: string;
-  if (!title || lower === name.toLowerCase() || namesLanguage(title, track.lang)) label = name;
-  else if (!hasLanguage(track.lang)) label = title;
+  if (!title || lower === name.toLowerCase() || namesLanguage(title, lang)) label = name;
+  else if (!hasLanguage(lang)) label = title;
   else if (lower.includes(name.toLowerCase())) label = title;
   // "English" on a British English track: the name says it already.
   else if (name.toLowerCase().includes(lower)) label = name;
@@ -514,7 +757,8 @@ export function defaultSubtitleLang({ audioLang, subtitlePref, audioPref }: Subt
 }
 
 /** The track to switch on by default, or null: one in the language
- *  defaultSubtitleLang names, a full one rather than a forced one. */
+ *  defaultSubtitleLang names, a full one rather than a forced one - the
+ *  forced one where it is the only one in that language. */
 export function defaultSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean }>(
   tracks: readonly T[],
   defaults: SubtitleDefaults,

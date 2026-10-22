@@ -153,6 +153,63 @@ test('duplicates: the one on stays, whichever it is; a text one before a picture
   assert.equal(subtitleEntries(pictures)[0].picture, true);
 });
 
+test('a track tagged with no language is no duplicate of one in a language, whatever its title says', () => {
+  // The file's untagged track titled "English", then a French one, then an
+  // English sidecar: the English one is on top, and comes on by itself.
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'und', title: 'English', embedded: true },
+    { id: 'emb-3', lang: 'fre', embedded: true },
+    { id: 's1', lang: 'en' },
+  ];
+  const m = menu(tracks);
+  assert.deepEqual(m.top.map((e) => e.id), ['s1']);
+  assert.deepEqual(m.more.map((e) => [e.id, e.label]), [['emb-3', 'French'], ['emb-2', 'English (2)']]);
+  assert.equal(autoSubtitle(m, { audioLang: 'fre', subtitlePref: 'eng' }), 's1');
+  // Two of the file's own, the untagged one first: the tagged one still.
+  const both = menu([{ id: 'emb-2', lang: 'und', title: 'English', embedded: true }, { id: 'emb-3', lang: 'eng', embedded: true }]);
+  assert.deepEqual(both.top.map((e) => e.id), ['emb-3']);
+  assert.equal(autoSubtitle(both, { audioLang: 'fre', subtitlePref: 'eng' }), 'emb-3');
+  // The foreign-language parts only, too: English audio, the tagged forced track.
+  const forced = menu([
+    { id: 'emb-4', lang: 'und', title: 'English Forced', embedded: true },
+    { id: 's2', lang: 'eng', forced: true },
+  ]);
+  assert.equal(autoSubtitle(forced, { audioLang: 'eng', subtitlePref: 'off' }), 's2');
+  // Untagged tracks that read the same are one.
+  assert.equal(menu([{ id: 'a', lang: 'und', title: 'Signs' }, { id: 'b', lang: '', title: 'Signs' }]).more.length, 1);
+});
+
+test('Simplified and Traditional Chinese, told apart by their titles only, are two', () => {
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-3', lang: 'chi', title: '简体中文', embedded: true },
+    { id: 'emb-4', lang: 'chi', title: '繁體中文', embedded: true },
+    { id: 'emb-5', lang: 'eng', embedded: true },
+  ];
+  const m = menu(tracks, { preferred: 'en' });
+  assert.deepEqual(labels(m.top), ['English', 'Chinese (Simplified)']);
+  assert.deepEqual(labels(m.more), ['Chinese (Traditional)']);
+  assert.deepEqual(m.more.map((e) => e.tag), ['zh-Hant']);
+  // A server with no languages: both, each by its script.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'en', serverLanguages: [] }).top), ['English', 'Chinese (Simplified)', 'Chinese (Traditional)']);
+  // Mandarin and Cantonese are two as well.
+  assert.deepEqual(labels(menu([{ id: 'a', lang: 'chi', title: '國語' }, { id: 'b', lang: 'chi', title: '粵語' }], { serverLanguages: [] }).top), [
+    'Chinese · Mandarin',
+    'Chinese · Cantonese',
+  ]);
+});
+
+test('a language\'s region in a title lists the track with that region', () => {
+  const tracks: SubtitleSource[] = [
+    { id: 'es', lang: 'spa', title: 'Español (España)' },
+    { id: 'la', lang: 'spa', title: 'Español (Latinoamérica)' },
+    { id: 'la2', lang: 'es-419' },
+  ];
+  const m = menu(tracks, { serverLanguages: [] });
+  // The same region twice is one; Spain and Latin America are two.
+  assert.deepEqual(labels(m.top), ['Spanish (Spain)', 'Spanish (Latin America)']);
+  assert.deepEqual(m.top.map((e) => e.tag), ['es-ES', 'es-419']);
+});
+
 test('a language takes its regions and scripts only where they agree', () => {
   assert.equal(sameLanguage('en', 'en-GB'), true);
   assert.equal(sameLanguage('eng', 'en'), true);

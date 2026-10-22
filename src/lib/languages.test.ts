@@ -14,6 +14,7 @@ import {
   saysForced,
   subtitleLabel,
   subtitleLabels,
+  subtitleLanguage,
   audioChipLabel,
   audioLabels,
   audioRenditionFor,
@@ -173,6 +174,59 @@ test('words that only name the language again go, in any language; words that ad
   assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch · Kommentar' }), 'German · Kommentar');
   // Another language's own name is something else.
   assert.equal(subtitleLabel({ lang: 'de', title: 'Español' }), 'German · Español');
+  // Inside a part with other words, only the language's name goes - not
+  // the label's own name, which says it once - and a word that is a code
+  // elsewhere is a word ("und" is German for "and").
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch Kommentar' }), 'German · Kommentar');
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Kommentar und Analyse' }), 'German · Kommentar und Analyse');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English Commentary' }), 'English Commentary');
+});
+
+test('a Chinese track\'s title that gives its script names it by its script', () => {
+  for (const title of ['简体中文', '簡體中文', '简体', 'CHS', 'Simplified', 'Chinese (Simplified)', 'Simplified Chinese']) {
+    assert.equal(subtitleLabel({ lang: 'chi', title }), 'Chinese (Simplified)', title);
+    assert.equal(subtitleLanguage({ lang: 'chi', title }), 'zh-Hans', title);
+  }
+  for (const title of ['繁體中文', '繁体中文', '繁體', 'CHT', 'Traditional']) {
+    assert.equal(subtitleLabel({ lang: 'chi', title }), 'Chinese (Traditional)', title);
+    assert.equal(subtitleLanguage({ lang: 'zho', title }), 'zh-Hant', title);
+  }
+  // Its region in brackets, the full-width ones too.
+  assert.equal(subtitleLabel({ lang: 'chi', title: '繁體中文（台灣）' }), 'Chinese (Traditional, Taiwan)');
+  // A tag that names the other script: the title's word stays, it says something.
+  assert.equal(subtitleLabel({ lang: 'zh-Hans', title: '繁體中文' }), 'Chinese (Simplified) · 繁體中文');
+  // Mandarin and Cantonese in the word list's words.
+  assert.equal(subtitleLabel({ lang: 'chi', title: '國語' }), 'Chinese · Mandarin');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '普通话' }), 'Chinese · Mandarin');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '粵語' }), 'Chinese · Cantonese');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '中文' }), 'Chinese');
+  assert.equal(subtitleLanguage({ lang: 'chi', title: '中文' }), 'zh');
+});
+
+test('a language\'s own name before a region: the region in brackets after the language', () => {
+  const cases: [string, string, string, string][] = [
+    ['spa', 'Español (Latinoamérica)', 'Spanish (Latin America)', 'es-419'],
+    ['spa', 'Español (España)', 'Spanish (Spain)', 'es-ES'],
+    ['spa', 'Español Latino', 'Spanish (Latin America)', 'es-419'],
+    ['spa', 'Latinoamerica', 'Spanish (Latin America)', 'es-419'],
+    ['fre', 'Français (Canada)', 'French (Canada)', 'fr-CA'],
+    ['fre', 'Français canadien', 'French (Canada)', 'fr-CA'],
+    ['pt', 'Português (Brasil)', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'Português - Brasil', 'Portuguese (Brazil)', 'pt-BR'],
+    ['spa', 'Spanish (Latin America)', 'Spanish (Latin America)', 'es-419'],
+    // The tag's region again says nothing more.
+    ['es-419', 'Español (Latinoamérica)', 'Spanish (Latin America)', 'es-419'],
+  ];
+  for (const [lang, title, label, tag] of cases) {
+    assert.equal(subtitleLabel({ lang, title }), label, title);
+    assert.equal(subtitleLanguage({ lang, title }), tag, title);
+  }
+  // Another region than the tag's stays a word.
+  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latinoamérica' }), 'Spanish (Spain) · Latinoamérica');
+  // A region among other words is a word.
+  assert.equal(subtitleLabel({ lang: 'fre', title: 'Canada Commentaire' }), 'French · Canada Commentaire');
+  // With the kind: once, after.
+  assert.equal(subtitleLabel({ lang: 'spa', title: 'Español (Latinoamérica) (Forced)' }), 'Spanish (Latin America) · foreign-language parts only');
 });
 
 test('what else a title says stays before the kind', () => {

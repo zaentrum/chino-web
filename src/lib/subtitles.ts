@@ -14,8 +14,11 @@ import {
   isSdhSubtitle,
   languageTag,
   normalizeLang,
+  regionOf,
   saysForced,
+  scriptOf,
   subtitleLabel,
+  subtitleLanguage,
   type SubtitleDefaults,
 } from './languages.ts';
 
@@ -38,6 +41,11 @@ export interface SubtitleSource {
 export type SubtitleEntry<T extends SubtitleSource = SubtitleSource> = T & {
   /** Its name (languages.ts subtitleLabel): "Chinese (Simplified) · AI". */
   label: string;
+  /** Its language as a BCP 47 tag, with the script or region its title
+   *  gives where its code has none (languages.ts subtitleLanguage: "chi"
+   *  titled "繁體中文" is "zh-Hant"); '' for none. What the menu lists it
+   *  by. */
+  tag: string;
   /** Forced, as its flag or its title says. */
   forced: boolean;
   /** For the deaf and hard of hearing, as its title says. */
@@ -62,6 +70,7 @@ export function subtitleEntries<T extends SubtitleSource>(tracks: readonly T[]):
     return {
       ...t,
       label: subtitleLabel({ lang: t.lang, title: t.title, forced, sdh }),
+      tag: subtitleLanguage(t),
       forced,
       sdh,
       ai: isAiSubtitle(t.title),
@@ -88,16 +97,6 @@ export interface SubtitleMenuOptions {
   packaged: boolean;
   /** The id of the subtitle on, if any. */
   on?: string | null;
-}
-
-/** The script of a canonical tag ("Hans" of "zh-Hans-CN"), or ''. */
-function scriptOf(tag: string): string {
-  return tag.split('-').slice(1).find((s) => /^[A-Za-z]{4}$/.test(s)) ?? '';
-}
-
-/** The region of a canonical tag ("BR" of "pt-BR", "419"), or ''. */
-function regionOf(tag: string): string {
-  return tag.split('-').slice(1).find((s) => /^([A-Za-z]{2}|\d{3})$/.test(s)) ?? '';
 }
 
 /** Whether a track tagged `code` is in the language `want` names: the same
@@ -150,9 +149,12 @@ function better(a: SubtitleEntry, b: SubtitleEntry, on: string | null | undefine
  * "more languages" alone would hide every track behind a click - their
  * tracks are all listed on top, the viewer's language first.
  *
- * Two tracks that read the same (one language, one kind, nothing in their
- * titles to tell them apart) show once, where the first of them was: the one
- * on if either is, else a text one, else the file's own.
+ * Two tracks of one language and one kind, with nothing in their titles to
+ * tell them apart, show once, where the first of them was: the one on if
+ * either is, else a text one, else the file's own. A track tagged with no
+ * language is none of a language's, whatever its title says ("English" on
+ * an "und" track): two that still read the same are numbered, the second
+ * "English (2)".
  */
 export function subtitleMenu<T extends SubtitleSource>(
   entries: readonly SubtitleEntry<T>[],
@@ -160,16 +162,14 @@ export function subtitleMenu<T extends SubtitleSource>(
 ): SubtitleMenu<T> {
   const firstOf = new Map<string, SubtitleEntry<T>>();
   for (const e of entries) {
-    const seen = firstOf.get(e.label);
-    firstOf.set(e.label, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
+    const key = `${e.tag}\u0000${e.label}`;
+    const seen = firstOf.get(key);
+    firstOf.set(key, seen ? (better(seen, e, on) as SubtitleEntry<T>) : e);
   }
   const unique = [...firstOf.values()];
   const ordered = (list: readonly SubtitleEntry<T>[]) => {
     const groups = new Map<string, SubtitleEntry<T>[]>();
-    for (const e of list) {
-      const key = languageTag(e.lang);
-      groups.set(key, [...(groups.get(key) ?? []), e]);
-    }
+    for (const e of list) groups.set(e.tag, [...(groups.get(e.tag) ?? []), e]);
     return [...groups.values()].flatMap((g) => [...g].sort((a, b) => kindRank(a) - kindRank(b)));
   };
   const pref = preferred?.trim() ?? '';
@@ -181,14 +181,27 @@ export function subtitleMenu<T extends SubtitleSource>(
   const placed = new Set<SubtitleEntry<T>>();
   const top: SubtitleEntry<T>[] = [];
   for (const w of wanted) {
-    const group = unique.filter((e) => !placed.has(e) && sameLanguage(w, e.lang));
+    const group = unique.filter((e) => !placed.has(e) && sameLanguage(w, e.tag));
     group.forEach((e) => placed.add(e));
     top.push(...ordered(group));
   }
   const rest = unique.filter((e) => !placed.has(e));
-  const others = [...ordered(rest.filter((e) => languageTag(e.lang))), ...rest.filter((e) => !languageTag(e.lang))];
+  const others = [...ordered(rest.filter((e) => e.tag)), ...rest.filter((e) => !e.tag)];
   const noMore = packaged || !serverLanguages.some((l) => languageTag(l));
-  return noMore ? { top: [...top, ...others], more: [] } : { top, more: others };
+  return numbered(noMore ? { top: [...top, ...others], more: [] } : { top, more: others });
+}
+
+/** The menu with the second and later of the entries that read the same
+ *  numbered, in its order ("English", "English (2)"). */
+function numbered<T extends SubtitleSource>(menu: SubtitleMenu<T>): SubtitleMenu<T> {
+  const seen = new Map<string, number>();
+  const number = (e: SubtitleEntry<T>): SubtitleEntry<T> => {
+    const n = (seen.get(e.label) ?? 0) + 1;
+    seen.set(e.label, n);
+    return n === 1 ? e : { ...e, label: `${e.label} (${n})` };
+  };
+  const top = menu.top.map(number);
+  return { top, more: menu.more.map(number) };
 }
 
 /** Every entry of the menu, in its order. */
@@ -201,10 +214,11 @@ export function menuEntries<T extends SubtitleSource>(menu: SubtitleMenu<T>): Su
  * preferred subtitle language (Settings) where the title has it and the
  * audio is in another language - not the language they chose, nor the audio
  * language they prefer - its first track in the menu that is not the
- * foreign-language parts only; else the foreign-language parts only in the
- * language of the audio playing, a text one before a picture one. Never
- * another language, and never a track because it comes first or a file
- * flags it default.
+ * foreign-language parts only, or its foreign-language parts only where the
+ * title has no other track in it (the phone app's defaultSubtitleTrack
+ * too); else the foreign-language parts only in the language of the audio
+ * playing, a text one before a picture one. Never another language, and
+ * never a track because it comes first or a file flags it default.
  */
 export function autoSubtitle(menu: SubtitleMenu, defaults: SubtitleDefaults): string | null {
   return autoSubtitleTrack(menuEntries(menu), defaults);
