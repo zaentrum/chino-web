@@ -82,9 +82,27 @@ test('a script or a region stays in the name, in brackets after the language, as
   assert.equal(languageName('spa-419'), 'Spanish (Latin America)');
   assert.equal(languageName('en-NZ'), 'English (New Zealand)');
   assert.equal(languageName('sr-Latn-RS'), 'Serbian (Latin, Serbia)');
-  // Never the dialect's own name.
+  // Never the dialect's own name: Intl.DisplayNames in its standard form,
+  // not its default.
   assert.notEqual(languageName('pt-BR'), 'Brazilian Portuguese');
   assert.notEqual(languageName('es-419'), 'Latin American Spanish');
+  for (const [code, name] of [
+    ['en-GU', 'English (Guam)'],
+    ['en-GB', 'English (United Kingdom)'],
+    ['en-US', 'English (United States)'],
+    ['pt-PT', 'Portuguese (Portugal)'],
+    ['fr-CA', 'French (Canada)'],
+    ['nl-BE', 'Dutch (Belgium)'],
+    ['de-CH', 'German (Switzerland)'],
+    ['es-ES', 'Spanish (Spain)'],
+  ]) {
+    assert.equal(languageName(code), name, code);
+  }
+  assert.deepEqual(audioLabels([{ lang: 'pt-BR' }, { lang: 'en-GB' }, { lang: 'nl-BE' }]), [
+    'Portuguese (Brazil)',
+    'English (United Kingdom)',
+    'Dutch (Belgium)',
+  ]);
   // A variant or an extension names nothing.
   assert.equal(languageName('de-1901'), 'German');
   assert.equal(languageName('en-US-x-custom'), 'English (United States)');
@@ -223,6 +241,15 @@ test('a language\'s own name before a region: the region in brackets after the l
     ['spa', 'Spanish (Latin America)', 'Spanish (Latin America)', 'es-419'],
     // The tag's region again says nothing more.
     ['es-419', 'Español (Latinoamérica)', 'Spanish (Latin America)', 'es-419'],
+    // A title in the dialect form names the region: said in the standard
+    // form, the language and its region in brackets.
+    ['por', 'Brazilian Portuguese', 'Portuguese (Brazil)', 'pt-BR'],
+    ['por', 'European Portuguese', 'Portuguese (Portugal)', 'pt-PT'],
+    ['spa', 'Latin American Spanish', 'Spanish (Latin America)', 'es-419'],
+    ['fre', 'Canadian French', 'French (Canada)', 'fr-CA'],
+    ['eng', 'British English', 'English (United Kingdom)', 'en-GB'],
+    ['dut', 'Flemish', 'Dutch (Belgium)', 'nl-BE'],
+    ['pt-BR', 'Brazilian Portuguese', 'Portuguese (Brazil)', 'pt-BR'],
   ];
   for (const [lang, title, label, tag] of cases) {
     assert.equal(subtitleLabel({ lang, title }), label, title);
@@ -230,6 +257,7 @@ test('a language\'s own name before a region: the region in brackets after the l
   }
   // Another region than the tag's stays a word.
   assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latinoamérica' }), 'Spanish (Spain) · Latinoamérica');
+  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latin American Spanish' }), 'Spanish (Spain) · Latin American Spanish');
   // A region among other words is a word.
   assert.equal(subtitleLabel({ lang: 'fre', title: 'Canada Commentaire' }), 'French · Canada Commentaire');
   // With the kind: once, after.

@@ -141,12 +141,14 @@ function intlName(tag: string, locales: readonly string[], form: 'standard' | 'd
 const ENGLISH_NAMES: Record<string, string> = { tl: 'Tagalog' };
 
 /** The language's name in the given UI locales, with the script and the
- *  region the code names in brackets after it, as the design system's word
- *  list writes them ("ger" → "German", "zh-Hans" → "Chinese (Simplified)",
- *  "pt-BR" → "Portuguese (Brazil)", "zh-Hant-TW" → "Chinese (Traditional,
- *  Taiwan)", "tl" → "Tagalog"); the code itself when Intl does not know it;
- *  "No dialogue" for "zxx", "Multiple languages" for "mul", "Other
- *  language" for "mis", "Unknown" for none. */
+ *  region the code names in brackets after it, as chino's word list writes
+ *  them ("ger" → "German", "zh-Hans" → "Chinese (Simplified)", "pt-BR" →
+ *  "Portuguese (Brazil)", "en-GU" → "English (Guam)", "zh-Hant-TW" →
+ *  "Chinese (Traditional, Taiwan)", "tl" → "Tagalog"): Intl.DisplayNames
+ *  with languageDisplay 'standard', never its default, which says
+ *  "Brazilian Portuguese". The code itself when Intl does not know it; "No
+ *  dialogue" for "zxx", "Multiple languages" for "mul", "Other language"
+ *  for "mis", "Unknown" for none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
   const notOne = NOT_ONE_LANGUAGE.get(primarySubtag(code));
   if (notOne) return notOne;
@@ -357,6 +359,31 @@ function regionsOf(base: string): Map<string, string> {
   return regions;
 }
 
+const DIALECTS = new Map<string, Map<string, string>>();
+
+/** The names Intl's dialect form gives a language's regional forms of its
+ *  own, in the language itself and in English, folded: "brazilian
+ *  portuguese" → "BR", "latin american spanish" → "419", "flemish" → "BE"
+ *  for "nl". A title that says one names the region, which the standard
+ *  form says in brackets ("Portuguese (Brazil)"). Made once per language,
+ *  when a title asks. */
+function dialectsOf(base: string): Map<string, string> {
+  const cached = DIALECTS.get(base);
+  if (cached) return cached;
+  const dialects = new Map<string, string>();
+  for (const locale of [base, 'en']) {
+    for (const region of REGION_CODES) {
+      const tag = `${base}-${region}`;
+      const dialect = intlName(tag, [locale], 'dialect');
+      if (dialect && dialect !== intlName(tag, [locale], 'standard') && !dialects.has(folded(dialect))) {
+        dialects.set(folded(dialect), region);
+      }
+    }
+  }
+  DIALECTS.set(base, dialects);
+  return dialects;
+}
+
 // The locales a language's name is looked up in: the languages a library
 // is likely to carry, each naming every other.
 const NAME_LOCALES = [...new Set([...Object.values(T_TO_1), 'fil', 'zh-Hans', 'zh-Hant'])];
@@ -425,7 +452,7 @@ function pieceSays(text: string, code: string | undefined, whole: boolean): Says
     const words = CHINESE_VARIETIES[t];
     if (words) return { words };
   }
-  const region = base ? regionsOf(base).get(folded(t)) : undefined;
+  const region = base ? regionsOf(base).get(folded(t)) ?? dialectsOf(base).get(folded(t)) : undefined;
   return region ? { region } : null;
 }
 
