@@ -4601,8 +4601,6 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
   return <PlayerPage itemId={itemId} extra={extra} />;
 }
 
-/** An extra that is not there: its title, an extra the title does not
- *  list, or a master that answers 400, 404 or 410. */
 /** One entry of the subtitles menu: a subtitle, or "off" - the one on
  *  checked and in the accent colour. */
 function SubtitleMenuItem({ label, on, onPick }: { label: string; on: boolean; onPick: () => void }) {
@@ -4621,6 +4619,8 @@ function SubtitleMenuItem({ label, on, onPick }: { label: string; on: boolean; o
   );
 }
 
+/** An extra that is not there: its title, an extra the title does not
+ *  list, or a master that answers 400, 404 or 410. */
 function TrailerNotAvailable({ online }: { online: TrailerRef | null }) {
   return (
     <StatusPage
