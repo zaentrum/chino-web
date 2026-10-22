@@ -61,13 +61,47 @@ test('a packaged title never switches to Medium or to a forced transcode on a st
   }
 });
 
-test('a transcode is retried in place first too, then rebuilt at its quality and position', () => {
+test('a transcode is retried in place first too, then steps down a rung at its position, saying so', () => {
   assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'medium', bufferedAheadSec: 1 })), { kind: 'nudge', at: 512.4 });
-  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'medium', loading: false, tries: 3 })), {
-    kind: 'reload', at: 512.4, quality: 'medium', forceTranscode: false, notice: null, label: 'reconnecting',
+  assert.equal(stallAction(stall({ mode: 'transcode', quality: 'medium', loading: false, tries: IN_PLACE_TRIES - 1 })).kind, 'resume-loading');
+  // The tries in place used up: one rung down, with the notice three
+  // stalls in 30 s give - not the same quality again.
+  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'medium', loading: false, tries: IN_PLACE_TRIES })), {
+    kind: 'reload', at: 512.4, quality: 'low', forceTranscode: false, notice: 'step', label: '→ low (auto, stalled)',
   });
+  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'high', bufferedAheadSec: 2, tries: IN_PLACE_TRIES })), {
+    kind: 'reload', at: 512.4, quality: 'medium', forceTranscode: false, notice: 'step', label: '→ medium (auto, stalled)',
+  });
+  // A direct stream moved onto the ladder steps down on it, still forced.
+  assert.deepEqual(stallAction(stall({ mode: 'remux', forcedTranscode: true, quality: 'medium', loading: false, tries: 3 })), {
+    kind: 'reload', at: 512.4, quality: 'low', forceTranscode: true, notice: 'step', label: '→ low (auto, stalled)',
+  });
+  // On the last rung there is nowhere lower: rebuilt there, no notice.
   assert.deepEqual(stallAction(stall({ mode: 'remux', forcedTranscode: true, quality: 'low', loading: false, tries: 3 })), {
     kind: 'reload', at: 512.4, quality: 'low', forceTranscode: true, notice: null, label: 'reconnecting',
+  });
+  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'low', bufferedAheadSec: 1, tries: 3 })), {
+    kind: 'reload', at: 512.4, quality: 'low', forceTranscode: false, notice: null, label: 'reconnecting',
+  });
+  // Fetching with nothing buffered is still a wait, however long.
+  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'high', tries: 9 })), { kind: 'wait' });
+});
+
+test("the stall watcher's step down on a named ladder goes where three stalls in 30 s go, and its notice names the rung", () => {
+  // A 720p original: high and medium are one "Medium (720p)" - past medium to low.
+  const ladder = onTheFlyLadder({ mode: 'transcode', listed: named(['Medium (720p)', 'Medium (720p)', 'Low (480p)']) });
+  const a = stallAction(stall({ mode: 'transcode', quality: 'high', loading: false, tries: IN_PLACE_TRIES, ladder }));
+  assert.deepEqual(a, { kind: 'reload', at: 512.4, quality: 'low', forceTranscode: false, notice: 'step', label: '→ Low (480p) (auto, stalled)' });
+  assert.equal(a.kind === 'reload' ? a.quality : null, downgradeStep({ mode: 'transcode', quality: 'high', forcedTranscode: false, ladder })?.quality);
+  assert.equal(stepDownNotice('Low (480p)', a.kind === 'reload' && a.notice ? a.notice : 'original-error'), "Switched to Low (480p) quality: the connection can't keep up.");
+  // A 360p original: one name, nowhere lower - rebuilt where it is.
+  const small = onTheFlyLadder({ mode: 'transcode', listed: named(['Lowest (360p)', 'Lowest (360p)', 'Lowest (360p)']) });
+  assert.deepEqual(stallAction(stall({ mode: 'transcode', quality: 'high', loading: false, tries: IN_PLACE_TRIES, ladder: small })), {
+    kind: 'reload', at: 512.4, quality: 'high', forceTranscode: false, notice: null, label: 'reconnecting',
+  });
+  // A packaged title is never stepped down by the watcher, ladder or not.
+  assert.deepEqual(stallAction(stall({ quality: 'auto', bufferedAheadSec: 2, tries: IN_PLACE_TRIES, ladder })), {
+    kind: 'reload', at: 512.4, quality: 'auto', forceTranscode: false, notice: null, label: 'reconnecting',
   });
 });
 

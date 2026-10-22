@@ -3088,7 +3088,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // whatever ?q= says) is retried in place - nudged where it stands, or its
   // loading restarted there - and rebuilt only when that keeps failing, at
   // the same quality (Auto, or the rung picked), never as a forced
-  // transcode. A
+  // transcode. A transcode is retried in place the same way, then steps
+  // down a rung, with the notice three stalls in 30 s give (and the same
+  // cool-down after it); on its last rung it is rebuilt there. A
   // direct stream moves onto the transcode ladder at Medium. Whatever is
   // rebuilt goes back to where it was: the old watcher recorded the
   // position in an offset nothing applied, so a stalled film restarted
@@ -3126,6 +3128,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         bufferedAheadSec: bufferedAheadOf(v),
         loading: hls ? hls.loadingEnabled : true,
         tries: s.tries,
+        ladder: ladderRef.current,
       });
       setReconnecting(true);
       reportEvent('stall_recover', {
@@ -3152,6 +3155,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           if (action.quality !== streamQualityRef.current) setStreamQuality(action.quality);
           setReloadKey((k) => k + 1);
           if (action.notice) setPendingNotice({ quality: action.quality, why: action.notice, ms: 5000 });
+          // A step down by the watcher holds off the three-stalls one, as
+          // its own step down does (onStall).
+          if (action.notice === 'step') lastAutoDowngradeAtRef.current = now;
           recordSwitch(action.label, 'stall', `8s no progress @ ${fmt(action.at)}`);
       }
     }, 2000);

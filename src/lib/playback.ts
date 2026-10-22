@@ -128,6 +128,9 @@ export interface StallState {
   loading: boolean;
   /** In-place tries since the playhead last moved. */
   tries: number;
+  /** The on-the-fly ladder, named (lib/qualities.ts onTheFlyLadder): where
+   *  a step down goes, and what it is called. */
+  ladder?: readonly LadderEntry[] | null;
 }
 
 export type StallAction =
@@ -149,12 +152,15 @@ export type StallAction =
  *
  * A packaged title (and a transcode, already on the ladder) is retried in
  * place, keeping its position; only when that has failed IN_PLACE_TRIES
- * times is the source rebuilt - same quality (a packaged title's Auto, or
- * the rung the viewer picked), never a forced transcode, and at the same
- * position. A direct stream (passthrough, remux, or a mode not known yet)
- * moves onto the server's transcode ladder at Medium, which can step the
- * bitrate down - at the same position too; so does the Original picked
- * again after such a move (onTranscodeLadder).
+ * times is the source rebuilt, at the same position. A packaged title is
+ * rebuilt at the same quality (its Auto, or the rung the viewer picked),
+ * never as a forced transcode. On the transcode ladder the player steps down
+ * as three stalls in 30 s do (downgradeStep: the next rung with another
+ * name), saying so ('step': "the connection can't keep up"); on its last
+ * rung it is rebuilt there. A direct stream (passthrough, remux, or a mode
+ * not known yet) moves onto the server's transcode ladder at Medium, which
+ * can step the bitrate down - at the same position too; so does the
+ * Original picked again after such a move (onTranscodeLadder).
  */
 export function stallAction(s: StallState): StallAction {
   const at = Math.max(0, s.positionSec || 0);
@@ -167,6 +173,11 @@ export function stallAction(s: StallState): StallAction {
           ? { kind: 'resume-loading', at }
           : { kind: 'wait' };
     if (inPlace.kind === 'wait' || s.tries < IN_PLACE_TRIES) return inPlace;
+    const step = s.mode === 'packaged' ? null : downgradeStep(s);
+    if (step) {
+      const name = s.ladder?.find((e) => e.name === step.quality)?.label ?? step.quality;
+      return { kind: 'reload', at, quality: step.quality, forceTranscode: step.forceTranscode, notice: step.why, label: `→ ${name} (auto, stalled)` };
+    }
     return {
       kind: 'reload',
       at,
