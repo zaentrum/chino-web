@@ -112,8 +112,10 @@ export function FailureDetails({ status, text }: { status: number | null; text?:
   const details = failureDetails(status) ?? (text || null);
   if (!details) return null;
   return (
-    <details className="text-xs text-chino-dim">
-      <summary className="font-mono cursor-pointer hover:text-chino-muted">details</summary>
+    // In the muted grey of labels and details: at least 4.5:1 on the
+    // canvas and on every surface (9.0 on surface), at 12 px.
+    <details className="text-xs text-chino-muted">
+      <summary className="font-mono cursor-pointer hover:text-chino-text">details</summary>
       <p className="mt-1 font-mono">{details}</p>
     </details>
   );

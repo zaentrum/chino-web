@@ -20,7 +20,7 @@ export default {
           fg: '#E6E6E6', // foreground.fg — primary text/titles
           text: '#C9D1D9', // foreground.fg-2 — body text, the glyph
           muted: '#AEB8C2', // foreground.fg-muted — labels/meta/captions
-          dim: '#6E7787', // foreground.fg-dim — helpers/hints/off
+          dim: '#7B8597', // foreground.fg-dim — helpers/hints/off; still 4.5:1 (5.15 on bg, 4.87 on surface)
           // brand
           accent: '#58A6FF', // brand.cloud-blue — chevron, links, CTA
           cyan: '#00A4DC', // brand.cloud-cyan — cursor, active stroke
