@@ -39,6 +39,19 @@ test("Settings' chrome in the mono face, lowercase: the heading, the sections' t
   for (const look of [PAGE_HEADING, SECTION_HEADING, QUIET_BUTTON]) assert.ok(classes(look).includes('font-mono'), look);
 });
 
+test("the auto-skip hint says what it skips in the player's word, the intro, and never series or session", () => {
+  const hint = SETTINGS_HINTS.autoSkipIntro;
+  assert.equal(hint, 'Skips the intro on every episode after the first one you watch in a row.');
+  assert.doesNotMatch(hint, /series|session|title sequence|click|\btap\b|automatically/i);
+  // The player's button skips the intro: one word for it.
+  const player = readFileSync(new URL('../components/PlayerPage.tsx', import.meta.url), 'utf8');
+  assert.match(player, /'Skip Intro'/);
+  // Capitals only where the sentence starts.
+  assert.deepEqual(hint.match(/[A-Z]/g), ['S']);
+  const settings = readFileSync(new URL('../components/sections/SettingsPage.tsx', import.meta.url), 'utf8');
+  assert.match(settings, /label="Auto-skip intros"\s+help=\{SETTINGS_HINTS\.autoSkipIntro\}/);
+});
+
 test('the auto-play hint names the up next card as it reads, in sentence case, and asks no one to click', () => {
   const hint = SETTINGS_HINTS.autoPlayNext;
   assert.equal(hint, 'Starts the next episode when the credits roll. Off, the up next card waits until you play it.');

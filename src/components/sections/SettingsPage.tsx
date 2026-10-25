@@ -70,7 +70,7 @@ export function SettingsPage() {
       >
         <Toggle
           label="Auto-skip intros"
-          help="Skips the title sequence on every episode after the first in a series session. Disabled for the first episode in a session so you still see the intro at least once."
+          help={SETTINGS_HINTS.autoSkipIntro}
           value={binge.autoSkipIntro}
           onChange={(v) => updateBinge({ autoSkipIntro: v })}
         />

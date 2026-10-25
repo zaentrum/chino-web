@@ -22,9 +22,10 @@ function sources(dir: string): string[] {
 const withoutComments = (code: string) =>
   code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"`])\/\/[^\n]*/g, '$1');
 
-/** The strings a .tsx file gives as a title, a label or a heading. */
+/** The strings a .tsx file gives as a title, a label, a heading, a hint or
+ *  a section's line. */
 function shownAttributes(code: string): string[] {
-  return [...withoutComments(code).matchAll(/\b(?:title|aria-label|label|placeholder)=["']([^"']+)["']/g)].map((m) => m[1]);
+  return [...withoutComments(code).matchAll(/\b(?:title|aria-label|label|placeholder|help|subtitle)=["']([^"']+)["']/g)].map((m) => m[1]);
 }
 
 /** What a viewer reads in a .tsx file: its elements' text, and the
@@ -65,8 +66,9 @@ test('"shows", as the grid says: the nav\'s tab, the search box, its suggestions
   const header = read('Header.tsx');
   assert.match(header, /placeholder="Search movies, shows…"/);
   assert.match(header, /s\.type === 'series' \? 'Show' : s\.type === 'movie' \? 'Movie'/);
-  // Nothing a viewer reads says Series: no element's text, no title or
-  // label in any case, none of the chrome's words - and no title's kind as
+  // Nothing a viewer reads says Series: no element's text, no title, label,
+  // hint or section's line in any case (Settings' "Auto-skip intros" said
+  // "a series session"), none of the chrome's words - and no title's kind as
   // the catalogue names it, which a {data.type} rendered in a badge reads
   // ("series", or "SERIES" capitalised by CSS).
   const found: string[] = [];

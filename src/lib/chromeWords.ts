@@ -28,6 +28,10 @@ export const SETTINGS_WORDS = {
  *  player's cards named as they read, never capitalised as names - and in
  *  words for every device, nothing to "click". */
 export const SETTINGS_HINTS = {
+  /** Under "Auto-skip intros": the intro the player's "Skip Intro" skips,
+   *  on another episode of the same show started within hours of the last
+   *  (settings.ts, isBingeContinuation) - the first one still shows it. */
+  autoSkipIntro: 'Skips the intro on every episode after the first one you watch in a row.',
   /** Under "Auto-play next episode". Off, the credits' "Up next" card
    *  stays, its "Play now" without a countdown. */
   autoPlayNext: 'Starts the next episode when the credits roll. Off, the up next card waits until you play it.',
