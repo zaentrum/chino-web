@@ -450,9 +450,11 @@ const PICTURE_OVER_BUTTONS_AND_DOTS = 'h-[calc(100%-104px)] sm:h-[calc(100%-112p
 
 /** A hero button: the title actions' height, look and words - lowercase,
  *  in the mono face - solid. One row on any phone, 320 px wide too: trailer
- *  is its icon alone there. */
+ *  is its icon alone below sm, and below 360 px, where the mono labels need
+ *  the room (play 82 px, see details 140, trailer 48, against 256), the
+ *  labelled buttons pad 8 px and see details leaves out its icon. */
 const HERO_BUTTON = `${ACTION_HEIGHT} ${ACTION_FOCUS} ${ACTION_LABEL} flex items-center justify-center gap-2 shrink-0 transition-colors text-sm lg:text-base font-medium`;
-const HERO_LABELLED = `${HERO_BUTTON} px-3 sm:px-4 lg:px-6`;
+const HERO_LABELLED = `${HERO_BUTTON} px-3 max-[359px]:px-2 sm:px-4 lg:px-6`;
 
 function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlideProps) {
   const pictureHeight = dots ? PICTURE_OVER_BUTTONS_AND_DOTS : PICTURE_OVER_BUTTONS;
@@ -568,7 +570,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
               disabled={!view.playId}
               className={`${HERO_LABELLED} ${OFF_LOOK} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
-              <Info aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
+              <Info aria-hidden className="w-4 h-4 lg:w-5 lg:h-5 max-[359px]:hidden" />
               <span>{SEE_DETAILS}</span>
             </button>
             {view.trailerHref ? (
