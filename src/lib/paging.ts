@@ -75,3 +75,11 @@ export function nextPageOffset<T>(state: PagingState<T>, key: string): number | 
   if (s.loading || s.error || !s.hasMore) return null;
   return s.items.length;
 }
+
+/** What a grid says under its last card, once every page is in: the count,
+ *  in the phone app's words - "12 shows in all.", "1 movie in all." Never
+ *  "catalogue", nor a wrong plural. */
+export function endOfList(count: number, kind: 'movies' | 'shows'): string {
+  const word = kind === 'movies' ? (count === 1 ? 'movie' : 'movies') : count === 1 ? 'show' : 'shows';
+  return `${count} ${word} in all.`;
+}

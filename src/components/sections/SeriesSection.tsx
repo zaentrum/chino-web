@@ -4,6 +4,7 @@ import { BrowseFilters, type BrowseQuery } from '../BrowseFilters';
 import { LoadingState } from '../LoadingState';
 import { CouldntLoad } from '../CouldntLoad';
 import { couldntLoad } from '../../lib/loadFailure';
+import { endOfList } from '../../lib/paging';
 import { usePagedItems } from '../../hooks/useItems';
 
 const PAGE_SIZE = 48;
@@ -66,7 +67,7 @@ export function SeriesSection() {
             </div>
           ) : (
             <div className="mt-6 text-center text-xs text-chino-muted">
-              You've reached the end of the catalogue — {items.length} shows.
+              {endOfList(items.length, 'shows')}
             </div>
           )}
         </>

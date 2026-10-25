@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  endOfList,
   freshPaging,
   nextPageOffset,
   offsetFor,
@@ -117,4 +118,12 @@ test('rows the server sends twice across a page boundary are kept once', () => {
   s = pageLoaded(s, ALL, 48, [{ id: 'm47' }, ...items(47, 48)], PAGE);
   assert.equal(s.items.length, 95);
   assert.equal(new Set(s.items.map((i) => i.id)).size, 95);
+});
+
+test('a grid ends as the phone app\'s does: the count in all, never "the end of the catalogue"', () => {
+  assert.equal(endOfList(12, 'shows'), '12 shows in all.');
+  assert.equal(endOfList(1, 'shows'), '1 show in all.');
+  assert.equal(endOfList(240, 'movies'), '240 movies in all.');
+  assert.equal(endOfList(1, 'movies'), '1 movie in all.');
+  for (const kind of ['shows', 'movies'] as const) assert.doesNotMatch(endOfList(3, kind), /catalogue|reached|end/i);
 });
