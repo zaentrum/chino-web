@@ -147,15 +147,15 @@ test('no server languages: the preferred language first, then the file\'s order;
     'Chinese (Simplified) · AI',
     'Chinese (Traditional)',
   ]);
-  // A preferred language with a script: its own first, then the rest of
-  // the language right after it, before the others.
+  // A preferred language with a script: the language first, the whole of
+  // it, its runs the bare one first, then alphabetical - before the others.
   assert.deepEqual(labels(menu(tracks, { preferred: 'zh-Hans', serverLanguages: [] }).top).slice(0, 4), [
     'Chinese',
     'Chinese (Simplified) · AI',
     'Chinese (Traditional)',
     'French',
   ]);
-  // And with a region: Brazil's, then Portugal's, then the others.
+  // And with a region: the language's runs, then the others.
   const portuguese: SubtitleSource[] = [
     { id: 'emb-2', lang: 'eng', embedded: true },
     { id: 'emb-3', lang: 'pt-PT', embedded: true },
@@ -168,6 +168,41 @@ test('no server languages: the preferred language first, then the file\'s order;
     'Portuguese (Portugal)',
     'English',
   ]);
+  // A preferred run that doesn't sort first keeps the language's order:
+  // the bare name, then the runs alphabetically - not its own run first,
+  // nor the rest of the language spliced in after it.
+  const chinese: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'zh-Hans', embedded: true },
+    { id: 'emb-3', lang: 'zh-Hant', embedded: true },
+    { id: 'emb-4', lang: 'chi', embedded: true },
+    { id: 'emb-5', lang: 'zh-CN', embedded: true },
+    { id: 'side-zh', lang: 'zh-Hant', title: 'AI' },
+    { id: 'emb-6', lang: 'eng', embedded: true },
+  ];
+  assert.deepEqual(labels(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }).top), [
+    'Chinese',
+    'Chinese (China)',
+    'Chinese (Simplified)',
+    'Chinese (Traditional)',
+    'Chinese (Traditional) · AI',
+    'English',
+  ]);
+  const portugal: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'pt-BR', embedded: true },
+    { id: 'emb-3', lang: 'eng', embedded: true },
+    { id: 'emb-4', lang: 'pt-PT', embedded: true },
+    { id: 'emb-5', lang: 'por', embedded: true },
+  ];
+  assert.deepEqual(labels(menu(portugal, { preferred: 'pt-PT', serverLanguages: [] }).top), [
+    'Portuguese',
+    'Portuguese (Brazil)',
+    'Portuguese (Portugal)',
+    'English',
+  ]);
+  // What comes on by itself is as before: the language's first track the
+  // preference takes, the bare one.
+  assert.equal(autoSubtitle(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'emb-4');
+  assert.equal(autoSubtitle(menu(portugal, { preferred: 'pt-PT', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'pt-PT' }), 'emb-5');
 });
 
 test('a packaged title follows the general rule: the viewer\'s language, the server\'s, then "more languages" for the rest', () => {

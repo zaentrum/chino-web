@@ -238,9 +238,10 @@ function standsForBoth<T extends SubtitleSource>(
  * the tracks are all listed on top: the viewer's language first, then the rest
  * in the file's order, by language as above. A language's tracks stay
  * together, the AI ones included, and a language with its region or script
- * counts as that language: where the ones on top leave out a region or a
- * script ("zh-Hant" beside a viewer's "zh-Hans"), those follow right after
- * them - "Chinese (Simplified) · AI" after "Chinese".
+ * counts as that language: the viewer's "zh-Hant" puts Chinese first, the
+ * whole of it, its runs in the order above - "Chinese", "Chinese (China)",
+ * "Chinese (Simplified)", "Chinese (Traditional)" - never their own run
+ * first and the rest of the language after it.
  *
  * Tracks that would read the same show once, where the first of them was,
  * and are never numbered ("English (2)"): the file's own before one the
@@ -276,12 +277,13 @@ export function subtitleMenu<T extends SubtitleSource>(
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
   const noMore = !serverLanguages.some((l) => languageTag(l));
   if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: alphabetical(rest).flatMap((g) => g.entries) };
-  // All on top: the rest of a language on top right after its last block
-  // there, the other languages after them in the file's order.
+  // All on top: the rest of a language on top joins its block there, the
+  // language's runs in order again (byRun), the other languages after them
+  // in the file's order.
   for (const group of rest) {
     let at = -1;
     if (group.base) for (let i = 0; i < blocks.length; i++) if (blocks[i].base === group.base) at = i;
-    if (at >= 0) blocks.splice(at + 1, 0, group);
+    if (at >= 0) blocks[at] = { base: blocks[at].base, entries: byRun([...blocks[at].entries, ...group.entries]) };
     else blocks.push(group);
   }
   return { top: blocks.flatMap((b) => b.entries), more: [] };
