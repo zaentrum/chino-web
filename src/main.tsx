@@ -39,7 +39,8 @@ function BootstrapLoading() {
 // by its case (lib/loadFailure.ts startupFailure) - "Can't reach the
 // server." only when nothing answered - with try again, which runs the
 // start-up again and shows the loading screen while it runs, and the status
-// under details. A 404 means the app and the server don't match. A page of
+// under details. A 404 means no chino server answers at the page's own
+// address - never an app update to check for, on the web. A page of
 // its own: its title the page's heading, not read out as it appears, as
 // every couldn't-load screen (CouldntLoad, StatusPage).
 function BootstrapError({ error, onRetry }: { error: unknown; onRetry: () => void }) {

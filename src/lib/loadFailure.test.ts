@@ -121,12 +121,14 @@ test("the start-up screen: \"couldn't load the app\", the reason by /api/config'
   // The server answered.
   assert.deepEqual(says(new HttpError(502, '/api/config')), ["couldn't load the app", 'The server ran into a problem.', 'HTTP 502 Bad Gateway']);
   assert.deepEqual(says(new HttpError(429, '/api/config')), ["couldn't load the app", 'The server is busy.', 'HTTP 429 Too Many Requests']);
-  // The app and the server don't match: no config route.
+  // No config route at the page's own address: no chino server answers
+  // there - on the web no app update can help.
   assert.deepEqual(says(new HttpError(404, '/api/config')), [
     "couldn't load the app",
-    "The server didn't accept the request. Check for an app update.",
+    'No chino server answers at this address.',
     'HTTP 404 Not Found',
   ]);
+  assert.equal(startupFailure(new HttpError(410)).reason, 'No chino server answers at this address.');
   // A page instead of the config: an answer that couldn't be read.
   assert.deepEqual(says(new SyntaxError('/api/config returned non-JSON content-type "text/html"')), [
     "couldn't load the app",
@@ -135,10 +137,15 @@ test("the start-up screen: \"couldn't load the app\", the reason by /api/config'
   ]);
   // Asked before anyone signs in: a 401 or a 403 is a request not accepted,
   // never an empty reason.
-  for (const s of [401, 403]) assert.equal(startupFailure(new HttpError(s)).reason, "The server didn't accept the request. Check for an app update.");
-  for (const s of [null, 0, 400, 401, 403, 404, 429, 500, 503]) {
+  for (const s of [400, 401, 403]) assert.equal(startupFailure(new HttpError(s)).reason, "The server didn't accept the request.");
+  for (const s of [null, 0, 400, 401, 403, 404, 410, 429, 500, 503]) {
     const { reason } = startupFailure(s === null ? new TypeError('x') : s === 0 ? new SyntaxError('x') : new HttpError(s));
     assert.notEqual(reason, '');
     assert.doesNotMatch(reason, /please|network|configuration|try again/i, String(s));
+    // Never an app update to check for: a web page has none.
+    assert.doesNotMatch(reason, /app update/i, String(s));
   }
+  // A list screen's "not found" still means the app and the server don't
+  // match, in every app (docs/chino, playback).
+  assert.equal(failureReason(caseOf(new HttpError(404), 'list')), "The server didn't accept the request. Check for an app update.");
 });

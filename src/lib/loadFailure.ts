@@ -102,18 +102,31 @@ export function couldntLoad(what: string): string {
   return `couldn't load ${what}`;
 }
 
+/** What the web app's start-up says where /api/config isn't there (404,
+ *  410): the page came from this address, so no chino server answers at it
+ *  - no app update can help a web page. */
+export const NO_SERVER_HERE = 'No chino server answers at this address.';
+
+/** What the web app's start-up says for any other request the server
+ *  didn't accept: the reason alone, without an app update to check for. */
+export const STARTUP_REFUSED = "The server didn't accept the request.";
+
 /**
  * What the start-up screen says when the app couldn't start - /api/config
  * failed: "couldn't load the app", the reason by the answer's case ("Can't
- * reach the server." only when nothing answered; a 404, the app and the
- * server not matching, says to check for an app update), "try again", and
- * the status under details. The config is asked before anyone signs in, so
- * a 401 or a 403 is a request the server didn't accept.
+ * reach the server." only when nothing answered), "try again", and the
+ * status under details. On the web the page and the config come from one
+ * address: a 404 means no chino server answers there, and nothing says to
+ * check for an app update (the TV and the phone apps keep that sentence).
+ * The config is asked before anyone signs in, so a 401 or a 403 is a
+ * request the server didn't accept.
  */
 export function startupFailure(error: unknown): { title: string; reason: string; status: number | null } {
   const status = failureStatus(error);
   const kind = failureCase(status, 'list');
-  return { title: couldntLoad('the app'), reason: failureReason(kind) || failureReason('refused'), status };
+  const reason =
+    status === 404 || status === 410 ? NO_SERVER_HERE : kind === 'refused' || !failureReason(kind) ? STARTUP_REFUSED : failureReason(kind);
+  return { title: couldntLoad('the app'), reason, status };
 }
 
 /** What a page of one thing says when it was removed. */
