@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { MediaCard } from '../MediaCard';
 import { BrowseFilters, type BrowseQuery } from '../BrowseFilters';
-import { LoadFailed, LoadingState } from '../LoadingState';
+import { LoadingState } from '../LoadingState';
+import { CouldntLoad } from '../CouldntLoad';
+import { couldntLoad } from '../../lib/loadFailure';
 import { usePagedItems } from '../../hooks/useItems';
 
 const PAGE_SIZE = 48;
@@ -39,7 +41,7 @@ export function MoviesSection() {
         <LoadingState variant="full" />
       ) : items.length === 0 && error ? (
         // Not "No movies match": nothing could be asked.
-        <LoadFailed what="the movies" onRetry={retry} />
+        <CouldntLoad title={couldntLoad('the movies')} error={error} onRetry={retry} />
       ) : items.length === 0 ? (
         <p className="text-chino-muted">No movies match the current filters.</p>
       ) : (
@@ -62,7 +64,7 @@ export function MoviesSection() {
           <div ref={sentinelRef} className="h-1" aria-hidden />
           {error ? (
             <div className="mt-6 flex justify-center">
-              <LoadFailed what="more movies" onRetry={retry} />
+              <CouldntLoad title={couldntLoad('more movies')} error={error} onRetry={retry} />
             </div>
           ) : hasMore ? (
             <div className="mt-6 flex justify-center">

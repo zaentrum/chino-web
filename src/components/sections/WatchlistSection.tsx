@@ -14,6 +14,8 @@ import {
 import { MediaCard } from '../MediaCard';
 import { MediaRow } from '../MediaRow';
 import { LoadingState } from '../LoadingState';
+import { CouldntLoad } from '../CouldntLoad';
+import { couldntLoad } from '../../lib/loadFailure';
 import {
   useWatchlists,
   getWatchlist,
@@ -47,6 +49,9 @@ function useWatchlistDetail(listId: string) {
   const token = auth.user?.access_token;
   const [detail, setDetail] = useState<WatchlistDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why it couldn't load, for the shelf to say (lib/loadFailure.ts).
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!token) {
@@ -58,10 +63,14 @@ function useWatchlistDetail(listId: string) {
     const load = () => {
       getWatchlist(token, listId)
         .then((d) => {
-          if (!cancelled) setDetail(d);
+          if (cancelled) return;
+          setDetail(d);
+          setError(null);
         })
-        .catch(() => {
-          if (!cancelled) setDetail(null);
+        .catch((e) => {
+          if (cancelled) return;
+          setDetail(null);
+          setError(e);
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -74,9 +83,14 @@ function useWatchlistDetail(listId: string) {
       cancelled = true;
       window.removeEventListener(LISTS_CHANGED, onChange);
     };
-  }, [token, listId]);
+  }, [token, listId, attempt]);
 
-  return { detail, loading };
+  const retry = () => {
+    setLoading(true);
+    setAttempt((a) => a + 1);
+  };
+
+  return { detail, loading, error, retry };
 }
 
 // Same ItemDetail → MediaCard mapping the grids use; shelves and the
@@ -121,7 +135,7 @@ interface ShelfProps {
  * out the per-list requests in parallel like the home rails do.
  */
 function WatchlistShelf({ list, onOpen }: ShelfProps) {
-  const { detail, loading } = useWatchlistDetail(list.id);
+  const { detail, loading, error, retry } = useWatchlistDetail(list.id);
   const shelfIds = (detail?.items ?? []).slice(0, SHELF_CAP);
   const { items, loading: itemsLoading } = useItemsByIds(shelfIds);
 
@@ -161,6 +175,8 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
       </div>
       {loading || itemsLoading ? (
         <LoadingState />
+      ) : error ? (
+        <CouldntLoad title={couldntLoad('this list')} error={error} onRetry={retry} />
       ) : (
         <p className="text-sm text-chino-muted">
           Save titles with the + button on any movie or show.
@@ -183,7 +199,7 @@ interface MoreViewProps {
  * list). Back returns to the hub.
  */
 function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
-  const { detail, loading } = useWatchlistDetail(list.id);
+  const { detail, loading, error, retry } = useWatchlistDetail(list.id);
   const { items, loading: itemsLoading } = useItemsByIds(detail?.items ?? []);
 
   const [busy, setBusy] = useState(false);
@@ -304,6 +320,8 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
       {/* Grid — reuses the Movies/Series grid shape + MediaCard. */}
       {loading || itemsLoading ? (
         <LoadingState variant="full" />
+      ) : error ? (
+        <CouldntLoad title={couldntLoad('this list')} error={error} onRetry={retry} />
       ) : items.length === 0 ? (
         <div className="text-chino-muted py-12 text-center">
           <Bookmark className="w-10 h-10 mx-auto mb-3 opacity-40" />
@@ -322,7 +340,7 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
 }
 
 export function WatchlistSection() {
-  const { lists, loading: listsLoading, create, rename, remove } = useWatchlists();
+  const { lists, loading: listsLoading, error: listsError, reload, create, rename, remove } = useWatchlists();
 
   // null → the hub; a list id → that list's MORE view. The id is
   // resolved against the live lists array so a deletion (here or in
@@ -372,6 +390,17 @@ export function WatchlistSection() {
       <div>
         <h1 className="text-4xl font-bold text-white mb-6">Watchlist</h1>
         <LoadingState variant="full" />
+      </div>
+    );
+  }
+
+  // The lists couldn't load, and there are none from before to show: say
+  // why, with try again (docs/chino, playback: when a page couldn't load).
+  if (listsError && lists.length === 0) {
+    return (
+      <div>
+        <h1 className="text-4xl font-bold text-white mb-6">Watchlist</h1>
+        <CouldntLoad title={couldntLoad('your watchlists')} error={listsError} onRetry={() => void reload()} />
       </div>
     );
   }

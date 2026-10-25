@@ -35,7 +35,8 @@ import {
   seriesPlayLabel,
 } from '../lib/titleActions';
 import { MediaRow } from './MediaRow';
-import { StatusPage } from './StatusPage';
+import { CouldntLoadPage, StatusPage } from './StatusPage';
+import { removedTitle } from '../lib/loadFailure';
 
 interface DetailPageProps {
   itemId: string;
@@ -49,7 +50,7 @@ interface DetailPageProps {
  */
 export function DetailPage({ itemId }: DetailPageProps) {
   const auth = useAuth();
-  const { data, loading, status, retry } = useItem(itemId);
+  const { data, loading, status, error, retry } = useItem(itemId);
   // Live refresh generation — bumps on catalog changes and on a bfcache
   // Back restore. Wired into the resume-position effect below so the
   // header Resume button refetches alongside the CW-driven row state
@@ -150,25 +151,11 @@ export function DetailPage({ itemId }: DetailPageProps) {
     }
   }, [redirectEpisodeId, itemId]);
 
-  // Not there, or not loaded: say which, with a way back — not a
-  // spinner that never stops.
-  if (status === 'not-found') {
-    return (
-      <StatusPage
-        title="Title not found"
-        message="There's no title at this address in the library. The link may be wrong, or the title has been removed."
-      />
-    );
-  }
-  if (status === 'error' && !data) {
-    return (
-      <StatusPage
-        title="Couldn't load this title"
-        message="The catalog didn't answer. Check your connection, or try again in a moment."
-        onRetry={retry}
-      />
-    );
-  }
+  // Not there, or not loaded: say which, and why, with a way back — not a
+  // spinner that never stops (docs/chino, playback: when a page couldn't
+  // load).
+  if (status === 'not-found') return <StatusPage title={removedTitle('title')} />;
+  if (status === 'error' && !data) return <CouldntLoadPage what="this title" thing="title" error={error} onRetry={retry} />;
 
   if (loading || !data || redirectEpisodeId) {
     return (

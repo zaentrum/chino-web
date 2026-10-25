@@ -4,6 +4,9 @@ import { useSearch } from '../hooks/useSearch';
 import { toApp } from '../lib/basepath';
 import { searchHeadline } from '../lib/search';
 import { ExtensionSlot } from './ExtensionSlot';
+import { FailureDetails, useSignInAgain } from './CouldntLoad';
+import { TRY_AGAIN, canTryAgain, caseOf, failureReason, failureStatus } from '../lib/loadFailure';
+import { RotateCw } from 'lucide-react';
 
 interface SearchPageProps {
   query: string;
@@ -51,7 +54,10 @@ export function SearchPage({ query }: SearchPageProps) {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-6">{headline}</h1>
+      {/* A search that couldn't be made says so in its heading, in the mono
+          face of an empty state's title, with the reason and try again
+          (docs/chino, playback: when a page couldn't load). */}
+      <h1 className={`text-2xl font-semibold ${catalogError && !loading ? 'font-mono mb-3' : 'mb-6'}`}>{headline}</h1>
 
       {!query ? (
         <p className="text-chino-muted">Type a movie or show title in the search bar to look it up.</p>
@@ -112,15 +118,36 @@ export function SearchPage({ query }: SearchPageProps) {
               does not exist — and do NOT offer to acquire something we simply
               could not look up. */}
           {!loading && catalogError ? (
-            <p className="search__error">
-              The catalog is unavailable right now, so we couldn't check whether
-              this title is in your library. Try again in a moment.
-            </p>
+            <SearchFailed error={catalogError} onRetry={search.retry} />
           ) : !loading && total === 0 && peopleList.length === 0 ? (
             <ExtensionSlot slot="search.empty" vars={{ q: query }} />
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+/** Under the heading of a search that couldn't be made: why, and try again.
+ *  The heading is the title ("couldn't search for …"). */
+function SearchFailed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const kind = caseOf(error, 'list');
+  useSignInAgain(kind === 'signed-out', onRetry);
+  const reason = failureReason(kind);
+  return (
+    <div role="alert" className="flex flex-col items-start gap-3">
+      {reason ? <p className="text-sm text-chino-muted">{reason}</p> : null}
+      {canTryAgain(kind) ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="h-12 px-5 inline-flex items-center gap-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium text-sm"
+        >
+          <RotateCw className="w-4 h-4" aria-hidden />
+          {TRY_AGAIN}
+        </button>
+      ) : null}
+      <FailureDetails status={failureStatus(error)} />
     </div>
   );
 }

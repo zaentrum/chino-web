@@ -1,0 +1,101 @@
+// node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  HttpError,
+  NO_ACCESS,
+  TRY_AGAIN,
+  canTryAgain,
+  caseOf,
+  couldntLoad,
+  failureCase,
+  failureDetails,
+  failureReason,
+  failureStatus,
+  removedTitle,
+  returnPath,
+  streamFailureReason,
+} from './loadFailure.ts';
+
+test('the case by the status alone: no answer, the server, busy, not accepted', () => {
+  // The design system's cases by cause, word for word.
+  assert.equal(failureReason(failureCase(null, 'list')), "Can't reach the server.");
+  assert.equal(failureReason(failureCase(408, 'list')), "Can't reach the server.");
+  for (const s of [500, 502, 503, 504]) assert.equal(failureReason(failureCase(s, 'list')), 'The server ran into a problem.', String(s));
+  assert.equal(failureReason(failureCase(429, 'list')), 'The server is busy.');
+  for (const s of [400, 405, 409, 415, 422]) {
+    assert.equal(failureReason(failureCase(s, 'list')), "The server didn't accept the request. Check for an app update.", String(s));
+  }
+  // On a list screen a list can't be removed: 404 and 410 mean the app and
+  // the server don't match.
+  assert.equal(failureCase(404, 'list'), 'refused');
+  assert.equal(failureCase(410, 'list'), 'refused');
+  // On a page of one thing, it was removed: back, not try again.
+  assert.equal(failureCase(404, 'one'), 'removed');
+  assert.equal(failureCase(410, 'one'), 'removed');
+  assert.equal(failureCase(403, 'one'), 'no-access');
+  assert.equal(failureCase(401, 'list'), 'signed-out');
+  for (const kind of ['removed', 'no-access', 'signed-out'] as const) {
+    assert.equal(canTryAgain(kind), false, kind);
+    assert.equal(failureReason(kind), '', kind);
+  }
+  for (const kind of ['unreachable', 'server', 'busy', 'refused'] as const) assert.equal(canTryAgain(kind), true, kind);
+});
+
+test("an error's status, never its message", () => {
+  assert.equal(failureStatus(new HttpError(503)), 503);
+  // The Watchlist's helpers carry the status on the error.
+  assert.equal(failureStatus(Object.assign(new Error('name exists'), { status: 409 })), 409);
+  // The network: fetch rejects with a TypeError - no answer.
+  assert.equal(failureStatus(new TypeError('Failed to fetch')), null);
+  assert.equal(caseOf(new TypeError('Failed to fetch'), 'list'), 'unreachable');
+  // A message that looks like a status is still no answer.
+  assert.equal(caseOf(new Error('chino-api 503'), 'list'), 'unreachable');
+  // An answer that couldn't be read is the server's.
+  assert.equal(caseOf(new SyntaxError('Unexpected token <'), 'list'), 'server');
+  assert.equal(caseOf(null, 'list'), 'unreachable');
+});
+
+test("the words: the screen's own in the title, the reason alone in the description, try again on the button", () => {
+  assert.equal(couldntLoad('the movies'), "couldn't load the movies");
+  assert.equal(couldntLoad('this title'), "couldn't load this title");
+  assert.equal(removedTitle('title'), "this title isn't in the library anymore");
+  assert.equal(removedTitle('person'), "this person isn't in the library anymore");
+  assert.equal(NO_ACCESS, "you don't have access to this");
+  assert.equal(TRY_AGAIN, 'try again');
+  // No reason asks to try again, says please, or guesses at the viewer's
+  // connection.
+  for (const kind of ['unreachable', 'server', 'busy', 'refused'] as const) {
+    assert.doesNotMatch(failureReason(kind), /try again|please|your connection|in a moment/i, kind);
+  }
+});
+
+test('details: the status and its reason phrase, for the people who fix things', () => {
+  assert.equal(failureDetails(503), 'HTTP 503 Service Unavailable');
+  assert.equal(failureDetails(429), 'HTTP 429 Too Many Requests');
+  assert.equal(failureDetails(418), 'HTTP 418');
+  assert.equal(failureDetails(null), null);
+});
+
+test('a refused sign-in comes back to the page of this site it was on', () => {
+  assert.equal(returnPath({ returnTo: '/movies?genre=Drama' }), '/movies?genre=Drama');
+  assert.equal(returnPath({ returnTo: '/chino/i/abc' }), '/chino/i/abc');
+  for (const bad of ['https://elsewhere.example/', '//elsewhere.example/x', '/\\elsewhere', '/auth/callback?code=1', 'movies', 42]) {
+    assert.equal(returnPath({ returnTo: bad }), null, String(bad));
+  }
+  assert.equal(returnPath(undefined), null);
+  assert.equal(returnPath('/movies'), null);
+});
+
+test("the player's give-up after every rung failed says the cause the same way", () => {
+  // hls.js: 0 or none when nothing answered.
+  assert.equal(streamFailureReason(0), "Can't reach the server.");
+  assert.equal(streamFailureReason(null), "Can't reach the server.");
+  assert.equal(streamFailureReason(undefined), "Can't reach the server.");
+  // The server answered: no guess about the viewer's connection.
+  assert.equal(streamFailureReason(502), 'The server ran into a problem.');
+  assert.equal(streamFailureReason(429), 'The server is busy.');
+  assert.equal(streamFailureReason(404), "The server didn't accept the request. Check for an app update.");
+  assert.equal(streamFailureReason(403), "The server didn't accept the request. Check for an app update.");
+  for (const s of [0, 403, 404, 429, 500]) assert.doesNotMatch(streamFailureReason(s), /please|unreachable|your connection/i, String(s));
+});

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { HttpError } from '../lib/loadFailure';
 
 /**
  * Multiple named watchlists — the lists-aware layer that sits on top of
@@ -49,7 +50,7 @@ function authHeaders(token: string): HeadersInit {
 
 export async function listWatchlists(token: string): Promise<Watchlist[]> {
   const r = await fetch('/api/v1/me/watchlists', { headers: authHeaders(token) });
-  if (!r.ok) throw new Error(`watchlists ${r.status}`);
+  if (!r.ok) throw new HttpError(r.status, 'watchlists');
   const j = (await r.json()) as { lists: Watchlist[] };
   return j.lists ?? [];
 }
@@ -86,7 +87,7 @@ export async function getWatchlist(token: string, listId: string): Promise<Watch
   const r = await fetch(`/api/v1/me/watchlists/${encodeURIComponent(listId)}`, {
     headers: authHeaders(token),
   });
-  if (!r.ok) throw new Error(`watchlist ${r.status}`);
+  if (!r.ok) throw new HttpError(r.status, 'watchlist');
   return (await r.json()) as WatchlistDetail;
 }
 
@@ -117,7 +118,7 @@ export async function getMemberships(
   const r = await fetch(`/api/v1/me/watchlists/memberships?ids=${qs}`, {
     headers: authHeaders(token),
   });
-  if (!r.ok) throw new Error(`memberships ${r.status}`);
+  if (!r.ok) throw new HttpError(r.status, 'memberships');
   const j = (await r.json()) as { memberships: Record<string, string[]> };
   return j.memberships ?? {};
 }
@@ -154,6 +155,9 @@ export function useWatchlists() {
   const reload = useCallback(async () => {
     if (!token) return;
     try {
+      // Loading again: a hub with nothing to show shows the loading state,
+      // not an empty one, while try again runs.
+      setLoading(true);
       setError(null);
       const next = await listWatchlists(token);
       setLists(next);

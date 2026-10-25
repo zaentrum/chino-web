@@ -9,6 +9,7 @@ import { PgsRenderer } from 'libpgs';
 import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
 import { MENU_HEADER, MENU_HEADERS, OVER_PICTURE, OVER_PICTURE_HOVER, PLAYBACK_RATES, speedName } from '../lib/playerMenus';
+import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -85,7 +86,7 @@ import { useDeviceCaps } from '../hooks/useDeviceCaps';
 import { useItem, type ExtraRef, type TrailerRef } from '../hooks/useItem';
 import { BugReportDialog } from './BugReportDialog';
 import { feedbackAvailable } from '../lib/runtimeConfig';
-import { StatusPage } from './StatusPage';
+import { CouldntLoadPage, StatusPage } from './StatusPage';
 
 interface Subtitle {
   id: string;
@@ -1155,9 +1156,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           networkFatals += 1;
           if (networkFatals > 3) {
             reportEvent('circuit_breaker', { kind: 'network', attempts: networkFatals, lastDetails: data.details });
+            // Every rung failed: the cause as a page says it
+            // (lib/loadFailure.ts) - no answer, the server, busy, not
+            // accepted - by the last answer's status, never a guess at
+            // the viewer's connection when the server answered.
             giveUp(
               'Playback failed',
-              'Stream unreachable — please check your connection.',
+              streamFailureReason(lastStreamErrorRef.current?.status),
               techDetail,
               String(data.type),
               String(data.details),
@@ -2781,7 +2786,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       });
       giveUp(
         extra ? "This trailer won't start" : "This title won't start",
-        `Nothing playable arrived from the server within ${STARTUP_DEADLINE_MS / 1000} seconds. Try again in a moment, or report it if it keeps happening.`,
+        `Nothing playable came from the server within ${STARTUP_DEADLINE_MS / 1000} seconds.`,
         tech,
         'StartupTimeout',
         // hls.js's details ("fragLoadError"), not its type: the reporter
@@ -3631,12 +3636,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   if (notFound) {
     if (extra) return <TrailerNotAvailable online={extra.online} />;
-    return (
-      <StatusPage
-        title="Title not found"
-        message="There's nothing to play at this address. The link may be wrong, or the title has been removed."
-      />
-    );
+    return <StatusPage title={removedTitle('title')} />;
   }
   // Where an extra does not play, its title's trailer online.
   const failureLink = extra ? onlineLink(extra.online) : undefined;
@@ -4708,7 +4708,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
  * did not load says so, with Try again.
  */
 export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: string }) {
-  const { data, status, retry } = useItem(itemId);
+  const { data, status, error, retry } = useItem(itemId);
   const found = data ? findExtra(data.extras, extraId) : null;
   const online = data ? pickTrailer(data.trailers) : null;
   // The same extra whatever refetch of the title brought it (useItem asks
@@ -4720,15 +4720,7 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
   );
 
   if (status === 'not-found' || (status === 'ok' && data && !found)) return <TrailerNotAvailable online={online} />;
-  if (status === 'error' && !data) {
-    return (
-      <StatusPage
-        title="Couldn't load the trailer"
-        message="The catalog didn't answer. Check your connection, or try again in a moment."
-        onRetry={retry}
-      />
-    );
-  }
+  if (status === 'error' && !data) return <CouldntLoadPage what="the trailer" thing="title" error={error} onRetry={retry} />;
   if (!extra) {
     return (
       <div className="fixed inset-0 bg-black text-white flex items-center justify-center">
@@ -4766,7 +4758,7 @@ function MenuChoice({ picked, onPick, children }: { picked: boolean; onPick: () 
 function TrailerNotAvailable({ online }: { online: TrailerRef | null }) {
   return (
     <StatusPage
-      title="Trailer not available"
+      title="trailer not available"
       message="There's no trailer at this address. The link may be wrong, or the trailer has been removed."
       link={onlineLink(online)}
     />
@@ -4779,7 +4771,7 @@ function onlineLink(online: TrailerRef | null | undefined): FailureLink | undefi
   if (!online?.url) return undefined;
   return {
     href: online.url,
-    label: (online.site || '').toLowerCase().includes('youtube') ? 'Watch on YouTube' : 'Watch Online',
+    label: (online.site || '').toLowerCase().includes('youtube') ? 'watch on YouTube' : 'watch online',
     icon: <Youtube className="w-4 h-4" aria-hidden />,
   };
 }
@@ -4823,16 +4815,16 @@ function PlaybackFailure({
         <button
           type="button"
           onClick={onRetry}
-          className="px-5 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 text-chino-bg font-medium"
+          className="px-5 py-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium"
         >
-          Try again
+          {TRY_AGAIN}
         </button>
         {link ? (
           <a
             href={link.href}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white inline-flex items-center gap-2"
+            className="px-5 py-2 bg-chino-surface-2 hover:bg-chino-border-2 text-white font-mono inline-flex items-center gap-2"
           >
             {link.icon}
             {link.label}
@@ -4841,17 +4833,17 @@ function PlaybackFailure({
         <button
           type="button"
           onClick={onBack}
-          className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+          className="px-5 py-2 bg-chino-surface-2 hover:bg-chino-border-2 text-white font-mono"
         >
-          Back
+          back
         </button>
         {onReport ? (
           <button
             type="button"
             onClick={onReport}
-            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white"
+            className="px-5 py-2 bg-chino-surface-2 hover:bg-chino-border-2 text-white font-mono"
           >
-            Report a bug
+            report a bug
           </button>
         ) : null}
       </div>

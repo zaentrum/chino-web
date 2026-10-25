@@ -4,6 +4,7 @@ import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
 import { withStreamToken } from '../lib/artwork';
 import { acceptLanguage } from '../lib/people';
+import { HttpError } from '../lib/loadFailure';
 
 /**
  * People search + filmography, served by katalog-api:
@@ -159,11 +160,11 @@ export function usePerson(personId: string | undefined, limit = 100) {
       headers,
     })
       .then((r) => {
-        if (r.status === 404) {
+        if (r.status === 404 || r.status === 410) {
           setNotFound(true);
           return null;
         }
-        if (!r.ok) throw new Error(`chino-api ${r.status}`);
+        if (!r.ok) throw new HttpError(r.status);
         return r.json() as Promise<PersonDetail>;
       })
       .then((j) => {

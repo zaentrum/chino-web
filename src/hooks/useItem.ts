@@ -4,6 +4,7 @@ import type { KatalogItem } from './useItems';
 import { useStreamToken } from './useStreamToken';
 import { useCatalogGen } from './useCatalogEvents';
 import { isNotFoundStatus } from '../lib/reportPolicy';
+import { HttpError } from '../lib/loadFailure';
 
 export interface CastEntry {
   // katalog-api now carries the catalogue person id on each cast/crew
@@ -115,6 +116,9 @@ export function useItem(itemId: string | undefined) {
   const [data, setData] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<ItemStatus>('loading');
+  // What the last failure was (an HttpError with its status, or the
+  // network's), for the page to say why (lib/loadFailure.ts).
+  const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -127,7 +131,7 @@ export function useItem(itemId: string | undefined) {
     })
       .then((r) => {
         if (r.status === 400 || isNotFoundStatus(r.status)) return null;
-        if (!r.ok) throw new Error(`chino-api ${r.status}`);
+        if (!r.ok) throw new HttpError(r.status);
         return r.json() as Promise<ItemDetail>;
       })
       .then((j) => {
@@ -144,11 +148,13 @@ export function useItem(itemId: string | undefined) {
           poster_url: j.poster_url && enc ? `${j.poster_url}?stream=${enc}` : j.poster_url,
           backdrop_url: j.backdrop_url && enc ? `${j.backdrop_url}?stream=${enc}` : j.backdrop_url,
         });
+        setError(null);
         setStatus('ok');
       })
       .catch((e) => {
         if (ctrl.signal.aborted || (e as Error).name === 'AbortError') return;
         // A refetch that failed leaves the item on screen as it was.
+        setError(e);
         setStatus((s) => (s === 'ok' ? s : 'error'));
       })
       .finally(() => {
@@ -162,5 +168,5 @@ export function useItem(itemId: string | undefined) {
     setAttempt((a) => a + 1);
   };
 
-  return { data, loading, status, retry };
+  return { data, loading, status, error, retry };
 }

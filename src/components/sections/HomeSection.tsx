@@ -4,6 +4,8 @@ import { LoadingState } from '../LoadingState';
 import { useItems } from '../../hooks/useItems';
 import { useContinueWatching, type ContinueWatchingEntry } from '../../hooks/useContinueWatching';
 import { useZapAppStartWarm } from '../../hooks/useZapPrefetch';
+import { CouldntLoad } from '../CouldntLoad';
+import { couldntLoad } from '../../lib/loadFailure';
 
 // cwToCard maps a continue-watching / next-up row to the MediaCard
 // props shape MediaRow consumes. Both rails share the same mapping —
@@ -124,20 +126,7 @@ export function HomeSection({ onNavigate }: HomeSectionProps) {
   return (
     <>
       {catalogDown ? (
-        <div role="alert" className="mb-8 p-6 bg-chino-surface border border-chino-border">
-          <h2 className="text-xl font-semibold text-white mb-1">The catalog is unavailable right now</h2>
-          <p className="text-sm text-chino-muted mb-4">
-            Your movies and shows couldn't be loaded. That's on the server's side, not yours — try again in a
-            moment.
-          </p>
-          <button
-            type="button"
-            onClick={retryCatalog}
-            className="px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg text-sm font-medium"
-          >
-            Try again
-          </button>
-        </div>
+        <CouldntLoad title={couldntLoad('the movies and shows')} error={recent.error} onRetry={retryCatalog} />
       ) : null}
 
       {hero ? (

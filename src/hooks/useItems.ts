@@ -13,6 +13,7 @@ import {
   type PageCursor,
   type PagingState,
 } from '../lib/paging';
+import { HttpError } from '../lib/loadFailure';
 
 export interface KatalogItem {
   id: string;
@@ -121,7 +122,7 @@ export function useItems(
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
     })
       .then((r) => {
-        if (!r.ok) throw new Error(`chino-api ${r.status}`);
+        if (!r.ok) throw new HttpError(r.status);
         return r.json() as Promise<ItemsResponse>;
       })
       .then((j) => {
@@ -218,7 +219,7 @@ export function usePagedItems(
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
     })
       .then((r) => {
-        if (!r.ok) throw new Error(`chino-api ${r.status}`);
+        if (!r.ok) throw new HttpError(r.status);
         return r.json() as Promise<ItemsResponse>;
       })
       .then((j) => {

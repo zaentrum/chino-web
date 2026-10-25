@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { MediaCard } from '../MediaCard';
 import { BrowseFilters, type BrowseQuery } from '../BrowseFilters';
-import { LoadFailed, LoadingState } from '../LoadingState';
+import { LoadingState } from '../LoadingState';
+import { CouldntLoad } from '../CouldntLoad';
+import { couldntLoad } from '../../lib/loadFailure';
 import { usePagedItems } from '../../hooks/useItems';
 
 const PAGE_SIZE = 48;
@@ -34,7 +36,7 @@ export function SeriesSection() {
         <LoadingState variant="full" />
       ) : items.length === 0 && error ? (
         // Not "No shows match": nothing could be asked.
-        <LoadFailed what="the shows" onRetry={retry} />
+        <CouldntLoad title={couldntLoad('the shows')} error={error} onRetry={retry} />
       ) : items.length === 0 ? (
         <p className="text-chino-muted">No shows match the current filters.</p>
       ) : (
@@ -56,7 +58,7 @@ export function SeriesSection() {
           <div ref={sentinelRef} className="h-1" aria-hidden />
           {error ? (
             <div className="mt-6 flex justify-center">
-              <LoadFailed what="more shows" onRetry={retry} />
+              <CouldntLoad title={couldntLoad('more shows')} error={error} onRetry={retry} />
             </div>
           ) : hasMore ? (
             <div className="mt-6 flex justify-center">

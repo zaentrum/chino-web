@@ -92,7 +92,7 @@ export interface SearchState {
 export function searchHeadline({ query, titles, people, loading, failed }: SearchState): string {
   if (!query) return 'Search the library';
   if (loading) return `Searching for "${query}"…`;
-  if (failed) return `Couldn't search for "${query}"`;
+  if (failed) return `couldn't search for "${query}"`;
   const found = titles + people;
   return found > 0 ? `${found} result${found === 1 ? '' : 's'} for "${query}"` : `No results for "${query}"`;
 }

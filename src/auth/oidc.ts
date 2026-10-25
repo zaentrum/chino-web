@@ -1,6 +1,7 @@
 import type { AuthProviderProps } from 'react-oidc-context';
 import { WebStorageStateStore } from 'oidc-client-ts';
 import { toApp } from '../lib/basepath';
+import { returnPath } from '../lib/loadFailure';
 import type { RuntimeConfig } from '../lib/runtimeConfig';
 
 const env = import.meta.env;
@@ -27,10 +28,14 @@ export function buildOidcConfig(cfg: RuntimeConfig): AuthProviderProps {
     scope: 'openid profile email',
     automaticSilentRenew: true,
     userStore: new WebStorageStateStore({ store: window.localStorage }),
-    onSigninCallback: () => {
-      // After handling the callback, send the user to the app HOME under
-      // the configured base (`/` or `/chino/`).
-      window.history.replaceState(null, '', toApp('/'));
+    onSigninCallback: (user) => {
+      // After handling the callback, back to the page a refused sign-in
+      // left (components/CouldntLoad.tsx useSignInAgain), else the app
+      // HOME under the configured base (`/` or `/chino/`). The router
+      // reads the address again on popstate.
+      const back = returnPath(user?.state);
+      window.history.replaceState(null, '', back ?? toApp('/'));
+      if (back) window.dispatchEvent(new PopStateEvent('popstate'));
     },
   };
 }

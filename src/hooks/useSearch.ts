@@ -14,6 +14,7 @@ import {
   type SearchRequest,
   type SearchSeries,
 } from '../lib/search';
+import { HttpError } from '../lib/loadFailure';
 
 /** A title a search found: a catalogue item, how it matched, and an
  *  episode's series. */
@@ -49,6 +50,7 @@ export function useSearch(q: string | undefined, request: SearchRequest) {
   const [data, setData] = useState<SearchResult | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(!!q);
+  const [attempt, setAttempt] = useState(0); // retry() searches again
   const key = JSON.stringify(request);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function useSearch(q: string | undefined, request: SearchRequest) {
     const get = (url: string) =>
       fetch(url, { signal: ctrl.signal, headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` } });
     const json = async <T,>(r: Response): Promise<T> => {
-      if (!r.ok) throw new Error(`chino-api ${r.status}`);
+      if (!r.ok) throw new HttpError(r.status);
       return (await r.json()) as T;
     };
     const asBefore = async (): Promise<SearchResult> => {
@@ -101,7 +103,7 @@ export function useSearch(q: string | undefined, request: SearchRequest) {
     return () => ctrl.abort();
     // key stands for request's fields.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, key, auth.isAuthenticated, auth.isLoading, gen]);
+  }, [q, key, auth.isAuthenticated, auth.isLoading, gen, attempt]);
 
   const withArtwork = useMemo(
     () =>
@@ -120,5 +122,7 @@ export function useSearch(q: string | undefined, request: SearchRequest) {
     [data, streamToken],
   );
 
-  return { data: withArtwork, error, loading };
+  const retry = () => setAttempt((a) => a + 1);
+
+  return { data: withArtwork, error, loading, retry };
 }

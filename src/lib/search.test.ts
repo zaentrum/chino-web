@@ -28,7 +28,10 @@ test('“No results” only when nothing matched at all', () => {
 
 test('a search under way, a failed search, no query', () => {
   assert.equal(searchHeadline(state({ loading: true, people: 1 })), 'Searching for "hoffman"…');
-  assert.equal(searchHeadline(state({ failed: true, people: 1 })), 'Couldn\'t search for "hoffman"');
+  // The title of the search that couldn't be made, lowercase in the mono
+  // face; the query keeps its case.
+  assert.equal(searchHeadline(state({ failed: true, people: 1 })), 'couldn\'t search for "hoffman"');
+  assert.equal(searchHeadline(state({ query: 'Harbour', failed: true })), 'couldn\'t search for "Harbour"');
   assert.equal(searchHeadline(state({ query: '' })), 'Search the library');
 });
 

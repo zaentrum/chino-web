@@ -3,7 +3,8 @@ import { ArrowLeft, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { MediaCard } from './MediaCard';
 import { MetaItem } from './MetaItem';
 import { PersonAvatar } from './PersonAvatar';
-import { StatusPage } from './StatusPage';
+import { CouldntLoadPage, StatusPage } from './StatusPage';
+import { removedTitle } from '../lib/loadFailure';
 import { usePerson, type PersonDetail } from '../hooks/usePeople';
 import { toApp } from '../lib/basepath';
 import { formatRoles } from '../lib/credits';
@@ -37,29 +38,10 @@ export function PersonPage({ personId }: PersonPageProps) {
     );
   }
 
-  // Not there, or not loaded: a failed request used to read "Person not
-  // found." as well.
-  if (notFound) {
-    return (
-      <StatusPage
-        title="Person not found"
-        message="There's no one at this address in the library. The link may be wrong, or the person's titles have been removed."
-      />
-    );
-  }
-  if (!data) {
-    return (
-      <StatusPage
-        title="Couldn't load this person"
-        message={
-          error
-            ? "The catalog didn't answer. Check your connection, or try again in a moment."
-            : 'Nothing came back for this person. Try again in a moment.'
-        }
-        onRetry={retry}
-      />
-    );
-  }
+  // Not there, or not loaded: say which, and why (docs/chino, playback:
+  // when a page couldn't load).
+  if (notFound) return <StatusPage title={removedTitle('person')} />;
+  if (!data) return <CouldntLoadPage what="this person" thing="person" error={error} onRetry={retry} />;
 
   const items = data.items ?? [];
   const credits = items.length;
