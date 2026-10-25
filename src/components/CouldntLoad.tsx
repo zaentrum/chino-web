@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { RotateCw } from 'lucide-react';
+import { ArrowLeft, RotateCw } from 'lucide-react';
+import { toApp } from '../lib/basepath';
 import {
   NO_ACCESS,
   TRY_AGAIN,
@@ -125,7 +126,10 @@ export function FailureDetails({ status, text }: { status: number | null; text?:
  * In the place of a list that couldn't load: the title the screen gives it
  * ("couldn't load the movies"), the reason ("Can't reach the server."), and
  * "try again". A list that answers 404 or 410 is the not-accepted case
- * (where 'list'); one the viewer may not see says so, with nothing to try.
+ * (where 'list'); one the viewer may not see says so, with back. Not a live
+ * region: it isn't read out when it appears (the design system's empty
+ * states), and its title is a heading at the level the page around it
+ * gives it.
  */
 export function CouldntLoad({
   title,
@@ -133,6 +137,7 @@ export function CouldntLoad({
   onRetry,
   where = 'list',
   quiet = false,
+  level = 2,
 }: {
   /** The screen's own words: couldntLoad('the movies'). */
   title: string;
@@ -142,15 +147,22 @@ export function CouldntLoad({
   /** "try again" quiet, for a part of a page whose emphasized action is
    *  another (a title's play): one emphasized action per view. */
   quiet?: boolean;
+  /** The title's heading level: 3 inside a section headed at level 2. */
+  level?: 2 | 3;
 }) {
   const status = failureStatus(error);
   const signIn = useSignInAgain(failureCase(status, where) === 'signed-out', onRetry);
   const kind = shownCase(failureCase(status, where), signIn);
   if (!kind) return <LoadingState />;
   const reason = failureReason(kind);
+  const Heading = level === 3 ? 'h3' : 'h2';
+  const back = () => {
+    if (window.history.length > 1) window.history.back();
+    else window.location.assign(toApp('/'));
+  };
   return (
-    <div role="alert" className="py-10 flex flex-col items-center gap-3 text-center">
-      <h2 className="font-mono text-lg font-semibold text-chino-fg">{kind === 'no-access' ? NO_ACCESS : title}</h2>
+    <div className="py-10 flex flex-col items-center gap-3 text-center">
+      <Heading className="font-mono text-lg font-semibold text-chino-fg">{kind === 'no-access' ? NO_ACCESS : title}</Heading>
       {reason ? <p className="text-sm text-chino-muted max-w-md">{reason}</p> : null}
       {onRetry && canTryAgain(kind) ? (
         <button
@@ -162,6 +174,16 @@ export function CouldntLoad({
         >
           <RotateCw className="w-4 h-4" aria-hidden />
           {TRY_AGAIN}
+        </button>
+      ) : kind === 'no-access' ? (
+        // Trying again can't help: the way back.
+        <button
+          type="button"
+          onClick={back}
+          className="mt-1 h-12 px-5 inline-flex items-center gap-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium text-sm"
+        >
+          <ArrowLeft className="w-4 h-4" aria-hidden />
+          back
         </button>
       ) : null}
       <FailureDetails status={status} />

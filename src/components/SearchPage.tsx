@@ -129,14 +129,15 @@ export function SearchPage({ query }: SearchPageProps) {
 }
 
 /** Under the heading of a search that couldn't be made: why, and try again.
- *  The heading is the title ("couldn't search for …"). */
+ *  The heading is the title ("couldn't search for …"). Not a live region:
+ *  it isn't read out when it appears (the design system's empty states). */
 function SearchFailed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   const signIn = useSignInAgain(caseOf(error, 'list') === 'signed-out', onRetry);
   const kind = shownCase(caseOf(error, 'list'), signIn);
   if (!kind) return null;
   const reason = failureReason(kind);
   return (
-    <div role="alert" className="flex flex-col items-start gap-3">
+    <div className="flex flex-col items-start gap-3">
       {reason ? <p className="text-sm text-chino-muted">{reason}</p> : null}
       {canTryAgain(kind) ? (
         <button

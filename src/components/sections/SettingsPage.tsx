@@ -106,6 +106,7 @@ export function SettingsPage() {
             title={couldntLoad('the subtitle languages')}
             error={subtitleLanguages.error}
             onRetry={subtitleLanguages.retry}
+            level={3}
           />
         ) : subtitleLanguages.list ? (
           <LanguageSetting
