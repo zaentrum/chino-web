@@ -47,11 +47,15 @@ test('the table: a height named by the step it reaches, with its own height', ()
     [2160, 'Ultra (2160p)'],
     [4320, 'Ultra (4320p)'],
   ];
+  // A frame's step up to 3% below a standard height is that height, a 16:9
+  // frame's and a height's alone too (docs/chino, playback: quality names).
+  const framed: Record<number, string> = { 479: 'Low (480p)', 719: 'Medium (720p)', 1079: 'High (1080p)', 2159: 'Ultra (2160p)' };
   for (const [h, name] of cases) {
     assert.equal(qualityName(h), name, String(h));
     // A 16:9 frame of the height, and the height alone, are named the same.
-    assert.equal(frameQualityName(Math.floor((h * 16 + 4) / 9), h), name, `16:9 ${h}`);
-    assert.equal(frameQualityName(0, h), name, `${h} alone`);
+    const frame = framed[h] ?? name;
+    assert.equal(frameQualityName(Math.floor((h * 16 + 4) / 9), h), frame, `16:9 ${h}`);
+    assert.equal(frameQualityName(0, h), frame, `${h} alone`);
   }
   for (const h of [0, -1, NaN, null, undefined]) assert.equal(qualityName(h), null, String(h));
 });
@@ -104,11 +108,30 @@ test("the spec's step rule: a step within 10% above or 3% below a standard heigh
   // A frame taller than the standard height is not pulled down to it: a
   // step 10% above 720 in a 770-line frame is its own.
   assert.equal(frameQualityName(1400, 770), 'Medium (788p)');
+  // A frame no wider than 16:9, its step its own height, keeps the 3% rule:
+  // a standard frame a few lines short is that frame, as on the TV.
+  const short: [number, number, string][] = [
+    [1272, 716, 'Medium (720p)'],
+    [956, 716, 'Medium (720p)'],
+    [1904, 1072, 'High (1080p)'],
+    [1912, 1076, 'High (1080p)'],
+    [1436, 1076, 'High (1080p)'],
+    [1440, 1072, 'High (1080p)'],
+    [704, 572, 'Low (576p)'],
+  ];
+  for (const [w, h, name] of short) assert.equal(frameQualityName(w, h), name, `${w}x${h}`);
+  // 4:3 and SD frames of a standard height, and one more than 3% short,
+  // are their own.
+  assert.equal(frameQualityName(720, 576), 'Low (576p)');
+  assert.equal(frameQualityName(640, 480), 'Low (480p)');
+  assert.equal(frameQualityName(1024, 768), 'Medium (768p)');
+  assert.equal(frameQualityName(1400, 1040), 'Medium (1040p)');
   // Every place a frame is named goes through the rule: an older server's
   // high by the frame it encodes, and a variant that comes with no name.
   const old = 'High (source resolution)';
   assert.equal(shownQualityName(old, { q: 'high', mode: 'transcode', width: 1666, height: 900 }), 'Medium (937p)');
   assert.equal(shownQualityName(old, { q: 'high', mode: 'transcode', width: 1916, height: 800 }), 'High (1080p)');
+  assert.equal(shownQualityName(old, { q: 'high', mode: 'transcode', width: 1904, height: 1072 }), 'High (1080p)');
   assert.equal(playingLabel({ uri: 'x/v9/playlist.m3u8', width: 1728, height: 720 }, null), 'Medium (972p)');
   assert.deepEqual(
     onTheFlyLadder({ mode: 'transcode', width: 1666, height: 900 }).map((e) => e.label),
