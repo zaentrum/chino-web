@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AUDIO_SETTING_TEXT, audioOptions, everyLanguage, sameChoice, subtitleOptions } from './settingsLanguages.ts';
 import { SUBTITLES_OFF_ROW } from './playerMenus.ts';
+import { LIBRARY_LANGUAGES } from './languages.ts';
 
 const labels = (o: { choices: { label: string }[] }) => o.choices.map((c) => c.label);
 
@@ -57,6 +58,12 @@ test('a server that names none offers every language by name, in alphabetical or
   // Each language once, and each by a name, never by its code.
   assert.equal(new Set(names).size, names.length);
   for (const c of o.choices.slice(1)) assert.notEqual(c.label.toLowerCase(), c.value.toLowerCase(), c.value);
+});
+
+test('every language a library carries is offered by its name, Tibetan too', () => {
+  const offered = everyLanguage(false).map((c) => c.value);
+  assert.deepEqual([...offered].sort(), [...LIBRARY_LANGUAGES].sort());
+  assert.equal(everyLanguage(false).find((c) => c.value === 'bo')?.label, 'Tibetan');
 });
 
 test('the audio setting: Original, then every language by name - no list fixed in the app', () => {

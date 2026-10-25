@@ -2,7 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  LIBRARY_LANGUAGES,
   autoSubtitleTrack,
+  builtInLanguageName,
   defaultSubtitleLang,
   defaultSubtitleTrack,
   forcedSubtitleTrack,
@@ -74,6 +76,47 @@ test('names by Intl.DisplayNames, in the UI language', () => {
   assert.equal(languageName('tl-PH'), 'Tagalog (Philippines)');
   assert.equal(languageName('fil'), 'Filipino');
   assert.equal(subtitleLabel({ lang: 'tgl', title: 'Tagalog' }), 'Tagalog');
+});
+
+test('every language a library carries has a built-in English name, as CLDR gives it: never a gap', () => {
+  const english = new Intl.DisplayNames(['en'], { type: 'language', languageDisplay: 'standard', fallback: 'none' });
+  for (const code of LIBRARY_LANGUAGES) {
+    const name = builtInLanguageName(code);
+    assert.ok(name, code);
+    assert.notEqual(name.toLowerCase(), code, code);
+    // The name Intl gives where it has one (here, with the full ICU data) -
+    // but Tagalog, as the word list says it.
+    assert.equal(name, code === 'tl' ? 'Tagalog' : english.of(code), code);
+  }
+  // By every spelling of the code.
+  for (const code of ['bo', 'bod', 'tib', 'BO']) assert.equal(builtInLanguageName(code), 'Tibetan', code);
+  assert.equal(builtInLanguageName('qaa'), '');
+});
+
+test('a language Intl can\'t name (Tibetan in Chrome) reads by its built-in English name, never the code', () => {
+  // An Intl as Chrome's: no name for Tibetan, with or without a region.
+  const Real = Intl.DisplayNames;
+  class WithoutTibetan extends Real {
+    of(code: string): string | undefined {
+      return this.resolvedOptions().type === 'language' && /^bo(-|$)/i.test(code) ? undefined : super.of(code);
+    }
+  }
+  (Intl as { DisplayNames: typeof Intl.DisplayNames }).DisplayNames = WithoutTibetan;
+  try {
+    // A locale no other test has asked, so its names come from this Intl.
+    const locales = ['en-AU'];
+    assert.equal(languageName('bo', locales), 'Tibetan');
+    assert.equal(languageName('tib', locales), 'Tibetan');
+    assert.equal(languageName('bod', locales), 'Tibetan');
+    // Its region as Intl names it, in brackets after the name.
+    assert.equal(languageName('bo-CN', locales), 'Tibetan (China)');
+    assert.equal(languageName('bo-IN', locales), 'Tibetan (India)');
+    // The others as Intl names them; a code neither knows stays as it came.
+    assert.equal(languageName('de', locales), 'German');
+    assert.equal(languageName('qaa', locales), 'qaa');
+  } finally {
+    (Intl as { DisplayNames: typeof Intl.DisplayNames }).DisplayNames = Real;
+  }
 });
 
 test('a script or a region stays in the name, in brackets after the language, as the word list writes it', () => {

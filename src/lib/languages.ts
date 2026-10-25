@@ -144,21 +144,70 @@ function intlName(tag: string, locales: readonly string[], form: 'standard' | 'd
 // another: CLDR folds "tl" into "fil" and calls it Filipino.
 const ENGLISH_NAMES: Record<string, string> = { tl: 'Tagalog' };
 
+// The English name of every language a library is likely to carry (T_TO_1),
+// as CLDR gives it, for a browser whose Intl has none: Chrome names no
+// Tibetan ("bo"), and a menu row or a Settings choice is never a code.
+const BUILT_IN_NAMES: Record<string, string> = {
+  af: 'Afrikaans', am: 'Amharic', ar: 'Arabic', az: 'Azerbaijani', be: 'Belarusian', bn: 'Bangla',
+  bo: 'Tibetan', bs: 'Bosnian', bg: 'Bulgarian', ca: 'Catalan', cs: 'Czech', cy: 'Welsh', da: 'Danish',
+  de: 'German', el: 'Greek', en: 'English', et: 'Estonian', eu: 'Basque', fa: 'Persian', fi: 'Finnish',
+  fr: 'French', ga: 'Irish', gl: 'Galician', gu: 'Gujarati', he: 'Hebrew', hi: 'Hindi', hr: 'Croatian',
+  hu: 'Hungarian', hy: 'Armenian', id: 'Indonesian', is: 'Icelandic', it: 'Italian', ja: 'Japanese',
+  kn: 'Kannada', ka: 'Georgian', kk: 'Kazakh', km: 'Khmer', ko: 'Korean', lo: 'Lao', la: 'Latin',
+  lv: 'Latvian', lt: 'Lithuanian', lb: 'Luxembourgish', ml: 'Malayalam', mr: 'Marathi', mk: 'Macedonian',
+  mt: 'Maltese', mn: 'Mongolian', mi: 'Māori', ms: 'Malay', my: 'Burmese', ne: 'Nepali', nl: 'Dutch',
+  nn: 'Norwegian Nynorsk', nb: 'Norwegian Bokmål', no: 'Norwegian', pa: 'Punjabi', pl: 'Polish',
+  pt: 'Portuguese', ps: 'Pashto', ro: 'Romanian', ru: 'Russian', si: 'Sinhala', sk: 'Slovak',
+  sl: 'Slovenian', so: 'Somali', es: 'Spanish', sq: 'Albanian', sr: 'Serbian', sw: 'Swahili',
+  sv: 'Swedish', ta: 'Tamil', te: 'Telugu', tl: 'Tagalog', th: 'Thai', tr: 'Turkish', uk: 'Ukrainian',
+  ur: 'Urdu', uz: 'Uzbek', vi: 'Vietnamese', yi: 'Yiddish', zh: 'Chinese', zu: 'Zulu',
+};
+
+/** The built-in English name of a language a library is likely to carry
+ *  ("bo" → "Tibetan"), or '' for one the table doesn't have. */
+export function builtInLanguageName(code: unknown): string {
+  return BUILT_IN_NAMES[normalizeLang(code)] ?? '';
+}
+
+/** What Intl calls a script or a region in the locales, or ''. */
+function partName(type: 'script' | 'region', code: string, locales: readonly string[]): string {
+  if (!code) return '';
+  try {
+    return new Intl.DisplayNames([...locales], { type, fallback: 'none' }).of(code) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/** A built-in name with the script and the region the tag names in
+ *  brackets, as Intl names those ("Tibetan (China)"); the bare name where
+ *  Intl names neither. */
+function builtInName(base: string, tag: string, locales: readonly string[]): string {
+  const parts = [partName('script', scriptOf(tag), locales), partName('region', regionOf(tag), locales)].filter(Boolean);
+  return parts.length ? `${base} (${parts.join(', ')})` : base;
+}
+
 /** The language's name in the given UI locales, with the script and the
  *  region the code names in brackets after it, as chino's word list writes
  *  them ("ger" → "German", "zh-Hans" → "Chinese (Simplified)", "pt-BR" →
  *  "Portuguese (Brazil)", "en-GU" → "English (Guam)", "zh-Hant-TW" →
  *  "Chinese (Traditional, Taiwan)", "tl" → "Tagalog"): Intl.DisplayNames
  *  with languageDisplay 'standard', never its default, which says
- *  "Brazilian Portuguese". The code itself when Intl does not know it; "No
- *  dialogue" for "zxx", "Multiple languages" for "mul", "Other language"
- *  for "mis", "Unknown" for none. */
+ *  "Brazilian Portuguese". Where Intl has no name for a language a library
+ *  is likely to carry (Chrome's for Tibetan), its built-in English name,
+ *  never the code: "bo" → "Tibetan", "bo-CN" → "Tibetan (China)". The code
+ *  itself only for one neither knows ("qaa"); "No dialogue" for "zxx",
+ *  "Multiple languages" for "mul", "Other language" for "mis", "Unknown"
+ *  for none. */
 export function languageName(code: unknown, locales: readonly string[] = ['en']): string {
   const notOne = NOT_ONE_LANGUAGE.get(primarySubtag(code));
   if (notOne) return notOne;
   const tag = languageTag(code);
   if (!tag) return UNKNOWN_LANGUAGE;
-  const name = intlName(namedTag(tag), locales, 'standard');
+  const named = namedTag(tag);
+  const intl = intlName(named, locales, 'standard');
+  // A name that is only the code again names nothing.
+  const name = intl.toLowerCase() === named.toLowerCase() ? '' : intl;
   const english = ENGLISH_NAMES[normalizeLang(code)];
   if (english && /^en(-|$)/i.test(locales[0] ?? '')) {
     // Its script and region as Intl names them, after the word list's name.
@@ -166,6 +215,8 @@ export function languageName(code: unknown, locales: readonly string[] = ['en'])
     return name && intlBase && name.startsWith(intlBase) ? english + name.slice(intlBase.length) : english;
   }
   if (name) return name;
+  const builtIn = builtInLanguageName(code);
+  if (builtIn) return builtInName(builtIn, named, locales);
   return typeof code === 'string' ? code.trim() : tag;
 }
 
