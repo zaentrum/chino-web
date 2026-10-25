@@ -8,7 +8,7 @@ import { PgsRenderer } from 'libpgs';
 // glue. Keeps libpgs's worker out of the main bundle.
 import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
-import { MENU_HEADER, MENU_HEADERS, PLAYBACK_RATES, speedName } from '../lib/playerMenus';
+import { MENU_HEADER, MENU_HEADERS, OVER_PICTURE, OVER_PICTURE_HOVER, PLAYBACK_RATES, speedName } from '../lib/playerMenus';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -3946,9 +3946,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
       {/* The toasts at the top - this one, reconnecting, Tap to unmute -
           5rem under the status bar's inset (--chino-safe-top), under the
-          top bar, which pads for it. */}
+          top bar, which pads for it. Each on a solid surface, never a
+          see-through one over the picture (OVER_PICTURE). */}
       {qualityNotice && (
-        <div className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-sm text-white shadow-lg">
+        <div role="status" className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm ${OVER_PICTURE}`}>
           {qualityNotice}
         </div>
       )}
@@ -3969,7 +3970,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       )}
 
       {reconnecting && (
-        <div className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-chino-red/20 text-chino-red text-sm border border-chino-red/40 shadow-lg">
+        <div className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm ${OVER_PICTURE}`}>
           Stream paused — reconnecting…
         </div>
       )}
@@ -3977,7 +3978,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {autoplayMuted && !needsClickToPlay && (
         <button
           onClick={startUnmuted}
-          className="absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 bg-black/70 hover:bg-black/85 text-sm flex items-center gap-2 transition-colors"
+          className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm flex items-center gap-2 transition-colors ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
         >
           <VolumeX className="w-4 h-4" />
           <span>Tap to unmute</span>

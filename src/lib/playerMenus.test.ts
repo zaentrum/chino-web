@@ -1,7 +1,7 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MENU_HEADER, MENU_HEADERS, PLAYBACK_RATES, speedName } from './playerMenus.ts';
+import { MENU_HEADER, MENU_HEADERS, OVER_PICTURE, OVER_PICTURE_HOVER, PLAYBACK_RATES, speedName } from './playerMenus.ts';
 
 test('the menus are headed in lowercase, in the mono face', () => {
   assert.deepEqual(Object.values(MENU_HEADERS), ['subtitles', 'audio', 'quality', 'speed', 'timing']);
@@ -13,4 +13,11 @@ test('a speed is "normal" at 1, else its rate without a trailing zero', () => {
   assert.equal(speedName(2.0), '2x');
   assert.equal(speedName(3), '3x');
   for (const rate of PLAYBACK_RATES) assert.doesNotMatch(speedName(rate), /\.0x$|Normal|\(1x\)/, String(rate));
+});
+
+test('what sits over the picture sits on a solid surface', () => {
+  for (const cls of `${OVER_PICTURE} ${OVER_PICTURE_HOVER}`.split(/\s+/)) {
+    if (/^(hover:)?bg-/.test(cls)) assert.doesNotMatch(cls, /\/\d+$|black|white|transparent/, cls);
+  }
+  assert.match(OVER_PICTURE, /\bbg-chino-surface\b/);
 });

@@ -24,3 +24,11 @@ export function speedName(rate: number): string {
   if (rate === 1) return 'normal';
   return `${Number(rate.toFixed(2))}x`;
 }
+
+/** A line or a chip the player puts over the picture - the quality notice,
+ *  "reconnecting", "tap to unmute": on a solid surface, never a see-through
+ *  one, whatever the picture under it (docs/chino, playback: the player's
+ *  menus). */
+export const OVER_PICTURE = 'bg-chino-surface border border-chino-border-2 text-chino-fg shadow-lg';
+/** Its hover, where it is a button. */
+export const OVER_PICTURE_HOVER = 'hover:bg-chino-surface-2';
