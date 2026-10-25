@@ -10,6 +10,8 @@ import { useZapTelemetry } from '../../hooks/useZapTelemetry';
 import { stampFirstCardSeek } from '../../hooks/useZapMidpoint';
 import { toApp } from '../../lib/basepath';
 import { ZapCard } from '../zap/ZapCard';
+import { CouldntLoad } from '../CouldntLoad';
+import { couldntLoad } from '../../lib/loadFailure';
 import type { KatalogItem } from '../../hooks/useItems';
 import type { ZapFeatures } from '../zap/ZapCard';
 
@@ -260,18 +262,29 @@ export function ZapSection() {
   }, [prefs, telemetry]);
 
   // ---- Empty / loading states ----
+  // In the pager's place, under the header and above the phone's bottom
+  // bar, which stay: the way out is never covered.
   if (!auth.isAuthenticated) {
-    return <EmptyState title="Sign in to start zapping" />;
+    return <EmptyState title="sign in to start zapping" />;
   }
   if (feed.loading && feed.queue.length === 0) {
     return (
-      <div className="fixed inset-0 bg-black text-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
+      <ZapStateShell>
+        <Loader2 className="w-8 h-8 animate-spin text-white" aria-label="Loading" />
+      </ZapStateShell>
+    );
+  }
+  // Nothing queued and the lists didn't answer: it couldn't load, and
+  // says why - never that there is nothing to zap.
+  if (feed.queue.length === 0 && feed.error) {
+    return (
+      <ZapStateShell>
+        <CouldntLoad title={couldntLoad('the movies and shows')} error={feed.error} onRetry={feed.retry} />
+      </ZapStateShell>
     );
   }
   if (feed.empty) {
-    return <EmptyState title="Nothing to zap right now" subtitle="Add some movies or shows to the catalogue, or come back after the next ingest cycle." />;
+    return <EmptyState title="nothing to zap yet" subtitle="Zap plays the movies and shows you haven't watched yet." />;
   }
 
   // Visible-set: render the current card + its immediate neighbours.
@@ -368,13 +381,24 @@ function ZapPlaceholder({ item }: { item: KatalogItem }) {
   );
 }
 
+/** The pager's place, for what shows instead of its cards. */
+function ZapStateShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="-m-4">
+      <div className="h-[calc(100dvh-var(--chino-header)-var(--chino-bottom-bar))] md:h-[calc(100dvh-var(--chino-header))] bg-black text-white flex flex-col items-center justify-center px-6 text-center">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="fixed inset-0 bg-black text-white flex flex-col items-center justify-center px-6 text-center">
-      <ZapIcon className="w-12 h-12 text-chino-accent mb-4" />
-      <h2 className="text-xl font-semibold">{title}</h2>
+    <ZapStateShell>
+      <ZapIcon className="w-12 h-12 text-chino-accent mb-4" aria-hidden />
+      <h2 className="font-mono text-xl font-semibold">{title}</h2>
       {subtitle ? <p className="mt-2 text-chino-muted max-w-md">{subtitle}</p> : null}
-    </div>
+    </ZapStateShell>
   );
 }
 

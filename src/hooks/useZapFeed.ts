@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import type { ZapItemFeatures } from './useZapPreferences';
+import { HttpError } from '../lib/loadFailure';
 
 /** ε for ε-greedy sampling: 60 % of picks ignore the score and pick
  *  uniformly from the pool. Higher than a textbook ε because on a
@@ -81,8 +82,16 @@ interface UseZapFeedResult {
    *  every advance. */
   refill: () => void;
   loading: boolean;
-  /** Pool is exhausted (no more candidates after dedup). Tell the user. */
+  /** Pool is exhausted (no more candidates after dedup). Tell the user.
+   *  Only once the lists answered: never after a failed load. */
   empty: boolean;
+  /** Why the pool couldn't be built - the movies and the shows lists both
+   *  failed (an HttpError with its status, or the network's); null when
+   *  either answered. With nothing queued, the screen says it couldn't
+   *  load, never that there is nothing (lib/loadFailure.ts). */
+  error: unknown;
+  /** Ask the lists again. */
+  retry: () => void;
 }
 
 /**
@@ -111,6 +120,8 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
   const [queue, setQueue] = useState<KatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [empty, setEmpty] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
 
   // Session-shown set is a ref because we don't want it to trigger
   // re-renders — it's a filter, not display state.
@@ -139,14 +150,18 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
     const ctrl = new AbortController();
     setLoading(true);
 
-    const fetchList = (qs: string): Promise<KatalogItem[]> =>
+    // A list's items, or why it couldn't load.
+    const fetchList = (qs: string): Promise<{ items: KatalogItem[]; error: unknown }> =>
       fetch(`/api/v1/items?${qs}`, {
         signal: ctrl.signal,
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j: { items?: KatalogItem[] } | null) => j?.items ?? [])
-        .catch(() => [] as KatalogItem[]);
+        .then((r) => {
+          if (!r.ok) throw new HttpError(r.status);
+          return r.json() as Promise<{ items?: KatalogItem[] } | null>;
+        })
+        .then((j) => ({ items: j?.items ?? [], error: null }))
+        .catch((e: unknown) => ({ items: [] as KatalogItem[], error: e }));
 
     // Watched IDs — used to dedupe. /me/watched returns the full
     // history; we only need the ids so a 200-item ceiling is plenty.
@@ -193,7 +208,19 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
       fetchList(`type=episode&sort=newest&limit=${POOL_SIZE_PER_TYPE}`),
       fetchWatched(),
       fetchPackagedIDs(),
-    ]).then(([movies, series, episodes, watched, packagedIds]) => {
+    ]).then(([movieList, seriesList, episodeList, watched, packagedIds]) => {
+      if (ctrl.signal.aborted) return;
+      // Neither the movies nor the shows answered: the pool couldn't be
+      // built, which is not an empty library. The episodes are optional.
+      if (movieList.error && seriesList.error) {
+        setPool([]);
+        setError(movieList.error);
+        setEmpty(false);
+        setLoading(false);
+        return;
+      }
+      setError(null);
+      const [movies, series, episodes] = [movieList.items, seriesList.items, episodeList.items];
       watchedRef.current = watched;
       // Stamp watched_at locally too so the dedup catches items that
       // were marked watched in this session by another tab.
@@ -231,7 +258,14 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
     // bearer-Authorization paths in chino-api handle our needs), and
     // listing it as a dep used to double-fire the pool refetch on
     // cold mount as the token transitioned null → string.
-  }, [auth.isLoading, auth.isAuthenticated, token]);
+  }, [auth.isLoading, auth.isAuthenticated, token, attempt]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setEmpty(false);
+    setLoading(true);
+    setAttempt((a) => a + 1);
+  }, []);
 
   // Sample a batch out of the pool. Stable across renders because all
   // scoring goes through scoreItemRef — no hook-input churn.
@@ -401,6 +435,8 @@ export function useZapFeed(opts: UseZapFeedOpts = {}): UseZapFeedResult {
     markShown,
     refill,
     loading,
-    empty,
-  }), [queue, markShown, refill, loading, empty]);
+    empty: empty && !error,
+    error,
+    retry,
+  }), [queue, markShown, refill, loading, empty, error, retry]);
 }
