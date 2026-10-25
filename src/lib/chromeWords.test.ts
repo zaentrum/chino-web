@@ -12,6 +12,7 @@ import {
   SECTION_HEADING,
   SEE_ALL,
   SEE_ALL_LOOK,
+  SETTINGS_HINTS,
   SETTINGS_WORDS,
   START_PLAYBACK,
   START_PLAYBACK_BUTTON,
@@ -34,6 +35,24 @@ test("Settings' chrome in the mono face, lowercase: the heading, the sections' t
   });
   for (const w of Object.values(SETTINGS_WORDS)) assert.equal(w, w.toLowerCase(), w);
   for (const look of [PAGE_HEADING, SECTION_HEADING, QUIET_BUTTON]) assert.ok(classes(look).includes('font-mono'), look);
+});
+
+test('the auto-play hint names the up next card as it reads, in sentence case, and asks no one to click', () => {
+  const hint = SETTINGS_HINTS.autoPlayNext;
+  assert.equal(hint, 'Starts the next episode when the credits roll. Off, the up next card waits until you play it.');
+  assert.doesNotMatch(hint, /click|\btap\b|automatically/i);
+  assert.doesNotMatch(hint, /Next Episode|Up Next/);
+  // Capitals only where a sentence starts.
+  assert.deepEqual(hint.match(/[A-Z]/g), ['S', 'O']);
+  for (const m of hint.matchAll(/[A-Z]/g)) assert.ok(m.index === 0 || hint.slice(m.index - 2, m.index) === '. ', hint.slice(m.index));
+  // The card it names: "Up next", its button "Play now".
+  const player = readFileSync(new URL('../components/PlayerPage.tsx', import.meta.url), 'utf8');
+  assert.match(player, />Up next</);
+  assert.match(player, /Play now \{autoNextSec/);
+  const settings = readFileSync(new URL('../components/sections/SettingsPage.tsx', import.meta.url), 'utf8');
+  assert.match(settings, /help=\{SETTINGS_HINTS\.autoPlayNext\}/);
+  // No hint or subtitle on the page asks to click.
+  for (const m of settings.matchAll(/(?:help|subtitle)="([^"]*)"/g)) assert.doesNotMatch(m[1], /\bclick/i, m[1]);
 });
 
 test("the Watchlist page's heading and new list in the mono face, lowercase", () => {

@@ -24,6 +24,15 @@ export const SETTINGS_WORDS = {
   reset: 'reset to defaults',
 } as const;
 
+/** Settings' hints under a field, in the body face: sentence case - the
+ *  player's cards named as they read, never capitalised as names - and in
+ *  words for every device, nothing to "click". */
+export const SETTINGS_HINTS = {
+  /** Under "Auto-play next episode". Off, the credits' "Up next" card
+   *  stays, its "Play now" without a countdown. */
+  autoPlayNext: 'Starts the next episode when the credits roll. Off, the up next card waits until you play it.',
+} as const;
+
 /** The Watchlist page's chrome. */
 export const WATCHLIST_WORDS = {
   heading: 'watchlist',

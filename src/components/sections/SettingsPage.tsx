@@ -9,7 +9,7 @@ import { feedbackAvailable } from '../../lib/runtimeConfig';
 import { SUBTITLE_SETTING_TEXT, settingsSubtitleLanguages } from '../../lib/subtitles';
 import { couldntLoad } from '../../lib/loadFailure';
 import { AUDIO_SETTING_TEXT, audioOptions, sameChoice, subtitleOptions, type LanguageOptions } from '../../lib/settingsLanguages';
-import { PAGE_HEADING, QUIET_BUTTON, SECTION_HEADING, SETTINGS_WORDS } from '../../lib/chromeWords';
+import { PAGE_HEADING, QUIET_BUTTON, SECTION_HEADING, SETTINGS_HINTS, SETTINGS_WORDS } from '../../lib/chromeWords';
 
 /**
  * The server's subtitle languages for Settings (GET
@@ -76,7 +76,7 @@ export function SettingsPage() {
         />
         <Toggle
           label="Auto-play next episode"
-          help="Automatically starts the next episode when the credits roll. Off shows the Next Episode card and lets you click to continue."
+          help={SETTINGS_HINTS.autoPlayNext}
           value={binge.autoPlayNext}
           onChange={(v) => updateBinge({ autoPlayNext: v })}
         />
