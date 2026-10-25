@@ -10,6 +10,7 @@ import {
   couldntLoad,
   failureCase,
   failureDetails,
+  startupFailure,
   failureReason,
   failureStatus,
   removedTitle,
@@ -108,4 +109,36 @@ test("the player's give-up after every rung failed says the cause the same way",
   // server refused - never an app update.
   assert.equal(streamFailureReason(401), "The server didn't accept your sign-in.");
   for (const s of [0, 401, 403, 404, 429, 500]) assert.doesNotMatch(streamFailureReason(s), /please|unreachable|your connection/i, String(s));
+});
+
+test("the start-up screen: \"couldn't load the app\", the reason by /api/config's answer, never a guess at the connection", () => {
+  const says = (e: unknown) => {
+    const { title, reason, status } = startupFailure(e);
+    return [title, reason, failureDetails(status)];
+  };
+  // Nothing answered.
+  assert.deepEqual(says(new TypeError('Failed to fetch')), ["couldn't load the app", "Can't reach the server.", null]);
+  // The server answered.
+  assert.deepEqual(says(new HttpError(502, '/api/config')), ["couldn't load the app", 'The server ran into a problem.', 'HTTP 502 Bad Gateway']);
+  assert.deepEqual(says(new HttpError(429, '/api/config')), ["couldn't load the app", 'The server is busy.', 'HTTP 429 Too Many Requests']);
+  // The app and the server don't match: no config route.
+  assert.deepEqual(says(new HttpError(404, '/api/config')), [
+    "couldn't load the app",
+    "The server didn't accept the request. Check for an app update.",
+    'HTTP 404 Not Found',
+  ]);
+  // A page instead of the config: an answer that couldn't be read.
+  assert.deepEqual(says(new SyntaxError('/api/config returned non-JSON content-type "text/html"')), [
+    "couldn't load the app",
+    'The server ran into a problem.',
+    'an answer that could not be read',
+  ]);
+  // Asked before anyone signs in: a 401 or a 403 is a request not accepted,
+  // never an empty reason.
+  for (const s of [401, 403]) assert.equal(startupFailure(new HttpError(s)).reason, "The server didn't accept the request. Check for an app update.");
+  for (const s of [null, 0, 400, 401, 403, 404, 429, 500, 503]) {
+    const { reason } = startupFailure(s === null ? new TypeError('x') : s === 0 ? new SyntaxError('x') : new HttpError(s));
+    assert.notEqual(reason, '');
+    assert.doesNotMatch(reason, /please|network|configuration|try again/i, String(s));
+  }
 });

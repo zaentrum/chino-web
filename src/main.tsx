@@ -7,7 +7,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { buildOidcConfig } from './auth/oidc';
 import { loadRuntimeConfig, type RuntimeConfig } from './lib/runtimeConfig';
 import { installErrorReporting } from './lib/errorReporter';
-import { TRY_AGAIN, couldntLoad, failureCase, failureReason, failureStatus } from './lib/loadFailure';
+import { RotateCw } from 'lucide-react';
+import { TRY_AGAIN, startupFailure } from './lib/loadFailure';
 import { FailureDetails } from './components/CouldntLoad';
 
 // Global error / unhandled-rejection listeners → auto bug reports.
@@ -33,22 +34,25 @@ function BootstrapLoading() {
 }
 
 // The app couldn't start: what the server's /api/config answered says why,
-// by its case (lib/loadFailure.ts) - "Can't reach the server." only when
-// nothing answered - with try again, which runs the start-up again, and the
-// status under details. A 404 means the app and the server don't match.
+// by its case (lib/loadFailure.ts startupFailure) - "Can't reach the
+// server." only when nothing answered - with try again, which runs the
+// start-up again and shows the loading screen while it runs, and the status
+// under details. A 404 means the app and the server don't match. A page of
+// its own: its title the page's heading, not read out as it appears, as
+// every couldn't-load screen (CouldntLoad, StatusPage).
 function BootstrapError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const status = failureStatus(error);
-  const reason = failureReason(failureCase(status, 'list')) || failureReason('refused');
+  const { title, reason, status } = startupFailure(error);
   return (
-    <main className="min-h-dvh bg-chino-bg text-white flex items-center justify-center p-6">
+    <main className="min-h-dvh bg-chino-bg text-chino-fg flex items-center justify-center p-6">
       <div className="max-w-md w-full text-center flex flex-col items-center gap-3">
-        <h1 className="font-mono text-2xl md:text-3xl font-semibold">{couldntLoad('the app')}</h1>
+        <h1 className="font-mono text-2xl md:text-3xl font-semibold">{title}</h1>
         <p className="text-chino-muted leading-relaxed">{reason}</p>
         <button
           type="button"
           onClick={onRetry}
           className="mt-5 h-12 px-5 inline-flex items-center gap-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium"
         >
+          <RotateCw className="w-4 h-4" aria-hidden />
           {TRY_AGAIN}
         </button>
         <div className="mt-3">

@@ -102,6 +102,20 @@ export function couldntLoad(what: string): string {
   return `couldn't load ${what}`;
 }
 
+/**
+ * What the start-up screen says when the app couldn't start - /api/config
+ * failed: "couldn't load the app", the reason by the answer's case ("Can't
+ * reach the server." only when nothing answered; a 404, the app and the
+ * server not matching, says to check for an app update), "try again", and
+ * the status under details. The config is asked before anyone signs in, so
+ * a 401 or a 403 is a request the server didn't accept.
+ */
+export function startupFailure(error: unknown): { title: string; reason: string; status: number | null } {
+  const status = failureStatus(error);
+  const kind = failureCase(status, 'list');
+  return { title: couldntLoad('the app'), reason: failureReason(kind) || failureReason('refused'), status };
+}
+
 /** What a page of one thing says when it was removed. */
 export function removedTitle(thing: 'title' | 'person'): string {
   return `this ${thing} isn't in the library anymore`;
