@@ -8,7 +8,17 @@ import { PgsRenderer } from 'libpgs';
 // glue. Keeps libpgs's worker out of the main bundle.
 import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
-import { MENU_HEADER, MENU_HEADERS, OVER_PICTURE, OVER_PICTURE_HOVER, PLAYBACK_RATES, speedName } from '../lib/playerMenus';
+import {
+  MENU_HEADER,
+  MENU_HEADERS,
+  OVER_PICTURE,
+  OVER_PICTURE_HOVER,
+  PICTURE_BUTTON,
+  PICTURE_BUTTON_ON,
+  PICTURE_CARD,
+  PLAYBACK_RATES,
+  speedName,
+} from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
@@ -3931,7 +3941,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           a bug opens the manual dialog pre-filled with the technical
           signature, for the viewer to add what they were doing. */}
       {fatalError && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-chino-bg">
           <PlaybackFailure
             title={fatalError.title}
             label={fatalError.label}
@@ -4008,14 +4018,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             // to the previous episode (or further back through the
             // chain) instead of escaping the player (goBack).
             onClick={goBack}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title="Back"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <button
             onClick={() => window.location.assign(toApp('/'))}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title="Home"
             aria-label="Home"
           >
@@ -4033,7 +4043,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inIntro && autoSkipIntroSec != null && !autoSkipIntroDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-chino-surface/95 backdrop-blur border border-white/10 shadow-2xl p-4"
+          className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Binge mode</div>
           <div className="mt-1 text-white font-medium">
@@ -4049,7 +4059,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             </button>
             <button
               onClick={() => setAutoSkipIntroDismissed(true)}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
+              className={`px-3 py-1.5 text-sm ${PICTURE_BUTTON}`}
             >
               Watch intro
             </button>
@@ -4070,7 +4080,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inCredits && nextEp && !autoNextDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 max-w-sm rounded-xl bg-chino-surface/95 backdrop-blur border border-white/10 shadow-2xl p-4"
+          className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Up next</div>
           <div className="mt-1 text-white font-medium truncate">{nextEp.title || 'Next episode'}</div>
@@ -4089,7 +4099,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             </button>
             <button
               onClick={() => setAutoNextDismissed(true)}
-              className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
+              className={`px-3 py-1.5 text-sm ${PICTURE_BUTTON}`}
             >
               Cancel
             </button>
@@ -4114,7 +4124,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inPreview && nextEpisodeId && !previewNextDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
-          className="absolute right-4 md:right-6 z-10 max-w-sm bg-chino-surface-2/95 backdrop-blur border border-chino-border shadow-2xl p-4"
+          className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Next episode</div>
           {nextEp?.title ? (
@@ -4136,7 +4146,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             {previewNextSec != null ? (
               <button
                 onClick={() => setPreviewNextDismissed(true)}
-                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm"
+                className={`px-3 py-1.5 text-sm ${PICTURE_BUTTON}`}
               >
                 Cancel
               </button>
@@ -4379,8 +4389,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                       backgroundRepeat: 'no-repeat',
                     }}
                   />
-                  <div className="mt-1 px-2 py-0.5 rounded bg-black/80 text-xs tabular-nums text-white text-center">
-                    {segLabel ? <span className="text-white/70 mr-1">{segLabel} ·</span> : null}
+                  <div className={`mt-1 px-2 py-0.5 text-xs tabular-nums text-center ${OVER_PICTURE}`}>
+                    {segLabel ? <span className="text-chino-muted mr-1">{segLabel} ·</span> : null}
                     {fmt(hover.sec)}
                   </div>
                 </div>
@@ -4394,7 +4404,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         <div className="relative flex items-center gap-2 mt-2">
           <button
             onClick={() => userTogglePlay()}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title={playing ? 'Pause' : 'Play'}
           >
             {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -4405,7 +4415,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               const v = videoRef.current;
               if (v) v.muted = !v.muted;
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title={muted ? 'Unmute' : 'Mute'}
           >
             {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -4430,7 +4440,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             <div className="relative">
               <button
                 onClick={() => toggleMenu('audio')}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors text-xs uppercase tracking-wide"
+                className={`px-3 py-2 text-xs uppercase tracking-wide ${PICTURE_BUTTON}`}
                 title={playingAudio ? `Audio: ${playingAudio.label}` : 'Audio language'}
                 aria-label={playingAudio ? `Audio: ${playingAudio.label}` : 'Audio language'}
               >
@@ -4461,7 +4471,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="md:relative">
             <button
               onClick={() => toggleMenu('captions')}
-              className={`p-2 transition-colors ${activeSubId ? 'bg-chino-accent/30 hover:bg-chino-accent/40' : 'bg-white/10 hover:bg-white/20'}`}
+              className={`p-2 ${activeSubId ? PICTURE_BUTTON_ON : PICTURE_BUTTON}`}
               title="Subtitles"
               aria-haspopup="menu"
               aria-expanded={showCaptionsMenu}
@@ -4565,7 +4575,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             <div className="relative">
               <button
                 onClick={() => toggleMenu('quality')}
-                className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+                className={`p-2 ${PICTURE_BUTTON}`}
                 title={`Quality (${qualityName})`}
               >
                 <Settings className="w-5 h-5" />
@@ -4611,7 +4621,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <div className="relative">
             <button
               onClick={() => toggleMenu('speed')}
-              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+              className={`p-2 ${PICTURE_BUTTON}`}
               title={`Playback speed (${speedName(playbackRate)})`}
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
@@ -4645,7 +4655,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           {episodeNav.prev && (
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.prev!.id)}`))}
-              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+              className={`p-2 ${PICTURE_BUTTON}`}
               title={`Previous episode: ${episodeNav.prev.code} — ${episodeNav.prev.title}`}
             >
               <ChevronLeft className="w-5 h-5" />
@@ -4654,7 +4664,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           {episodeNav.next && (
             <button
               onClick={() => window.location.replace(toApp(`/player/${encodeURIComponent(episodeNav.next!.id)}?binge=1`))}
-              className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+              className={`p-2 ${PICTURE_BUTTON}`}
               title={`Next episode: ${episodeNav.next.code} — ${episodeNav.next.title}`}
             >
               <ChevronRight className="w-5 h-5" />
@@ -4663,7 +4673,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
           <button
             onClick={() => setInfoOpen(true)}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title="Playback info"
           >
             <Info className="w-5 h-5" />
@@ -4671,7 +4681,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
           <button
             onClick={toggleFullscreen}
-            className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+            className={`p-2 ${PICTURE_BUTTON}`}
             title={fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
           >
             {fullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}

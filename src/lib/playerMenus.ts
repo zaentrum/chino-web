@@ -32,3 +32,17 @@ export function speedName(rate: number): string {
 export const OVER_PICTURE = 'bg-chino-surface border border-chino-border-2 text-chino-fg shadow-lg';
 /** Its hover, where it is a button. */
 export const OVER_PICTURE_HOVER = 'hover:bg-chino-surface-2';
+
+/** A button over the picture - back, home, every button of the control bar,
+ *  a card's quiet one: on the raised surface, never a see-through one,
+ *  whatever the picture under it; disabled, the plain surface and a dim
+ *  icon (docs/chino, playback: the player's menus; as on the TV). The bars'
+ *  gradients stay a scrim behind them, not their surface. */
+export const PICTURE_BUTTON =
+  'bg-chino-surface-2 hover:bg-chino-border-2 text-chino-fg transition-colors disabled:bg-chino-surface disabled:text-chino-dim';
+/** One that is on (subtitles on): solid blue, its icon dark, as every
+ *  filled blue control. */
+export const PICTURE_BUTTON_ON = 'bg-chino-accent hover:brightness-110 text-chino-bg transition-colors';
+/** A card over the picture - binge mode's countdown, up next, the next
+ *  episode: solid, with the heavier border. */
+export const PICTURE_CARD = 'bg-chino-surface border border-chino-border-2 shadow-2xl';
