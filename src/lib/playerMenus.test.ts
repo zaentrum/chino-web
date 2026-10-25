@@ -8,7 +8,10 @@ import {
   OVER_PICTURE,
   OVER_PICTURE_HOVER,
   PLAYBACK_RATES,
+  MENU_ROW_REM,
   SUBTITLES_LIST,
+  SUBTITLES_LIST_AT_TOP,
+  SUBTITLES_LIST_SCROLLED,
   SUBTITLES_MENU,
   WAITING_LINE,
   WAITING_PANEL,
@@ -61,9 +64,12 @@ test('the subtitles menu opens above the whole control bar: never over the seek 
   assert.ok(look.includes('max-w-[calc(100%-2rem)]'));
   // One place for every width: no breakpoint moves it back over the bar.
   for (const c of look) assert.doesNotMatch(c, /^(sm|md|lg|xl):/, c);
-  // Its list scrolls, never taller than the screen leaves above the bar.
+  // Its list scrolls, never taller than the screen leaves above the bar:
+  // the list and "off" over it together as tall as the list was alone.
   assert.match(SUBTITLES_LIST, /overflow-y-auto/);
-  assert.match(SUBTITLES_LIST, /calc\(100vh-18rem\)/);
+  assert.match(SUBTITLES_LIST, /max-h-\[min\(21\.5rem,calc\(55vh-2\.5rem\),calc\(100vh-20\.5rem\)\)\]/);
+  assert.equal(21.5 + MENU_ROW_REM, 24);
+  assert.equal(18 + MENU_ROW_REM, 20.5);
   // In the player, the bar is its anchor: between the bar and the menu no
   // wrapper is positioned, so bottom-full is the bar's top, above the seek
   // bar.
@@ -76,4 +82,25 @@ test('the subtitles menu opens above the whole control bar: never over the seek 
   assert.ok(between.length > 0);
   assert.doesNotMatch(between.slice(0, 60), /relative/);
   assert.doesNotMatch(between, /md:relative/);
+});
+
+test('"more languages" opened keeps "off" reachable: "off" stays with the header, outside the list that scrolls', () => {
+  const source = readFileSync(new URL('../components/PlayerPage.tsx', import.meta.url), 'utf8');
+  const menu = source.indexOf('className={SUBTITLES_MENU}');
+  const header = source.indexOf('{MENU_HEADERS.subtitles}', menu);
+  const off = source.indexOf('{SUBTITLES_OFF_ROW}', menu);
+  const list = source.indexOf('ref={subListRef}', menu);
+  const more = source.indexOf('more languages</span>', menu);
+  assert.ok(menu > 0 && header > menu && off > header && list > off && more > list, 'header, off, then the list with "more languages"');
+  // Nothing between the header and "off" scrolls: "off" is no row of the list.
+  assert.doesNotMatch(source.slice(header, off), /overflow|SUBTITLES_LIST/);
+  // Scrolled, a hairline under "off"; at its top, the same line unseen, so
+  // nothing moves when it shows.
+  assert.match(source, /subListScrolled \? SUBTITLES_LIST_SCROLLED : SUBTITLES_LIST_AT_TOP/);
+  assert.deepEqual(SUBTITLES_LIST_SCROLLED.split(' ').slice(0, 1), SUBTITLES_LIST_AT_TOP.split(' ').slice(0, 1));
+  assert.match(SUBTITLES_LIST_SCROLLED, /\bborder-chino-border-2\b/);
+  assert.match(SUBTITLES_LIST_AT_TOP, /\bborder-transparent\b/);
+  // Opening "more languages" scrolls the list alone, to it.
+  const open = source.slice(source.indexOf('const openMoreLangs = '), source.indexOf('// The server\'s subtitle languages, asked once'));
+  assert.match(open, /list\.scrollTop = more\.offsetTop - list\.offsetTop/);
 });

@@ -61,8 +61,21 @@ export const SUBTITLES_MENU =
   'absolute right-4 bottom-full w-96 max-w-[calc(100%-2rem)] bg-chino-surface border border-chino-border-2 shadow-xl py-1 z-50';
 
 /** Its list, which scrolls where it is long: never taller than the screen
- *  leaves above the bar, a phone held sideways too. */
-export const SUBTITLES_LIST = 'max-h-[min(24rem,55vh,calc(100vh-18rem))] overflow-y-auto';
+ *  leaves above the bar, a phone held sideways too. "off" stays outside it,
+ *  with the header - "more languages" opened never scrolls it away - and
+ *  takes its 2.5rem from the list's height, so the menu is never taller
+ *  than its 24rem, 55vh and 100vh-18rem of list allowed before. */
+export const SUBTITLES_LIST = 'max-h-[min(21.5rem,calc(55vh-2.5rem),calc(100vh-20.5rem))] overflow-y-auto';
+
+/** The height of a row of the menus, as "off" pinned with the header takes
+ *  it from the list. */
+export const MENU_ROW_REM = 2.5;
+
+/** The list's top edge under "off": a hairline once the list is scrolled,
+ *  so what scrolls reads as passing under "off"; at its top, the same line
+ *  unseen - the rows don't move when it shows. */
+export const SUBTITLES_LIST_SCROLLED = 'border-t border-chino-border-2';
+export const SUBTITLES_LIST_AT_TOP = 'border-t border-transparent';
 
 /** A button over the picture - back, home, every button of the control bar,
  *  a card's quiet one: on the raised surface, never a see-through one,

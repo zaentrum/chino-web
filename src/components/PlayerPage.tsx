@@ -18,6 +18,8 @@ import {
   PICTURE_CARD,
   PLAYBACK_RATES,
   SUBTITLES_LIST,
+  SUBTITLES_LIST_AT_TOP,
+  SUBTITLES_LIST_SCROLLED,
   SUBTITLES_MENU,
   SUBTITLES_OFF_ROW,
   WAITING_LINE,
@@ -420,6 +422,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const [serverSubLangs, setServerSubLangs] = useState<readonly string[] | null>(null);
   // "more languages" in the subtitles menu: open or closed.
   const [moreLangsOpen, setMoreLangsOpen] = useState(false);
+  // The subtitles menu's list scrolled from its top: a hairline under the
+  // "off" pinned above it, so what scrolls reads as passing under it.
+  const [subListScrolled, setSubListScrolled] = useState(false);
   // What the text subtitle on shows now, as SubtitleOverlay draws it.
   const [subLines, setSubLines] = useState<CueLine[]>([]);
   // The browser shows the video itself - picture-in-picture, a phone's
@@ -1753,14 +1758,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         : null,
     [subMenu, subEntries, activeSubId],
   );
-  // "more languages" opens closed, unless the subtitle on is among them.
+  // "more languages" opens closed, unless the subtitle on is among them;
+  // its list at its top.
   useEffect(() => {
     if (showCaptionsMenu) setMoreLangsOpen(subMenu.more.some((s) => s.id === activeSubId));
+    setSubListScrolled(false);
     // Only as the menu opens: a click inside it opens and closes it after.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCaptionsMenu]);
   // Opened by a click, the list scrolls to "more languages", so what it
-  // opened shows below it.
+  // opened shows below it - "off", pinned above the list, stays in view.
   const subListRef = useRef<HTMLDivElement | null>(null);
   const moreLangsRef = useRef<HTMLButtonElement | null>(null);
   const openMoreLangs = () => {
@@ -4612,12 +4619,18 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.subtitles}</div>
                 {/* "off", the languages that matter here, then "more
                     languages" with the rest (subMenu). One subtitle at a
-                    time: a pick replaces the one on. Scrolls where it is
-                    long. */}
-                <div ref={subListRef} className={SUBTITLES_LIST}>
-                  <MenuChoice picked={!activeSubId} onPick={() => chooseSub(null)}>
-                    {SUBTITLES_OFF_ROW}
-                  </MenuChoice>
+                    time: a pick replaces the one on. "off" stays with the
+                    header, outside the list that scrolls where it is long:
+                    "more languages" opened scrolls the rest into view and
+                    "off" is still there, a press away. */}
+                <MenuChoice picked={!activeSubId} onPick={() => chooseSub(null)}>
+                  {SUBTITLES_OFF_ROW}
+                </MenuChoice>
+                <div
+                  ref={subListRef}
+                  onScroll={(e) => setSubListScrolled(e.currentTarget.scrollTop > 0)}
+                  className={`${SUBTITLES_LIST} ${subListScrolled ? SUBTITLES_LIST_SCROLLED : SUBTITLES_LIST_AT_TOP}`}
+                >
                   {subMenu.top.map((s) => (
                     <MenuChoice key={s.id} picked={s.id === activeSubId} onPick={() => chooseSub(s)}>
                       {s.label}
