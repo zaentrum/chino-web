@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AUDIO_SETTING_TEXT, audioOptions, everyLanguage, sameChoice, subtitleOptions } from './settingsLanguages.ts';
+import { SUBTITLES_OFF_ROW } from './playerMenus.ts';
 
 const labels = (o: { choices: { label: string }[] }) => o.choices.map((c) => c.label);
 
@@ -15,29 +16,39 @@ test("the audio setting's text, word for word as every chino app has it", () => 
 test("the subtitle setting offers the server's languages, named as the player's menus name them", () => {
   const o = subtitleOptions(['en', 'de', 'zh-Hans'], 'off');
   assert.equal(o.every, false);
-  assert.deepEqual(labels(o), ['Off', 'English', 'German', 'Chinese (Simplified)']);
+  assert.deepEqual(labels(o), ['off', 'English', 'German', 'Chinese (Simplified)']);
   assert.deepEqual(o.choices.map((c) => c.value), ['off', 'en', 'de', 'zh-Hans']);
   // A region in the standard form, as the menu has it.
-  assert.deepEqual(labels(subtitleOptions(['pt-BR'], 'off')), ['Off', 'Portuguese (Brazil)']);
+  assert.deepEqual(labels(subtitleOptions(['pt-BR'], 'off')), ['off', 'Portuguese (Brazil)']);
   // Codes that name no language, or one twice, offer nothing more.
-  assert.deepEqual(labels(subtitleOptions(['und', 'en', 'eng'], 'off')), ['Off', 'English']);
+  assert.deepEqual(labels(subtitleOptions(['und', 'en', 'eng'], 'off')), ['off', 'English']);
+});
+
+test('the subtitle setting says "off" as the player\'s subtitles menu does, with or without the server\'s languages', () => {
+  assert.equal(SUBTITLES_OFF_ROW, 'off');
+  for (const server of [['en', 'de'], []]) {
+    const off = subtitleOptions(server, 'off').choices[0];
+    assert.deepEqual(off, { value: 'off', label: SUBTITLES_OFF_ROW });
+    // Never "Off": the menu's word, lowercase.
+    assert.ok(!subtitleOptions(server, 'eng').choices.some((c) => c.label === 'Off'));
+  }
 });
 
 test('what is set stays among the choices, and shows as set', () => {
   // An older setting's code is the server's language.
   const o = subtitleOptions(['en', 'de'], 'eng');
-  assert.deepEqual(labels(o), ['Off', 'English', 'German']);
+  assert.deepEqual(labels(o), ['off', 'English', 'German']);
   assert.equal(sameChoice('eng', 'en'), true);
   assert.equal(sameChoice('zh-Hans', 'zh-Hant'), false);
   assert.equal(sameChoice('off', 'off'), true);
   // A language the server no longer names: kept, last.
-  assert.deepEqual(labels(subtitleOptions(['en', 'de'], 'jpn')), ['Off', 'English', 'German', 'Japanese']);
+  assert.deepEqual(labels(subtitleOptions(['en', 'de'], 'jpn')), ['off', 'English', 'German', 'Japanese']);
 });
 
 test('a server that names none offers every language by name, in alphabetical order', () => {
   const o = subtitleOptions([], 'eng');
   assert.equal(o.every, true);
-  assert.equal(o.choices[0].label, 'Off');
+  assert.equal(o.choices[0].label, 'off');
   const names = labels(o).slice(1);
   assert.deepEqual(names, [...names].sort(new Intl.Collator('en').compare));
   for (const name of ['English', 'German', 'Japanese', 'Chinese', 'Chinese (Simplified)', 'Chinese (Traditional)', 'Tagalog']) {

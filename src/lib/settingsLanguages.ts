@@ -6,6 +6,7 @@
 // settingsLanguages.test.ts runs it under node --test.
 
 import { LIBRARY_LANGUAGES, languageName, languageTag } from './languages.ts';
+import { SUBTITLES_OFF_ROW } from './playerMenus.ts';
 
 /** The text under Settings' audio language, the same in every chino app
  *  (docs/chino, playback: the audio setting). */
@@ -18,6 +19,10 @@ export const AUDIO_SETTING_TEXT =
  *  language each title was made in. */
 export const SUBTITLES_OFF = 'off';
 export const AUDIO_ORIGINAL = 'orig';
+
+/** What the subtitle setting calls none: "off", the word the player's
+ *  subtitles menu has for it, lowercase as there. */
+export const SUBTITLES_OFF_NAME = SUBTITLES_OFF_ROW;
 
 /** A choice of a language setting: the value kept, the name shown. */
 export interface LanguageChoice {
@@ -66,14 +71,15 @@ export interface LanguageOptions {
 }
 
 /**
- * The subtitle setting's choices: "Off", then the server's subtitle
- * languages in its order (GET /api/v1/subtitles/languages), named as the
- * player's menus name them; a server that names none (an empty list, or an
- * older one without the route) offers every language by name. The current
- * value stays among them.
+ * The subtitle setting's choices: "off", as the player's subtitles menu
+ * says it, then the server's subtitle languages in its order (GET
+ * /api/v1/subtitles/languages), named as the player's menus name them; a
+ * server that names none (an empty list, or an older one without the
+ * route) offers every language by name. The current value stays among
+ * them.
  */
 export function subtitleOptions(serverLanguages: readonly string[], current: string): LanguageOptions {
-  const off = { value: SUBTITLES_OFF, label: 'Off' };
+  const off = { value: SUBTITLES_OFF, label: SUBTITLES_OFF_NAME };
   const named: string[] = [];
   for (const l of serverLanguages) {
     if (languageTag(l) && !named.some((n) => sameChoice(n, l))) named.push(l);

@@ -51,11 +51,14 @@ test('the menu: the viewer\'s language, then the server\'s, then "more languages
     'German',
     'German · foreign-language parts only',
     'German · AI',
+    // The server's Simplified Chinese brings the whole language: the
+    // file's Traditional with it, not under "more languages".
     'Chinese (Simplified) · AI',
+    'Chinese (Traditional)',
   ]);
   // The rest in alphabetical order of their names, a track in no language
-  // by its own; "zh-Hant" is not "zh-Hans".
-  assert.deepEqual(labels(m.more), ['Chinese (Traditional)', 'French', 'Japanese', 'Signs']);
+  // by its own.
+  assert.deepEqual(labels(m.more), ['French', 'Japanese', 'Signs']);
 });
 
 test('within a language: plain, for deaf and hard of hearing, foreign-language parts only, then what the platform made', () => {
@@ -119,6 +122,37 @@ test('a language named twice on top, by two scripts, is one block where it first
     'Chinese (Traditional)',
     'German',
   ]);
+});
+
+test('a language on top brings all of its tracks, whatever region or script names it: never one of them under "more languages"', () => {
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'zh-Hant', embedded: true },
+    { id: 'emb-3', lang: 'fre', embedded: true },
+    { id: 'emb-4', lang: 'chi', embedded: true },
+    { id: 'emb-5', lang: 'pt-PT', embedded: true },
+    { id: 'emb-6', lang: 'zh-Hant-TW', embedded: true },
+    { id: 'side-zh', lang: 'zh-Hans', title: 'AI' },
+    { id: 'side-pt', lang: 'pt-BR', title: 'AI' },
+  ];
+  const chinese = ['Chinese', 'Chinese (Simplified) · AI', 'Chinese (Traditional)', 'Chinese (Traditional, Taiwan)'];
+  // Named by the server with a script: the whole language, the bare name
+  // first, then the runs alphabetically.
+  const hans = menu(tracks, { preferred: 'off', serverLanguages: ['zh-Hans'] });
+  assert.deepEqual(labels(hans.top), chinese);
+  assert.deepEqual(labels(hans.more), ['French', 'Portuguese (Brazil) · AI', 'Portuguese (Portugal)']);
+  // With a region, the same: Brazil's Portuguese brings Portugal's.
+  const brazil = menu(tracks, { preferred: 'off', serverLanguages: ['pt-BR'] });
+  assert.deepEqual(labels(brazil.top), ['Portuguese (Brazil) · AI', 'Portuguese (Portugal)']);
+  // Named by the person: the subtitle setting's Traditional Chinese brings
+  // the server's Simplified and the file's bare one, on a server that names
+  // other languages too.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'zh-Hant', serverLanguages: ['fr'] }).top), [...chinese, 'French']);
+  // And without the server's languages, as before.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'zh-Hans', serverLanguages: [] }).top), chinese);
+  // Every track is still listed once.
+  for (const serverLanguages of [['zh-Hans'], ['pt-BR'], []]) {
+    assert.equal(menuEntries(menu(tracks, { serverLanguages })).length, tracks.length);
+  }
 });
 
 test('a server with no subtitle languages (404, or none set): the person\'s own languages on top, the rest under "more languages"', () => {
@@ -423,9 +457,11 @@ test('Simplified and Traditional Chinese, told apart by their titles only, are t
     { id: 'emb-5', lang: 'eng', embedded: true },
   ];
   const m = menu(tracks, { preferred: 'en' });
-  assert.deepEqual(labels(m.top), ['English', 'Chinese (Simplified)']);
-  assert.deepEqual(labels(m.more), ['Chinese (Traditional)']);
-  assert.deepEqual(m.more.map((e) => e.tag), ['zh-Hant']);
+  // The server's Simplified Chinese on top brings the Traditional too, each
+  // by its script.
+  assert.deepEqual(labels(m.top), ['English', 'Chinese (Simplified)', 'Chinese (Traditional)']);
+  assert.deepEqual(m.top.map((e) => e.tag), ['en', 'zh-Hans', 'zh-Hant']);
+  assert.deepEqual(m.more, []);
   // A server with no languages: both, each by its script, under "more
   // languages"; on top for a browser in Chinese.
   assert.deepEqual(labels(menu(tracks, { preferred: 'en', serverLanguages: [] }).more), ['Chinese (Simplified)', 'Chinese (Traditional)']);

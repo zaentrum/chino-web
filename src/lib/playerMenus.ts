@@ -12,6 +12,10 @@ export const MENU_HEADERS = {
   timing: 'timing',
 } as const;
 
+/** The subtitles menu's first row, for none: "off", lowercase. Settings'
+ *  subtitle setting says it in the same word (settingsLanguages.ts). */
+export const SUBTITLES_OFF_ROW = 'off';
+
 /** A header's look: the mono face, small, muted. */
 export const MENU_HEADER = 'font-mono text-xs tracking-wide text-chino-muted';
 

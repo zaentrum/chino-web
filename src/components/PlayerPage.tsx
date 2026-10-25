@@ -17,6 +17,7 @@ import {
   PICTURE_BUTTON_ON,
   PICTURE_CARD,
   PLAYBACK_RATES,
+  SUBTITLES_OFF_ROW,
   WAITING_LINE,
   WAITING_PANEL,
   speedName,
@@ -4500,7 +4501,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     long. */}
                 <div ref={subListRef} className="max-h-[min(24rem,55vh)] overflow-y-auto">
                   <MenuChoice picked={!activeSubId} onPick={() => chooseSub(null)}>
-                    off
+                    {SUBTITLES_OFF_ROW}
                   </MenuChoice>
                   {subMenu.top.map((s) => (
                     <MenuChoice key={s.id} picked={s.id === activeSubId} onPick={() => chooseSub(s)}>

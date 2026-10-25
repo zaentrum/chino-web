@@ -160,6 +160,14 @@ function byKind<E extends SubtitleEntry>(group: readonly E[]): E[] {
 // Names in alphabetical order, as a reader of English sorts them.
 const COLLATOR = new Intl.Collator('en');
 
+/** A run's name as it sorts: its words, without the brackets and commas
+ *  between them, so a name comes before the longer ones it begins -
+ *  "Chinese (Traditional)" before "Chinese (Traditional, Taiwan)", where
+ *  the collator alone puts the comma before the bracket. */
+function sortName(name: string): string {
+  return name.replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The script and region a track's tag names beside its language ("Hans" of
  *  "zh-Hans", "BR" of "pt-BR"): its run within the language; '' for the
  *  bare language. */
@@ -182,7 +190,9 @@ function byRun<E extends SubtitleEntry>(group: readonly E[]): E[] {
     else runs.set(run, [e]);
   }
   return [...runs.entries()]
-    .sort(([a, ea], [b, eb]) => (a === b ? 0 : a === '' ? -1 : b === '' ? 1 : COLLATOR.compare(languageName(ea[0].tag), languageName(eb[0].tag))))
+    .sort(([a, ea], [b, eb]) =>
+      a === b ? 0 : a === '' ? -1 : b === '' ? 1 : COLLATOR.compare(sortName(languageName(ea[0].tag)), sortName(languageName(eb[0].tag))),
+    )
     .flatMap(([, entries]) => byKind(entries));
 }
 
@@ -243,11 +253,14 @@ function standsForBoth<T extends SubtitleSource>(
  * The subtitles menu of a title's tracks, given in the order they come (the
  * file's own streams first, in the file's order, then its sidecars). On
  * top: the viewer's subtitle language (Settings; "off" names none), then
- * each other subtitle language the server is set up for. A language's
- * tracks stay together, the AI ones included: where two of these name it
- * with another script or region (the setting's "zh-Hant", the server's
- * "zh-Hans"), its tracks are one block, where the language first comes -
- * never split by the languages between. Within a language, each region or
+ * each other subtitle language the server is set up for. A language on top
+ * brings all of its tracks there, the AI ones included, whatever region or
+ * script names it: a server that names "zh-Hans" shows "Chinese
+ * (Traditional)" in the Chinese block too, never under "more languages".
+ * Where two of these name one language with another script or region (the
+ * setting's "zh-Hant", the server's "zh-Hans"), its tracks are one block,
+ * where the language first comes - never split by the languages between.
+ * Within a language, each region or
  * script keeps a run of its own, the bare language first and the others in
  * alphabetical order of their names
  * ("Chinese", "Chinese (Simplified)", "Chinese (Simplified) · AI",
@@ -265,9 +278,8 @@ function standsForBoth<T extends SubtitleSource>(
  * an older server without the route) the languages on top are the person's
  * own (ownLanguages): the subtitle setting's, the audio setting's unless it
  * is Original, then the device's or the browser's - and the rest is under
- * "more languages", as with the server's. Each of them the whole language,
- * the AI ones included, a language with its region or script counting as
- * that language: the viewer's "zh-Hant" puts Chinese on top, the whole of
+ * "more languages", as with the server's. Each of them the whole language
+ * as well: the viewer's "zh-Hant" puts Chinese on top, the whole of
  * it, its runs in the order above - "Chinese", "Chinese (China)", "Chinese
  * (Simplified)", "Chinese (Traditional)" - never their own run first and
  * the rest of the language after it.
@@ -298,22 +310,21 @@ export function subtitleMenu<T extends SubtitleSource>(
     const tag = languageTag(w);
     if (tag && !wanted.some((x) => languageTag(x) === tag)) wanted.push(w);
   }
-  const takes = (w: string, e: SubtitleEntry<T>) => (named ? sameLanguage(w, e.tag) : normalizeLang(e.tag) === normalizeLang(w));
+  // On top, one block per language asked for, the whole language whatever
+  // region or script names it: the server's "zh-Hans" brings "Chinese
+  // (Traditional)" too. A later one in a language already on top - the
+  // server's "zh-Hans" after the setting's "zh-Hant" - has nothing left to
+  // bring, so the language's tracks stay together, in their runs.
   const placed = new Set<SubtitleEntry<T>>();
-  // On top, one block per language asked for. A later one in a language
-  // already on top - the server's "zh-Hans" after the setting's "zh-Hant" -
-  // joins that language's block, so its tracks stay together, in their runs.
-  const blocks: { base: string; entries: SubtitleEntry<T>[] }[] = [];
+  const blocks: SubtitleEntry<T>[][] = [];
   for (const w of wanted) {
-    const group = unique.filter((e) => !placed.has(e) && takes(w, e));
-    if (!group.length) continue;
-    group.forEach((e) => placed.add(e));
     const base = normalizeLang(w);
-    const block = base ? blocks.find((b) => b.base === base) : undefined;
-    if (block) block.entries.push(...group);
-    else blocks.push({ base, entries: group });
+    const block = unique.filter((e) => !placed.has(e) && normalizeLang(e.tag) === base);
+    if (!block.length) continue;
+    block.forEach((e) => placed.add(e));
+    blocks.push(block);
   }
-  const top = blocks.flatMap((b) => byRun(b.entries));
+  const top = blocks.flatMap((b) => byRun(b));
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
   return { top, more: alphabetical(rest).flatMap((g) => g.entries) };
 }
