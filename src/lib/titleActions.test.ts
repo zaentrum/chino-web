@@ -4,6 +4,14 @@ import assert from 'node:assert/strict';
 import {
   ACTION_GAP,
   ACTION_HEIGHT,
+  ACTION_LABEL,
+  PLAY,
+  SEE_DETAILS,
+  START_OVER,
+  TRAILER,
+  clockTime,
+  resumeLabel,
+  seriesPlayLabel,
   CARET_PART,
   CHOOSE_LISTS,
   ICON_BUTTON,
@@ -90,4 +98,30 @@ test('every control is 48 px tall, 8 px apart; the "⌄" part drawn 40 px wide w
   // Its touch target reaches 8 px over the gap on its right, none over the main part.
   assert.match(CARET_PART, /after:-right-2/);
   assert.match(CARET_PART, /after:left-0/);
+});
+
+test("the row's words as docs/chino writes them: lowercase, in the mono face", () => {
+  assert.equal(PLAY, 'play');
+  assert.equal(START_OVER, 'start over');
+  assert.equal(TRAILER, 'trailer');
+  assert.equal(SEE_DETAILS, 'see details');
+  assert.equal(ACTION_LABEL, 'font-mono');
+  // A movie stopped part way: resume with where it picks up.
+  assert.equal(resumeLabel(103), 'resume 1:43');
+  assert.equal(resumeLabel(3725), 'resume 1:02:05');
+  assert.equal(resumeLabel(59.9), 'resume 0:59');
+  assert.equal(clockTime(Number.NaN), '0:00');
+  for (const label of [PLAY, START_OVER, TRAILER, SEE_DETAILS, resumeLabel(103)]) assert.equal(label, label.toLowerCase(), label);
+});
+
+test("a series' first button names the episode by its code, which keeps its capitals - never the position", () => {
+  // docs/chino, title actions: on a series.
+  assert.equal(seriesPlayLabel(false, 'S01E01'), 'play S01E01');
+  assert.equal(seriesPlayLabel(true, 'S01E03'), 'resume S01E03');
+  assert.equal(seriesPlayLabel(false, 'S01E02'), 'play S01E02');
+  // A file of two episodes, as the TV names it.
+  assert.equal(seriesPlayLabel(false, 'S03E18–19'), 'play S03E18–19');
+  // The code not known: the verb alone, no clock.
+  assert.equal(seriesPlayLabel(true, null), 'resume');
+  assert.equal(seriesPlayLabel(false, undefined), 'play');
 });

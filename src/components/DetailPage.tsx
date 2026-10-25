@@ -21,7 +21,19 @@ import { ratingBadge } from '../lib/ratings';
 import { trailerChoice, trailerPath } from '../lib/trailers';
 import { episodeCode } from '../lib/episodeFiles';
 import { seriesPlayTarget } from '../lib/seriesPlay';
-import { ACTION_FOCUS, ACTION_GAP, ACTION_HEIGHT, OFF_LOOK, PLAY_LOOK } from '../lib/titleActions';
+import {
+  ACTION_FOCUS,
+  ACTION_GAP,
+  ACTION_HEIGHT,
+  ACTION_LABEL,
+  OFF_LOOK,
+  PLAY,
+  PLAY_LOOK,
+  START_OVER,
+  TRAILER,
+  resumeLabel,
+  seriesPlayLabel,
+} from '../lib/titleActions';
 import { MediaRow } from './MediaRow';
 import { StatusPage } from './StatusPage';
 
@@ -302,92 +314,93 @@ export function DetailPage({ itemId }: DetailPageProps) {
             {/* The title actions (docs/chino, title actions): play, or
                 resume and start over, then trailer, add to list, watched
                 and liked - every control 48 px tall, 8 px apart, a control
-                wrapping as a whole. */}
+                wrapping as a whole, its label lowercase in the mono face. */}
             <div className={`flex flex-wrap ${ACTION_GAP} mb-6`}>
               {isSeries ? (
-                // A series plays an episode: the one the viewer is in
-                // ("Resume S02E03", and start over), the next ("Play
-                // S02E04"), or S01E01.
+                // A series plays an episode, named by its code: the one
+                // the viewer is in ("resume S01E03", and start over, which
+                // plays it from its beginning), the next ("play S01E02"),
+                // or S01E01. Its position is in its row below.
                 seriesPlay ? (
                   seriesPlay.resumeSec > 0 ? (
                     <>
                       <button
                         onClick={() => goEpisode(seriesPlay.episodeId, seriesPlay.resumeSec)}
-                        className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                        className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                       >
                         <Play aria-hidden className="w-5 h-5 fill-current" />
-                        {seriesCode ? `Resume ${seriesCode}` : `Resume ${fmtDur(seriesPlay.resumeSec)}`}
+                        {seriesPlayLabel(true, seriesCode)}
                       </button>
                       <button
                         onClick={() => goEpisode(seriesPlay.episodeId, null)}
-                        className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                        className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                       >
-                        Start over
+                        {START_OVER}
                       </button>
                     </>
                   ) : (
                     <button
                       onClick={() => goEpisode(seriesPlay.episodeId, null)}
-                      className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                      className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                     >
                       <Play aria-hidden className="w-5 h-5 fill-current" />
-                      {seriesCode ? `Play ${seriesCode}` : 'Play'}
+                      {seriesPlayLabel(false, seriesCode)}
                     </button>
                   )
                 ) : !seriesKnown ? (
                   <button
                     onClick={() => void playTitle(itemId, 'series')}
                     disabled={playPending}
-                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0 disabled:opacity-60`}
+                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0 disabled:opacity-60`}
                   >
                     <Play aria-hidden className="w-5 h-5 fill-current" />
-                    Play
+                    {PLAY}
                   </button>
                 ) : null
               ) : resumeSec > 30 ? (
                 <>
                   <button
                     onClick={() => goPlayer(true)}
-                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                    className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                   >
                     <Play aria-hidden className="w-5 h-5 fill-current" />
-                    Resume {fmtDur(resumeSec)}
+                    {resumeLabel(resumeSec)}
                   </button>
                   <button
                     onClick={() => goPlayer(false)}
-                    className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                    className={`${ACTION_HEIGHT} px-5 ${OFF_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                   >
-                    Start over
+                    {START_OVER}
                   </button>
                 </>
               ) : (
                 <button
                   onClick={() => goPlayer(false)}
-                  className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                  className={`${ACTION_HEIGHT} px-5 ${PLAY_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                 >
                   <Play aria-hidden className="w-5 h-5 fill-current" />
-                  Play
+                  {PLAY}
                 </button>
               )}
               {trailer?.local ? (
                 <a
                   href={toApp(trailerPath(itemId, trailer.extra.id))}
-                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                   title="Play the trailer"
                 >
                   <Clapperboard aria-hidden className="w-5 h-5" />
-                  Trailer
+                  {TRAILER}
                 </a>
               ) : trailer ? (
                 <a
                   href={trailer.link.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} font-medium flex items-center gap-2 shrink-0`}
+                  className={`${ACTION_HEIGHT} px-4 ${OFF_LOOK} ${ACTION_FOCUS} ${ACTION_LABEL} font-medium flex items-center gap-2 shrink-0`}
                   title="Watch trailer on YouTube"
                 >
                   <Youtube aria-hidden className="w-5 h-5" />
-                  Trailer
+                  {TRAILER}
                 </a>
               ) : null}
               <AddToListControl key={itemId} itemId={itemId} />
@@ -465,13 +478,4 @@ export function DetailPage({ itemId }: DetailPageProps) {
       </div>
     </div>
   );
-}
-
-function fmtDur(s: number): string {
-  if (!isFinite(s) || s < 0) return '0:00';
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60).toString().padStart(2, '0');
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec}`;
-  return `${m}:${sec}`;
 }

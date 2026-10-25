@@ -93,14 +93,27 @@ export function seriesPlayTarget(
   const row = (continueWatching ?? []).find((r) => r.type === 'episode' && r.parent_id === seriesId);
   if (row) {
     const position = row.position_sec ?? 0;
+    // A row without its numbers takes them from the season it is in, so
+    // the button names the episode all the same.
+    const listed = row.season_number == null || row.episode_number == null ? episodeIn(seasons, row.id) : null;
     return {
       episodeId: row.id,
-      season: row.season_number ?? null,
-      episode: row.episode_number ?? null,
+      season: row.season_number ?? listed?.season ?? null,
+      episode: row.episode_number ?? listed?.episode ?? null,
       episodeEnd: row.episodeEnd ?? null,
       resumeSec: !row.up_next && isMidWatch(position, row.duration_sec ?? 0) ? position : 0,
     };
   }
   const first = firstEpisodeOf(seasons);
   return first ? { episodeId: first.id, season: first.season, episode: first.episode_number ?? null, episodeEnd: null, resumeSec: 0 } : null;
+}
+
+/** The season and number of the episode with that id, where the seasons
+ *  list it. */
+function episodeIn(seasons: readonly SeasonRef[] | null | undefined, id: string): { season: number; episode: number | null } | null {
+  for (const s of seasons ?? []) {
+    const e = s.episodes?.find((x) => x.id === id);
+    if (e) return { season: s.season, episode: e.episode_number ?? null };
+  }
+  return null;
 }

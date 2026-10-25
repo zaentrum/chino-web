@@ -71,3 +71,11 @@ test("a series page's Play: a row barely started or in its last minute is played
   assert.equal(isMidWatch(30, 2700), false);
   assert.equal(isMidWatch(2640, 2700), false);
 });
+
+test("a series page's Play: a row without its numbers is named from the season it is in", () => {
+  const cw = [{ id: 's1e2', type: 'episode', parent_id: 'pioneer', position_sec: 754, duration_sec: 2700 }];
+  assert.deepEqual(seriesPlayTarget('pioneer', cw, seasons), { episodeId: 's1e2', season: 1, episode: 2, episodeEnd: null, resumeSec: 754 });
+  // Not in the seasons either: no code, the button says the verb alone.
+  const elsewhere = [{ id: 'gone', type: 'episode', parent_id: 'pioneer', position_sec: 754, duration_sec: 2700 }];
+  assert.deepEqual(seriesPlayTarget('pioneer', elsewhere, seasons), { episodeId: 'gone', season: null, episode: null, episodeEnd: null, resumeSec: 754 });
+});

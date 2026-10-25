@@ -47,6 +47,44 @@ export function actionLook(meaning: ActionMeaning, on: boolean): string {
 /** Play and Resume: the accent's fill, its label and icon dark. */
 export const PLAY_LOOK = `bg-chino-accent ${ON_CONTENT}`;
 
+// The row's words (docs/chino, title actions), as a button of the design
+// system writes them: lowercase, in its mono face. The words are written in
+// lowercase rather than lowercased by CSS, so an episode's code keeps its
+// capitals ("resume S01E03") and a screen reader reads what is shown.
+
+/** The face of a button's label in the row, and of the hero's buttons. */
+export const ACTION_LABEL = 'font-mono';
+export const PLAY = 'play';
+export const START_OVER = 'start over';
+export const TRAILER = 'trailer';
+/** The hero's way to a title's page. */
+export const SEE_DETAILS = 'see details';
+
+/** A position as a clock shows it: "1:43", "1:02:05". */
+export function clockTime(sec: number): string {
+  const s = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const rest = String(s % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${rest}` : `${m}:${rest}`;
+}
+
+/** A movie's resume, with where it picks up: "resume 1:43". */
+export function resumeLabel(positionSec: number): string {
+  return `resume ${clockTime(positionSec)}`;
+}
+
+/**
+ * A series' first button, which names the episode it plays by its code, as
+ * the TV's title page does: "play S01E01", "resume S01E03", "play S01E02",
+ * a file of two episodes "play S03E18–19". The position is in the episode's
+ * row below, never in the button; without a code, "play" or "resume".
+ */
+export function seriesPlayLabel(resumes: boolean, code: string | null | undefined): string {
+  const verb = resumes ? 'resume' : PLAY;
+  return code ? `${verb} ${code}` : verb;
+}
+
 /** The 1 px divider between the two parts of add to list: on blue a dark
  *  line, on the plain surface the border's. */
 export function dividerLook(inWatchlist: boolean): string {
