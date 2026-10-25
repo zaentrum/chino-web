@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context';
 import { Check, Loader2, Plus, X } from 'lucide-react';
 import { useWatchlists, useMemberships, toggleMembership } from '../hooks/useWatchlists';
 import { MENU_HEADER } from '../lib/playerMenus';
+import { LIST_PICKER, LIST_PICKER_CHROME } from '../lib/titleActions';
 
 interface AddToListPickerProps {
   itemId: string;
@@ -36,7 +37,7 @@ interface AddToListPickerProps {
 /**
  * Small popover listing the user's lists with a check each (checked =
  * the title is in that list). Toggling a row optimistically flips
- * the membership and calls PUT/DELETE items. An inline "+ New list…" row
+ * the membership and calls PUT/DELETE items. An inline "+ new list…" row
  * creates a list then adds the item to it.
  *
  * What add to list's "⌄" opens (TitleActions.tsx AddToListControl), on a
@@ -158,8 +159,10 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
                     {checked ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : null}
                   </span>
                   <span className="truncate flex-1">{list.name}</span>
+                  {/* A badge is chrome: mono, lowercase - never capitals
+                      by CSS. */}
                   {list.isDefault ? (
-                    <span className="text-[10px] uppercase text-chino-muted shrink-0">Default</span>
+                    <span className={`${LIST_PICKER_CHROME} text-xs text-chino-muted shrink-0`}>{LIST_PICKER.defaultBadge}</span>
                   ) : null}
                 </button>
               </li>
@@ -187,10 +190,10 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
               <button
                 onClick={() => void submitNew()}
                 disabled={busy}
-                className="px-3 py-1 bg-chino-accent hover:brightness-110 text-chino-bg text-sm font-medium disabled:opacity-50 flex items-center gap-1"
+                className={`px-3 py-1 bg-chino-accent hover:brightness-110 text-chino-bg ${LIST_PICKER_CHROME} text-sm font-medium disabled:opacity-50 flex items-center gap-1`}
               >
                 {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
-                Create
+                {LIST_PICKER.create}
               </button>
               <button
                 onClick={() => {
@@ -198,22 +201,22 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
                   setNewName('');
                   setErr(null);
                 }}
-                className="px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white text-sm"
+                className={`px-3 py-1 rounded bg-white/10 hover:bg-white/20 text-white ${LIST_PICKER_CHROME} text-sm`}
               >
-                Cancel
+                {LIST_PICKER.cancel}
               </button>
             </div>
           </div>
         ) : (
           <button
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-chino-accent hover:bg-chino-surface-2"
+            className={`w-full flex items-center gap-2 px-3 py-2 ${LIST_PICKER_CHROME} text-sm text-chino-accent hover:bg-chino-surface-2`}
             onClick={() => {
               setCreating(true);
               setErr(null);
             }}
           >
             <Plus className="w-4 h-4" />
-            New list…
+            {LIST_PICKER.newList}
           </button>
         )}
       </div>

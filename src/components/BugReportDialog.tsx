@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Camera, ExternalLink, Loader2, X } from 'lucide-react';
 import { captureScreenshot } from '../lib/screenshot';
 import { submitBugReport, type FeedbackResult } from '../lib/feedback';
-import { feedbackFailure } from '../lib/feedbackStatus';
+import { BUG_REPORT, feedbackFailure, feedbackFiled } from '../lib/feedbackStatus';
 import { baseContext } from '../lib/errorReporter';
 
 type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
@@ -73,7 +73,7 @@ export function BugReportDialog({
 
   const submit = async () => {
     if (!description.trim()) {
-      setError('Please describe what happened.');
+      setError(BUG_REPORT.describe);
       return;
     }
     setError(null);
@@ -110,21 +110,19 @@ export function BugReportDialog({
         className="w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto rounded-xl bg-chino-surface border border-white/10 shadow-2xl"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <h2 className="text-lg font-medium text-white">Report a bug</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-chino-text" title="Close">
+          {/* The dialog's title and its buttons: chrome, in the mono face,
+              lowercase. */}
+          <h2 className="font-mono text-lg font-medium text-white">{BUG_REPORT.title}</h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-chino-text" title={BUG_REPORT.close} aria-label={BUG_REPORT.close}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {phase === 'done' && result ? (
           <div className="p-6 space-y-4 text-sm">
-            <p className="text-white font-medium">
-              {result.duplicate ? 'Thanks — this one is already on file.' : 'Thanks for the report!'}
-            </p>
+            <p className="text-white font-medium">{BUG_REPORT.thanks}</p>
             <p className="text-chino-text">
-              {result.duplicate
-                ? 'Your details were added to the existing ticket '
-                : 'Filed bug '}
+              {feedbackFiled(!!result.duplicate)}{' '}
               <a
                 href={result.url}
                 target="_blank"
@@ -139,9 +137,9 @@ export function BugReportDialog({
             <div className="flex justify-end">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
+                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
               >
-                Close
+                {BUG_REPORT.close}
               </button>
             </div>
           </div>
@@ -180,10 +178,10 @@ export function BugReportDialog({
                 {includeShot && shotUrl ? (
                   <button
                     onClick={() => setPhase('capturing')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-chino-text"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-xs text-chino-text"
                   >
                     <Camera className="w-3.5 h-3.5" />
-                    Retake
+                    {BUG_REPORT.retake}
                   </button>
                 ) : null}
               </div>
@@ -209,17 +207,17 @@ export function BugReportDialog({
             <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
+                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
               >
-                Cancel
+                {BUG_REPORT.cancel}
               </button>
               <button
                 onClick={submit}
                 disabled={phase === 'submitting'}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 text-sm text-chino-bg font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 font-mono text-sm text-chino-bg font-medium"
               >
                 {phase === 'submitting' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Submit report
+                {BUG_REPORT.send}
               </button>
             </div>
           </div>

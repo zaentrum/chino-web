@@ -17,6 +17,8 @@ import {
   CARET_PART,
   CHOOSE_LISTS,
   ICON_BUTTON,
+  LIST_PICKER,
+  LIST_PICKER_CHROME,
   OFF_LOOK,
   PLAY_LOOK,
   actionLook,
@@ -136,4 +138,12 @@ test("a card's menu says its actions as the title row does, lowercase for the mo
   assert.equal(watchedName(true), 'watched');
   assert.equal(REMOVE_FROM_CONTINUE_WATCHING, 'remove from continue watching');
   for (const w of [RESUME, PLAY, watchedName(false), watchedName(true), REMOVE_FROM_CONTINUE_WATCHING]) assert.equal(w, w.toLowerCase());
+});
+
+test("the list picker's badge, new-list row and buttons: lowercase for the mono face, never capitals by CSS", () => {
+  // Never "DEFAULT" by CSS, "Default", "New list…", "Create" or "Cancel".
+  assert.deepEqual(LIST_PICKER, { defaultBadge: 'default', newList: 'new list…', create: 'create list', cancel: 'cancel' });
+  for (const w of Object.values(LIST_PICKER)) assert.equal(w, w.toLowerCase());
+  assert.match(LIST_PICKER_CHROME, /\bfont-mono\b/);
+  assert.doesNotMatch(LIST_PICKER_CHROME, /uppercase|capitalize/);
 });

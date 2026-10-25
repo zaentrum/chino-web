@@ -111,6 +111,20 @@ export function addToListName(inWatchlist: boolean): string {
 /** The "⌄" part of add to list, which opens the list picker. */
 export const CHOOSE_LISTS = 'choose lists';
 
+/** The list picker's chrome (AddToListPicker): the default list's badge,
+ *  the row that starts a new list and the buttons of its form - lowercase
+ *  for the mono face, written so rather than lowercased (or capitalised) by
+ *  CSS. A list's name keeps the case it was given. */
+export const LIST_PICKER = {
+  defaultBadge: 'default',
+  newList: 'new list…',
+  create: 'create list',
+  cancel: 'cancel',
+} as const;
+/** The look of the picker's badge, its new-list row and its buttons: the
+ *  mono face, never capitals by CSS. */
+export const LIST_PICKER_CHROME = 'font-mono';
+
 export function watchedName(watched: boolean): string {
   return watched ? 'watched' : 'mark as watched';
 }

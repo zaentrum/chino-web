@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { featuresFrom } from './runtimeConfig.ts';
-import { FeedbackOffError, feedbackError, feedbackFailure } from './feedbackStatus.ts';
+import { BUG_REPORT, FeedbackOffError, feedbackError, feedbackFailure, feedbackFiled } from './feedbackStatus.ts';
 
 test('feedback is offered only when the server says true', () => {
   assert.deepEqual(featuresFrom({ features: { feedback: true } }), { feedback: true });
@@ -32,4 +32,22 @@ test('a report that could not be filed says why, and never asks to try again', (
   assert.equal(feedbackFailure(new TypeError('Failed to fetch')), "Couldn't file the report. Can't reach the server.");
   assert.equal(feedbackFailure(feedbackError(503)), "Bug reporting is switched off on this server, so this report can't be filed.");
   for (const s of [400, 401, 403, 413, 500]) assert.doesNotMatch(feedbackFailure(feedbackError(s)), /please|in a moment|try again/i, String(s));
+});
+
+test('the bug-report dialog: its title and buttons lowercase for the mono face, a verb and its object, never "submit"', () => {
+  for (const w of [BUG_REPORT.title, BUG_REPORT.cancel, BUG_REPORT.send, BUG_REPORT.close, BUG_REPORT.retake]) assert.equal(w, w.toLowerCase());
+  assert.equal(BUG_REPORT.cancel, 'cancel');
+  assert.equal(BUG_REPORT.send, 'send report');
+  assert.doesNotMatch(BUG_REPORT.send, /submit/i);
+});
+
+test("the bug-report dialog's messages: no \"please\", no exclamation marks; a report goes to the people who run this server", () => {
+  const messages = [BUG_REPORT.describe, BUG_REPORT.thanks, feedbackFiled(false), feedbackFiled(true)];
+  for (const m of messages) {
+    assert.doesNotMatch(m, /please|!|ticket|backlog/i, m);
+    // The body face: sentence case.
+    assert.match(m, /^[A-Z]/, m);
+  }
+  assert.equal(feedbackFiled(false), 'It went to the people who run this server as');
+  assert.match(feedbackFiled(true), /^The people who run this server already have this one\. /);
 });
