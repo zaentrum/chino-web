@@ -16,6 +16,7 @@ import {
 import { markRenewed, nextSignInStep, readSignInMarks, renewalFailure } from '../lib/signInAgain';
 import { oidcUserManager } from '../auth/oidc';
 import { LoadingState } from './LoadingState';
+import { DETAILS_BODY, DETAILS_DISCLOSURE } from '../lib/chromeWords';
 
 // What a screen shows in the place of what couldn't load (lib/loadFailure.ts;
 // the design system's empty states, "when it couldn't load: say why"): the
@@ -114,10 +115,12 @@ export function FailureDetails({ status, text }: { status: number | null; text?:
   if (!details) return null;
   return (
     // In the muted grey of labels and details: at least 4.5:1 on the
-    // canvas and on every surface (9.0 on surface), at 12 px.
-    <details className="text-xs text-chino-muted">
+    // canvas and on every surface (9.0 on surface), at 12 px. What it
+    // opens takes no room of its own: the centred block around it stays
+    // where it was (DETAILS_BODY).
+    <details className={DETAILS_DISCLOSURE}>
       <summary className="font-mono cursor-pointer hover:text-chino-text">details</summary>
-      <p className="mt-1 font-mono">{details}</p>
+      <p className={DETAILS_BODY}>{details}</p>
     </details>
   );
 }

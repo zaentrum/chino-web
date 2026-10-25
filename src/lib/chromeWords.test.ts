@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  DETAILS_BODY,
+  DETAILS_DISCLOSURE,
   PAGE_HEADING,
   QUIET_BUTTON,
   SECTION_HEADING,
@@ -55,4 +57,15 @@ test('square, as every frame in the design system: no rounded corners on the chr
 test("the bug dialog's frame, fields and buttons are square: no rounded-xl, rounded-lg, rounded-md", () => {
   const source = readFileSync(new URL('../components/BugReportDialog.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /\brounded(-[a-z0-9]+)?\b/);
+});
+
+test('opening "details" never moves the centred block: what it opens takes no room of its own', () => {
+  const body = DETAILS_BODY.split(/\s+/);
+  assert.ok(body.includes('absolute') && body.includes('top-full'));
+  // Centred under its summary, never wider than the screen leaves.
+  assert.ok(body.includes('left-1/2') && body.includes('-translate-x-1/2'));
+  assert.ok(body.some((c) => c.startsWith('max-w-[')));
+  // The disclosure is what it is placed against, in the muted grey.
+  assert.ok(DETAILS_DISCLOSURE.split(/\s+/).includes('relative'));
+  assert.ok(DETAILS_DISCLOSURE.split(/\s+/).includes('text-chino-muted'));
 });

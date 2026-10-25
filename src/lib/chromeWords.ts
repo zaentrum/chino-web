@@ -41,3 +41,13 @@ export const START_PLAYBACK = 'play';
  *  see-through wash. */
 export const START_PLAYBACK_BUTTON =
   'inline-flex items-center gap-2 h-12 px-5 bg-chino-accent text-chino-bg font-mono font-medium shadow-xl';
+
+/** A "details" disclosure under a couldn't-load screen's reason: in the
+ *  muted grey of labels and details (at least 4.5:1 on the canvas and on
+ *  every surface, at 12 px). */
+export const DETAILS_DISCLOSURE = 'relative text-xs text-chino-muted';
+
+/** What it opens: under its summary, centred on it, taking no room of its
+ *  own - so opening it never moves the centred block it is part of. */
+export const DETAILS_BODY =
+  'absolute top-full left-1/2 -translate-x-1/2 mt-1 w-max max-w-[min(28rem,calc(100vw-2rem))] font-mono text-center';

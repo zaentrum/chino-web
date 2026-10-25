@@ -17,10 +17,13 @@ import {
   PICTURE_BUTTON_ON,
   PICTURE_CARD,
   PLAYBACK_RATES,
+  SUBTITLES_LIST,
+  SUBTITLES_MENU,
   SUBTITLES_OFF_ROW,
   WAITING_LINE,
-  WAITING_PANEL,
+  WAITING_SQUARE,
   speedName,
+  waitingPanel,
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
 import { START_PLAYBACK, START_PLAYBACK_BUTTON } from '../lib/chromeWords';
@@ -3731,7 +3734,12 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             link={failureLink}
           />
         ) : (
-          <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />
+          // The spinner alone, in its square frame; a screen reader hears
+          // "Loading".
+          <div role="status" className={WAITING_SQUARE}>
+            <Loader2 aria-hidden className="w-8 h-8 animate-spin text-chino-fg" />
+            <span className="sr-only">{LOADING_NAME}</span>
+          </div>
         )}
         {bugDialog}
       </div>
@@ -3998,8 +4006,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           (WAITING_PANEL) - the picture under it undimmed. */}
       {buffering && !fatalError && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className={WAITING_PANEL}>
-            <Loader2 className="w-12 h-12 animate-spin text-chino-fg" aria-hidden />
+          {/* With a line, a panel; the spinner alone, a square frame. */}
+          <div className={waitingPanel(!!actionLabel)}>
+            <Loader2 className={`${actionLabel ? 'w-12 h-12' : 'w-8 h-8'} animate-spin text-chino-fg`} aria-hidden />
             {/* What it is doing, where the spinner alone doesn't say it;
                 else nothing. */}
             <p role="status" className={actionLabel ? WAITING_LINE : 'sr-only'}>
@@ -4480,8 +4489,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           <span className="text-sm tabular-nums w-16">{fmt(effectiveDuration)}</span>
         </div>
 
-        {/* relative: the subtitles menu's place on a narrow screen. */}
-        <div className="relative flex items-center gap-2 mt-2">
+        {/* Not the subtitles menu's anchor: the whole bar is, so the menu
+            opens above the seek bar (SUBTITLES_MENU). */}
+        <div className="flex items-center gap-2 mt-2">
           <button
             onClick={() => userTogglePlay()}
             className={`p-2 ${PICTURE_BUTTON}`}
@@ -4544,11 +4554,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             </div>
           )}
 
-          {/* The subtitles menu opens above its button; on a narrow screen
-              (below md), where the buttons to its right would push it
-              past the left edge, it opens at the right end of the row
-              instead, within the bar's 16 px sides. */}
-          <div className="md:relative">
+          {/* The subtitles menu opens above the whole bar, at its right
+              end, within its 16 px sides: never over the seek bar, and
+              never past the left edge on a narrow screen. */}
+          <div>
             <button
               onClick={() => toggleMenu('captions')}
               className={`p-2 ${activeSubId ? PICTURE_BUTTON_ON : PICTURE_BUTTON}`}
@@ -4560,17 +4569,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               <Captions className="w-5 h-5" />
             </button>
             {showCaptionsMenu && mergedSubs.length > 0 && (
-              <div
-                className="absolute right-0 bottom-full mb-3 w-96 max-w-full md:max-w-none bg-chino-surface border border-white/10 rounded-lg shadow-xl py-1 z-50"
-                role="menu"
-                aria-label="subtitles"
-              >
+              <div className={SUBTITLES_MENU} role="menu" aria-label="subtitles">
                 <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.subtitles}</div>
                 {/* "off", the languages that matter here, then "more
                     languages" with the rest (subMenu). One subtitle at a
                     time: a pick replaces the one on. Scrolls where it is
                     long. */}
-                <div ref={subListRef} className="max-h-[min(24rem,55vh)] overflow-y-auto">
+                <div ref={subListRef} className={SUBTITLES_LIST}>
                   <MenuChoice picked={!activeSubId} onPick={() => chooseSub(null)}>
                     {SUBTITLES_OFF_ROW}
                   </MenuChoice>
