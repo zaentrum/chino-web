@@ -773,6 +773,31 @@ test('the track: the setting\'s script or region first, then one that names neit
   const regions = [{ id: 'cn', lang: 'zh-CN' }, { id: 'hk', lang: 'zh-HK' }];
   assert.equal(defaultSubtitleTrack(regions, { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'hk');
   assert.equal(defaultSubtitleTrack(regions, { audioLang: 'eng', subtitlePref: 'zh-Hans' }), 'cn');
+  // A setting with a region: its script before a track that names neither.
+  // Taiwan's and Hong Kong's Chinese are Traditional, so "Chinese
+  // (Traditional)" before the bare "Chinese" the menu lists first.
+  const bareFirst = [{ id: 'zh', lang: 'chi' }, { id: 'hant', lang: 'zh-Hant' }];
+  for (const subtitlePref of ['zh-TW', 'zh-HK', 'zh-Hant-TW', 'zh-Hant']) {
+    assert.equal(defaultSubtitleTrack(bareFirst, { audioLang: 'eng', subtitlePref }), 'hant', subtitlePref);
+  }
+  // Told by its title alone, as the menu tags it.
+  assert.equal(
+    defaultSubtitleTrack([{ id: 'zh', lang: 'chi' }, { id: 'trad', lang: 'chi', tag: 'zh-Hant' }], { audioLang: 'eng', subtitlePref: 'zh-TW' }),
+    'trad',
+  );
+  // The region too, where the title has it: "zh-TW" before "zh-Hant" for
+  // a zh-TW setting; the Simplified after the bare one still.
+  const traditional = [{ id: 'hans', lang: 'zh-Hans' }, { id: 'zh', lang: 'chi' }, { id: 'hant', lang: 'zh-Hant' }, { id: 'tw', lang: 'zh-TW' }];
+  assert.equal(defaultSubtitleTrack(traditional, { audioLang: 'eng', subtitlePref: 'zh-TW' }), 'tw');
+  assert.equal(defaultSubtitleTrack(traditional, { audioLang: 'eng', subtitlePref: 'zh-Hant-TW' }), 'tw');
+  assert.equal(defaultSubtitleTrack(traditional.slice(0, 3), { audioLang: 'eng', subtitlePref: 'zh-TW' }), 'hant');
+  assert.equal(defaultSubtitleTrack(traditional.slice(0, 2), { audioLang: 'eng', subtitlePref: 'zh-TW' }), 'zh');
+  assert.equal(defaultSubtitleTrack(traditional.slice(0, 1), { audioLang: 'eng', subtitlePref: 'zh-TW' }), 'hans');
+  // And the other way: a zh-CN setting turns on the Simplified before the bare one.
+  assert.equal(
+    defaultSubtitleTrack([{ id: 'zh', lang: 'chi' }, { id: 'hant', lang: 'zh-Hant' }, { id: 'hans', lang: 'zh-Hans' }], { audioLang: 'eng', subtitlePref: 'zh-CN' }),
+    'hans',
+  );
   // A region: English (United Kingdom) for an en-GB setting.
   const english = [{ id: 'us', lang: 'en-US' }, { id: 'en', lang: 'eng' }, { id: 'gb', lang: 'en-GB' }];
   assert.equal(defaultSubtitleTrack(english, { audioLang: 'fre', subtitlePref: 'en-GB' }), 'gb');

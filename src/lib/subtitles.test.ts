@@ -624,6 +624,13 @@ test('what comes on by itself respects the setting\'s script or region, where th
   assert.equal(on([tracks[1], tracks[3]], 'zh-Hant'), 'emb-3');
   // A region that stands for the script: Taiwan's Chinese is Traditional.
   assert.equal(on([tracks[0], tracks[1], { id: 'emb-5', lang: 'zh-TW', embedded: true }], 'zh-Hant'), 'emb-5');
+  // So a setting with that region turns on the Traditional, before the bare
+  // "Chinese" the menu lists first - on a server that names zh-TW.
+  const taiwan = (list: readonly SubtitleSource[], subtitlePref: string) =>
+    autoSubtitle(menu(list, { preferred: subtitlePref, serverLanguages: ['en', 'de', 'zh-TW'] }), { audioLang: 'eng', subtitlePref });
+  assert.equal(taiwan([tracks[0], tracks[2]], 'zh-TW'), 'emb-4');
+  assert.equal(taiwan([tracks[0], tracks[2]], 'zh-Hant-TW'), 'emb-4');
+  assert.equal(taiwan([tracks[0], { id: 'emb-6', lang: 'zh-Hant', embedded: true }], 'zh-TW'), 'emb-6');
   // The setting's region: Portugal's Portuguese before the bare one and
   // Brazil's.
   const portuguese: SubtitleSource[] = [

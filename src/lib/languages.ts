@@ -998,31 +998,37 @@ function scriptFor(tag: string): string {
 }
 
 /**
- * How well a track's tag answers the script and the region a setting names:
- * 0 where it is in them ("zh-Hant", "zh-Hant-TW" and "zh-TW" for a
- * "zh-Hant" setting; "pt-PT" for "pt-PT"), 1 where it names neither
- * against them (a bare "zh"), 2 where it names another ("zh-Hans", "zh-CN";
+ * How well a track's tag answers the script and the region a setting names
+ * (its script also where only its region stands for one: "Hant" for
+ * "zh-TW"): 0 where it is in all of them ("zh-Hant", "zh-Hant-TW" and
+ * "zh-TW" for a "zh-Hant" setting; "zh-TW" and "zh-Hant-TW" for "zh-TW";
+ * "pt-PT" for "pt-PT"), 1 where it is in some and names no other
+ * ("zh-Hant" for a "zh-TW" or "zh-Hant-TW" setting), 2 where it names
+ * neither (a bare "zh"), 3 where it names another ("zh-Hans", "zh-CN";
  * "pt-BR"). A setting with neither, a bare language, takes every track the
- * same (1).
+ * same (2).
  */
-function formRank(setting: string, tag: string): 0 | 1 | 2 {
-  const [wantScript, wantRegion] = [scriptFor(setting), regionOf(setting)];
-  if (!wantScript && !wantRegion) return 1;
-  const [script, region] = [scriptFor(tag), regionOf(tag)];
-  if ((wantScript && script && script !== wantScript) || (wantRegion && region && region !== wantRegion)) return 2;
-  const inIt = (!wantScript || script === wantScript) && (!wantRegion || region === wantRegion);
-  return inIt ? 0 : 1;
+function formRank(setting: string, tag: string): 0 | 1 | 2 | 3 {
+  const want = { script: scriptFor(setting), region: regionOf(setting) };
+  const parts = (['script', 'region'] as const).filter((p) => want[p]);
+  if (parts.length === 0) return 2;
+  const has = { script: scriptFor(tag), region: regionOf(tag) };
+  if (parts.some((p) => has[p] && has[p] !== want[p])) return 3;
+  const matched = parts.filter((p) => has[p] === want[p]).length;
+  return matched === parts.length ? 0 : matched > 0 ? 1 : 2;
 }
 
 /** The track to switch on by default, or null: one in the language
  *  defaultSubtitleLang names, a full one rather than a forced one - the
  *  forced one where it is the only one in that language. Within the
- *  language, the setting's script or region first: a "zh-Hant" setting
+ *  language, the setting's script and region first: a "zh-Hant" setting
  *  turns on "Chinese (Traditional)" where the title has it, before a bare
- *  "Chinese" or the Simplified; then a track that names neither, then the
- *  rest of the language - each in the order given (the menu's). A track
- *  is in the language its tag says (`tag`, the menu's: "chi" titled
- *  "繁體中文" is "zh-Hant"), else its code. */
+ *  "Chinese" or the Simplified; then one in its script or its region that
+ *  names no other ("Chinese (Traditional)" for a "zh-TW" setting, where the
+ *  title has no "zh-TW"); then a track that names neither, then the rest
+ *  of the language - each in the order given (the menu's). A track is in
+ *  the language its tag says (`tag`, the menu's: "chi" titled "繁體中文" is
+ *  "zh-Hant"), else its code. */
 export function defaultSubtitleTrack<T extends { id: string; lang?: string; tag?: string; forced?: boolean }>(
   tracks: readonly T[],
   defaults: SubtitleDefaults,
@@ -1032,7 +1038,7 @@ export function defaultSubtitleTrack<T extends { id: string; lang?: string; tag?
   const setting = languageTag(defaults.subtitlePref);
   const tagOf = (t: T) => languageTag(t.tag || t.lang);
   const inLang = tracks.filter((t) => normalizeLang(tagOf(t)) === want);
-  const ranked = [0, 1, 2].flatMap((rank) => inLang.filter((t) => formRank(setting, tagOf(t)) === rank));
+  const ranked = [0, 1, 2, 3].flatMap((rank) => inLang.filter((t) => formRank(setting, tagOf(t)) === rank));
   return (ranked.find((t) => !t.forced) ?? ranked[0])?.id ?? null;
 }
 
