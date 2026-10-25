@@ -15,7 +15,7 @@ import {
   type Sample,
 } from '../lib/heroSwipe';
 import { trailerPath } from '../lib/trailers';
-import { ACTION_FOCUS, ACTION_HEIGHT, OFF_LOOK, PLAY_LOOK } from '../lib/titleActions';
+import { ACTION_FOCUS, ACTION_HEIGHT, ACTION_LABEL, OFF_LOOK, PLAY, PLAY_LOOK, SEE_DETAILS, TRAILER } from '../lib/titleActions';
 import { FadeImage } from './FadeImage';
 
 interface HeroSectionProps {
@@ -448,9 +448,10 @@ interface HeroSlideProps {
 const PICTURE_OVER_BUTTONS = 'h-[calc(100%-80px)] sm:h-[calc(100%-88px)] md:h-full';
 const PICTURE_OVER_BUTTONS_AND_DOTS = 'h-[calc(100%-104px)] sm:h-[calc(100%-112px)] md:h-full';
 
-/** A hero button: the title actions' height and look, solid. One row on
- *  any phone, 320 px wide too: Trailer is its icon alone there. */
-const HERO_BUTTON = `${ACTION_HEIGHT} ${ACTION_FOCUS} flex items-center justify-center gap-2 shrink-0 transition-colors text-sm lg:text-base font-medium`;
+/** A hero button: the title actions' height, look and words - lowercase,
+ *  in the mono face - solid. One row on any phone, 320 px wide too: trailer
+ *  is its icon alone there. */
+const HERO_BUTTON = `${ACTION_HEIGHT} ${ACTION_FOCUS} ${ACTION_LABEL} flex items-center justify-center gap-2 shrink-0 transition-colors text-sm lg:text-base font-medium`;
 const HERO_LABELLED = `${HERO_BUTTON} px-3 sm:px-4 lg:px-6`;
 
 function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlideProps) {
@@ -545,7 +546,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
         {/* Spacer pushes the controls group to the bottom. */}
         <div className="flex-1" />
 
-        {/* Bottom group: Play, More info and Trailer, then the room for
+        {/* Bottom group: play, see details and trailer, then the room for
             the rotation dots. The title actions' 48 px, 8 px apart, on
             solid fills - Play dark on the accent, the others the plain
             surface - and never on the picture: on a phone under it
@@ -560,7 +561,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
               className={`${HERO_LABELLED} ${PLAY_LOOK} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <Play aria-hidden className="w-4 h-4 lg:w-5 lg:h-5 fill-current" />
-              <span>Play</span>
+              <span>{PLAY}</span>
             </button>
             <button
               onClick={onDetail}
@@ -568,7 +569,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
               className={`${HERO_LABELLED} ${OFF_LOOK} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <Info aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
-              <span>More info</span>
+              <span>{SEE_DETAILS}</span>
             </button>
             {view.trailerHref ? (
               <a
@@ -576,14 +577,14 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
                 {...(view.localTrailer ? {} : { target: '_blank', rel: 'noopener noreferrer' })}
                 className={`${HERO_BUTTON} w-12 sm:w-auto sm:px-4 lg:px-6 ${OFF_LOOK}`}
                 title={view.localTrailer ? 'Play the trailer' : 'Watch trailer on YouTube'}
-                aria-label="Trailer"
+                aria-label={TRAILER}
               >
                 {view.localTrailer ? (
                   <Clapperboard aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
                 ) : (
                   <Youtube aria-hidden className="w-4 h-4 lg:w-5 lg:h-5" />
                 )}
-                <span aria-hidden className="hidden sm:inline">Trailer</span>
+                <span aria-hidden className="hidden sm:inline">{TRAILER}</span>
               </a>
             ) : null}
           </div>
