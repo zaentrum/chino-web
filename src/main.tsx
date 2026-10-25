@@ -9,6 +9,7 @@ import { loadRuntimeConfig, type RuntimeConfig } from './lib/runtimeConfig';
 import { installErrorReporting } from './lib/errorReporter';
 import { RotateCw } from 'lucide-react';
 import { TRY_AGAIN, startupFailure } from './lib/loadFailure';
+import { LOADING_NAME } from './lib/playerStatus';
 import { FailureDetails } from './components/CouldntLoad';
 
 // Global error / unhandled-rejection listeners → auto bug reports.
@@ -21,14 +22,15 @@ const root: Root = createRoot(document.getElementById('root')!);
 // Minimal, dependency-free splash while we fetch /api/config. Kept in
 // plain markup (no app components) so it renders even before the OIDC
 // context / app tree exist. Palette matches the on-brand dark cards in
-// AuthGate.
+// AuthGate. The spinner alone, in a square frame, as every loading screen
+// (LoadingState): a screen reader hears "Loading", nothing more is shown.
 function BootstrapLoading() {
   return (
-    <div className="min-h-dvh bg-chino-bg text-chino-muted flex flex-col items-center justify-center p-6">
-      <div className="w-16 h-16 mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
+    <div role="status" className="min-h-dvh bg-chino-bg text-chino-muted flex flex-col items-center justify-center p-6">
+      <div aria-hidden className="w-16 h-16 bg-chino-surface border border-chino-border flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-chino-border border-t-chino-accent animate-spin" />
       </div>
-      <p className="text-sm italic">Loading…</p>
+      <span className="sr-only">{LOADING_NAME}</span>
     </div>
   );
 }
