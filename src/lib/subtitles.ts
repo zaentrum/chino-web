@@ -24,6 +24,7 @@ import {
   type SubtitleDefaults,
 } from './languages.ts';
 import { HttpError } from './loadFailure.ts';
+import { AUDIO_ORIGINAL, SUBTITLES_OFF } from './settingsLanguages.ts';
 
 /** The text under Settings' subtitle language, the same in every chino app
  *  (docs/chino, subtitles: the setting) - what autoSubtitle does, and how
@@ -101,11 +102,35 @@ export interface SubtitleMenu<T extends SubtitleSource = SubtitleSource> {
 export interface SubtitleMenuOptions {
   /** Settings' subtitle language, or "off" (none). */
   preferred?: string | null;
+  /** Settings' audio language, or "orig" (Original, none): one of the
+   *  person's own languages where the server names none. */
+  audio?: string | null;
+  /** The device's or the browser's language (navigator.languages[0]): one of
+   *  the person's own languages where the server names none. */
+  device?: string | null;
   /** The subtitle languages the server is set up for, its order; none from
    *  an older server. */
   serverLanguages: readonly string[];
   /** The id of the subtitle on, if any. */
   on?: string | null;
+}
+
+/** A language setting's value as a language: '' for none ("off", "orig",
+ *  empty, a code that names no language). */
+function settingLanguage(value: string | null | undefined, none: string): string {
+  const v = value?.trim() ?? '';
+  return v && v.toLowerCase() !== none ? v : '';
+}
+
+/** The languages that matter to the person where the server names none, in
+ *  this order: the subtitle setting's, the audio setting's unless it is
+ *  Original, and the device's or the browser's - each once. */
+export function ownLanguages({ preferred, audio, device }: Pick<SubtitleMenuOptions, 'preferred' | 'audio' | 'device'>): string[] {
+  const own: string[] = [];
+  for (const w of [settingLanguage(preferred, SUBTITLES_OFF), settingLanguage(audio, AUDIO_ORIGINAL), device?.trim() ?? '']) {
+    if (languageTag(w) && !own.some((x) => normalizeLang(x) === normalizeLang(w))) own.push(w);
+  }
+  return own;
 }
 
 /** Whether a track tagged `code` is in the language `want` names: the same
@@ -232,16 +257,17 @@ function standsForBoth<T extends SubtitleSource>(
  * outside the server's languages, and they are under "more languages" as
  * an original's are.
  *
- * Without "more languages" only on a server set up for no subtitle
- * languages (an empty list, or an older server without the route), where
- * "off" and "more languages" alone would hide every track behind a click -
- * the tracks are all listed on top: the viewer's language first, then the rest
- * in the file's order, by language as above. A language's tracks stay
- * together, the AI ones included, and a language with its region or script
- * counts as that language: the viewer's "zh-Hant" puts Chinese first, the
- * whole of it, its runs in the order above - "Chinese", "Chinese (China)",
- * "Chinese (Simplified)", "Chinese (Traditional)" - never their own run
- * first and the rest of the language after it.
+ * The menu never lists every track a file brings: a title can carry a
+ * hundred. On a server set up for no subtitle languages (an empty list, or
+ * an older server without the route) the languages on top are the person's
+ * own (ownLanguages): the subtitle setting's, the audio setting's unless it
+ * is Original, then the device's or the browser's - and the rest is under
+ * "more languages", as with the server's. Each of them the whole language,
+ * the AI ones included, a language with its region or script counting as
+ * that language: the viewer's "zh-Hant" puts Chinese on top, the whole of
+ * it, its runs in the order above - "Chinese", "Chinese (China)", "Chinese
+ * (Simplified)", "Chinese (Traditional)" - never their own run first and
+ * the rest of the language after it.
  *
  * Tracks that would read the same show once, where the first of them was,
  * and are never numbered ("English (2)"): the file's own before one the
@@ -252,7 +278,7 @@ function standsForBoth<T extends SubtitleSource>(
  */
 export function subtitleMenu<T extends SubtitleSource>(
   entries: readonly SubtitleEntry<T>[],
-  { preferred, serverLanguages, on }: SubtitleMenuOptions,
+  { preferred, audio, device, serverLanguages, on }: SubtitleMenuOptions,
 ): SubtitleMenu<T> {
   const firstOf = new Map<string, SubtitleEntry<T>>();
   for (const e of entries) {
@@ -260,33 +286,26 @@ export function subtitleMenu<T extends SubtitleSource>(
     firstOf.set(e.label, seen ? standsForBoth(seen, e, on) : e);
   }
   const unique = [...firstOf.values()];
-  const pref = preferred?.trim() ?? '';
+  const named = serverLanguages.some((l) => languageTag(l));
+  // The server's languages after the subtitle setting's; where it names
+  // none, the person's own, each the whole language.
   const wanted: string[] = [];
-  for (const w of [...(pref && pref.toLowerCase() !== 'off' ? [pref] : []), ...serverLanguages]) {
+  const pref = settingLanguage(preferred, SUBTITLES_OFF);
+  for (const w of named ? [...(pref ? [pref] : []), ...serverLanguages] : ownLanguages({ preferred, audio, device })) {
     const tag = languageTag(w);
     if (tag && !wanted.some((x) => languageTag(x) === tag)) wanted.push(w);
   }
+  const takes = (w: string, e: SubtitleEntry<T>) => (named ? sameLanguage(w, e.tag) : normalizeLang(e.tag) === normalizeLang(w));
   const placed = new Set<SubtitleEntry<T>>();
   // On top, one block per language asked for.
-  const blocks: { base: string; entries: SubtitleEntry<T>[] }[] = [];
+  const top: SubtitleEntry<T>[] = [];
   for (const w of wanted) {
-    const group = unique.filter((e) => !placed.has(e) && sameLanguage(w, e.tag));
+    const group = unique.filter((e) => !placed.has(e) && takes(w, e));
     group.forEach((e) => placed.add(e));
-    if (group.length) blocks.push({ base: normalizeLang(w), entries: byRun(group) });
+    top.push(...byRun(group));
   }
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
-  const noMore = !serverLanguages.some((l) => languageTag(l));
-  if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: alphabetical(rest).flatMap((g) => g.entries) };
-  // All on top: the rest of a language on top joins its block there, the
-  // language's runs in order again (byRun), the other languages after them
-  // in the file's order.
-  for (const group of rest) {
-    let at = -1;
-    if (group.base) for (let i = 0; i < blocks.length; i++) if (blocks[i].base === group.base) at = i;
-    if (at >= 0) blocks[at] = { base: blocks[at].base, entries: byRun([...blocks[at].entries, ...group.entries]) };
-    else blocks.push(group);
-  }
-  return { top: blocks.flatMap((b) => b.entries), more: [] };
+  return { top, more: alphabetical(rest).flatMap((g) => g.entries) };
 }
 
 /** Every entry of the menu, in its order. */

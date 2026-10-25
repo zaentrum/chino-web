@@ -1691,18 +1691,23 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // The subtitles menu (lib/subtitles.ts, the design system's subtitles
   // pattern): "off"; the viewer's subtitle language, then the server's
-  // other subtitle languages; then "more languages" with the rest of the
-  // title's tracks, packaged or not. Each named by its language, then its kind ("English
+  // other subtitle languages - where the server names none, the viewer's
+  // own: the subtitle setting's, the audio setting's unless Original, the
+  // browser's; then "more languages" with the rest of the title's tracks,
+  // packaged or not. Each named by its language, then its kind ("English
   // · for deaf and hard of hearing"); two that read the same show once.
   const subEntries = useMemo(() => subtitleEntries(mergedSubs), [mergedSubs]);
+  const browserLang = typeof navigator === 'undefined' ? null : navigator.languages?.[0] ?? navigator.language ?? null;
   const subMenu = useMemo(
     () =>
       subtitleMenu(subEntries, {
         preferred: settings.subtitles.preferredLang,
+        audio: settings.audio.preferredLang,
+        device: browserLang,
         serverLanguages: serverSubLangs ?? [],
         on: activeSubId,
       }),
-    [subEntries, settings.subtitles.preferredLang, serverSubLangs, activeSubId],
+    [subEntries, settings.subtitles.preferredLang, settings.audio.preferredLang, browserLang, serverSubLangs, activeSubId],
   );
   // The subtitle on, as the menu lists it: a track tagged with no language
   // there takes the language of the twin it stands for (its <track

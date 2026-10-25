@@ -92,29 +92,99 @@ test('a viewer with subtitles off in Settings has the server\'s languages on top
   ]);
 });
 
-test('a server with no subtitle languages (404, or none set): every track on top, the viewer\'s language first, no "more languages"', () => {
-  const m = menu(ORIGINAL, { serverLanguages: [] });
-  assert.deepEqual(m.more, []);
-  // Then the file's order, a language's tracks together: the AI Chinese
-  // with the file's Chinese, not after French - each script a run of its
-  // own, in alphabetical order.
+test('a server with no subtitle languages (404, or none set): the person\'s own languages on top, the rest under "more languages"', () => {
+  // The subtitle setting's language, the audio setting's, the browser's -
+  // in that order, each the whole language.
+  const m = menu(ORIGINAL, { preferred: 'eng', audio: 'jpn', device: 'de-CH', serverLanguages: [] });
   assert.deepEqual(labels(m.top), [
     'English',
     'English · for deaf and hard of hearing',
+    'Japanese',
+    'German',
+    'German · foreign-language parts only',
+    'German · AI',
+  ]);
+  // The rest in alphabetical order of their names, a language's scripts
+  // together: Chinese (Simplified) · AI with the file's Chinese.
+  assert.deepEqual(labels(m.more), ['Chinese (Simplified) · AI', 'Chinese (Traditional)', 'French', 'Signs']);
+  // Never every track on top: with the subtitle setting's language alone,
+  // the other languages wait under "more languages".
+  const alone = menu(ORIGINAL, { serverLanguages: [] });
+  assert.deepEqual(labels(alone.top), ['English', 'English · for deaf and hard of hearing']);
+  assert.deepEqual(labels(alone.more), [
+    'Chinese (Simplified) · AI',
+    'Chinese (Traditional)',
+    'French',
     'German',
     'German · foreign-language parts only',
     'German · AI',
     'Japanese',
-    'Chinese (Simplified) · AI',
-    'Chinese (Traditional)',
-    'French',
     'Signs',
   ]);
   // Tags that name no language count as none.
-  assert.deepEqual(menu(ORIGINAL, { serverLanguages: ['und', ''] }).more, []);
+  assert.deepEqual(menu(ORIGINAL, { serverLanguages: ['und', ''] }), alone);
 });
 
-test('no server languages: the preferred language first, then the file\'s order; a language\'s tracks together, AI ones and regions and scripts with it', () => {
+test('a hundred tracks and no server languages: German, English and Chinese on top, the other ninety-odd under "more languages"', () => {
+  const codes = [
+    'ara', 'bul', 'cat', 'ces', 'dan', 'ell', 'est', 'fin', 'fra', 'heb', 'hin', 'hrv', 'hun', 'ind', 'isl', 'ita', 'jpn', 'kor',
+    'lav', 'lit', 'msa', 'nld', 'nor', 'pol', 'por', 'ron', 'rus', 'slk', 'slv', 'spa', 'srp', 'swe', 'tha', 'tur', 'ukr', 'vie',
+  ];
+  const tracks: SubtitleSource[] = [];
+  let n = 2;
+  for (const lang of codes) {
+    tracks.push({ id: `emb-${n++}`, lang, embedded: true });
+    tracks.push({ id: `emb-${n++}`, lang, title: 'SDH', embedded: true });
+  }
+  tracks.push({ id: `emb-${n++}`, lang: 'ger', embedded: true });
+  tracks.push({ id: `emb-${n++}`, lang: 'eng', embedded: true });
+  tracks.push({ id: `emb-${n++}`, lang: 'chi', title: '简体中文', embedded: true });
+  for (const lang of codes) tracks.push({ id: `side-${lang}`, lang, title: 'AI' });
+  tracks.push({ id: 'side-zh-hant', lang: 'zh-Hant', title: 'AI' });
+  assert.ok(tracks.length > 100);
+  // German subtitles in Settings, English audio, a browser in Chinese.
+  const m = menu(tracks, { preferred: 'ger', audio: 'eng', device: 'zh-CN', serverLanguages: [] });
+  assert.deepEqual(labels(m.top), ['German', 'English', 'Chinese (Simplified)', 'Chinese (Traditional) · AI']);
+  assert.equal(m.more.length, codes.length * 3);
+  assert.equal(m.more[0].label, 'Arabic');
+  // Every track is still there to pick, each once.
+  assert.equal(menuEntries(m).length, tracks.length);
+});
+
+test('the person\'s own languages: the audio setting\'s unless Original, the browser\'s, each language once', () => {
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'fre', embedded: true },
+    { id: 'emb-3', lang: 'ita', embedded: true },
+    { id: 'emb-4', lang: 'eng', embedded: true },
+    { id: 'emb-5', lang: 'en-GB', embedded: true },
+  ];
+  // Audio set to Original names no language: the browser's alone.
+  const original = menu(tracks, { preferred: 'off', audio: 'orig', device: 'it-IT', serverLanguages: [] });
+  assert.deepEqual(labels(original.top), ['Italian']);
+  assert.deepEqual(labels(original.more), ['English', 'English (United Kingdom)', 'French']);
+  // The browser's language with a region takes the whole language, the
+  // bare name first.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'off', device: 'en-US', serverLanguages: [] }).top), ['English', 'English (United Kingdom)']);
+  // The same language twice (the setting's "eng", the browser's "en-GB") is
+  // one block, where the first of them puts it.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'eng', audio: 'fre', device: 'en-GB', serverLanguages: [] }).top), [
+    'English',
+    'English (United Kingdom)',
+    'French',
+  ]);
+  // None of them: "off" and "more languages" alone.
+  const none = menu(tracks, { preferred: 'off', audio: 'orig', device: 'ja-JP', serverLanguages: [] });
+  assert.deepEqual(none.top, []);
+  assert.equal(none.more.length, 4);
+  // On a server that names its languages, the audio setting's and the
+  // browser's count for nothing: the subtitle setting's, then the server's.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'off', audio: 'fre', device: 'it-IT', serverLanguages: ['en'] }).top), [
+    'English',
+    'English (United Kingdom)',
+  ]);
+});
+
+test('no server languages: the preferred language first, the whole of it, its runs in order; the rest under "more languages"', () => {
   const tracks: SubtitleSource[] = [
     { id: 'emb-2', lang: 'chi', title: '中文', embedded: true },
     { id: 'emb-3', lang: 'fre', embedded: true },
@@ -127,47 +197,42 @@ test('no server languages: the preferred language first, then the file\'s order;
     { id: 'side-de', lang: 'de', title: 'AI' },
     { id: 'side-en', lang: 'en', title: 'AI' },
   ];
-  assert.deepEqual(labels(menu(tracks, { preferred: 'eng', serverLanguages: [] }).top), [
-    'English',
-    'English · AI',
+  const eng = menu(tracks, { preferred: 'eng', serverLanguages: [] });
+  assert.deepEqual(labels(eng.top), ['English', 'English · AI']);
+  // The rest under "more languages", alphabetical, a language's tracks
+  // together: the AI Chinese with the file's Chinese, not after French.
+  assert.deepEqual(labels(eng.more), [
     'Chinese',
     'Chinese (Simplified) · AI',
     'Chinese (Traditional)',
     'French',
     'French · for deaf and hard of hearing',
-    // A track in no language: in its place in the file.
-    'Signs',
     'German',
     'German · AI',
+    'Signs',
   ]);
-  // Subtitles off in Settings: the file's order alone, a language's runs
-  // the bare one first, then alphabetical.
-  assert.deepEqual(labels(menu(tracks, { preferred: 'off', serverLanguages: [] }).top).slice(0, 3), [
-    'Chinese',
-    'Chinese (Simplified) · AI',
-    'Chinese (Traditional)',
-  ]);
-  // A preferred language with a script: the language first, the whole of
-  // it, its runs the bare one first, then alphabetical - before the others.
-  assert.deepEqual(labels(menu(tracks, { preferred: 'zh-Hans', serverLanguages: [] }).top).slice(0, 4), [
-    'Chinese',
-    'Chinese (Simplified) · AI',
-    'Chinese (Traditional)',
-    'French',
-  ]);
-  // And with a region: the language's runs, then the others.
+  // Subtitles off in Settings: nothing on top, a language's runs under
+  // "more languages" the bare one first, then alphabetical.
+  const off = menu(tracks, { preferred: 'off', serverLanguages: [] });
+  assert.deepEqual(off.top, []);
+  assert.deepEqual(labels(off.more).slice(0, 3), ['Chinese', 'Chinese (Simplified) · AI', 'Chinese (Traditional)']);
+  // A preferred language with a script: the language on top, the whole of
+  // it, its runs the bare one first, then alphabetical - the others under
+  // "more languages".
+  const hans = menu(tracks, { preferred: 'zh-Hans', serverLanguages: [] });
+  assert.deepEqual(labels(hans.top), ['Chinese', 'Chinese (Simplified) · AI', 'Chinese (Traditional)']);
+  assert.equal(hans.more[0].label, 'English');
+  // And with a region: the language's runs, the others under "more
+  // languages".
   const portuguese: SubtitleSource[] = [
     { id: 'emb-2', lang: 'eng', embedded: true },
     { id: 'emb-3', lang: 'pt-PT', embedded: true },
     { id: 'emb-4', lang: 'por', title: 'Português (Brasil)', embedded: true },
     { id: 'side-pt', lang: 'pt-BR', title: 'AI' },
   ];
-  assert.deepEqual(labels(menu(portuguese, { preferred: 'pt-BR', serverLanguages: [] }).top), [
-    'Portuguese (Brazil)',
-    'Portuguese (Brazil) · AI',
-    'Portuguese (Portugal)',
-    'English',
-  ]);
+  const brazil = menu(portuguese, { preferred: 'pt-BR', serverLanguages: [] });
+  assert.deepEqual(labels(brazil.top), ['Portuguese (Brazil)', 'Portuguese (Brazil) · AI', 'Portuguese (Portugal)']);
+  assert.deepEqual(labels(brazil.more), ['English']);
   // A preferred run that doesn't sort first keeps the language's order:
   // the bare name, then the runs alphabetically - not its own run first,
   // nor the rest of the language spliced in after it.
@@ -179,26 +244,26 @@ test('no server languages: the preferred language first, then the file\'s order;
     { id: 'side-zh', lang: 'zh-Hant', title: 'AI' },
     { id: 'emb-6', lang: 'eng', embedded: true },
   ];
-  assert.deepEqual(labels(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }).top), [
+  const hant = menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] });
+  assert.deepEqual(labels(hant.top), [
     'Chinese',
     'Chinese (China)',
     'Chinese (Simplified)',
     'Chinese (Traditional)',
     'Chinese (Traditional) · AI',
-    'English',
   ]);
+  assert.deepEqual(labels(hant.more), ['English']);
+  // The same order for the browser's language with a region.
+  assert.deepEqual(labels(menu(chinese, { preferred: 'off', device: 'zh-TW', serverLanguages: [] }).top), labels(hant.top));
   const portugal: SubtitleSource[] = [
     { id: 'emb-2', lang: 'pt-BR', embedded: true },
     { id: 'emb-3', lang: 'eng', embedded: true },
     { id: 'emb-4', lang: 'pt-PT', embedded: true },
     { id: 'emb-5', lang: 'por', embedded: true },
   ];
-  assert.deepEqual(labels(menu(portugal, { preferred: 'pt-PT', serverLanguages: [] }).top), [
-    'Portuguese',
-    'Portuguese (Brazil)',
-    'Portuguese (Portugal)',
-    'English',
-  ]);
+  const pt = menu(portugal, { preferred: 'pt-PT', serverLanguages: [] });
+  assert.deepEqual(labels(pt.top), ['Portuguese', 'Portuguese (Brazil)', 'Portuguese (Portugal)']);
+  assert.deepEqual(labels(pt.more), ['English']);
   // What comes on by itself is as before: the language's first track the
   // preference takes, the bare one.
   assert.equal(autoSubtitle(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'emb-4');
@@ -221,11 +286,12 @@ test('a packaged title follows the general rule: the viewer\'s language, the ser
   assert.deepEqual(labels(m.more), ['French', 'Japanese']);
   // Only the server's languages: nothing more to open.
   assert.deepEqual(menu(packaged.filter((t) => t.lang !== 'fr' && t.lang !== 'ja')).more, []);
-  // A server with no subtitle languages lists a package's tracks all on
-  // top, as an original's: the viewer's language first, then their order.
-  const none = menu(packaged, { serverLanguages: [] });
-  assert.deepEqual(none.more, []);
-  assert.deepEqual(labels(none.top), ['English', 'German', 'German · AI', 'French', 'Japanese', 'Chinese (Simplified)']);
+  // A server with no subtitle languages: a package's tracks as an
+  // original's - the person's own languages on top, the rest under "more
+  // languages".
+  const none = menu(packaged, { audio: 'deu', serverLanguages: [] });
+  assert.deepEqual(labels(none.top), ['English', 'German', 'German · AI']);
+  assert.deepEqual(labels(none.more), ['Chinese (Simplified)', 'French', 'Japanese']);
 });
 
 test('tracks that would read the same show once: the file\'s own before a sidecar, else the first in the file', () => {
@@ -300,7 +366,8 @@ test('a track tagged with no language that reads as one: the file\'s own, else t
   assert.deepEqual(m.more.map((e) => [e.id, e.label]), [['emb-3', 'French']]);
   assert.equal(autoSubtitle(m, { audioLang: 'fre', subtitlePref: 'eng' }), 'emb-2');
   // The same without the server's languages, and with no preferred language.
-  assert.deepEqual(menu(tracks, { serverLanguages: [] }).top.map((e) => e.id), ['emb-2', 'emb-3']);
+  const own = menu(tracks, { serverLanguages: [] });
+  assert.deepEqual([own.top.map((e) => [e.id, e.tag]), own.more.map((e) => e.id)], [[['emb-2', 'en']], ['emb-3']]);
   assert.deepEqual(menuEntries(menu(tracks, { preferred: 'off' })).map((e) => e.id), ['emb-2', 'emb-3']);
   // The sidecar on: it stays, whichever it is.
   assert.deepEqual(menu(tracks, { on: 's1' }).top.map((e) => e.id), ['s1']);
@@ -330,10 +397,12 @@ test('Simplified and Traditional Chinese, told apart by their titles only, are t
   assert.deepEqual(labels(m.top), ['English', 'Chinese (Simplified)']);
   assert.deepEqual(labels(m.more), ['Chinese (Traditional)']);
   assert.deepEqual(m.more.map((e) => e.tag), ['zh-Hant']);
-  // A server with no languages: both, each by its script.
-  assert.deepEqual(labels(menu(tracks, { preferred: 'en', serverLanguages: [] }).top), ['English', 'Chinese (Simplified)', 'Chinese (Traditional)']);
+  // A server with no languages: both, each by its script, under "more
+  // languages"; on top for a browser in Chinese.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'en', serverLanguages: [] }).more), ['Chinese (Simplified)', 'Chinese (Traditional)']);
+  assert.deepEqual(labels(menu(tracks, { preferred: 'en', device: 'zh-HK', serverLanguages: [] }).top), ['English', 'Chinese (Simplified)', 'Chinese (Traditional)']);
   // Mandarin and Cantonese are two as well.
-  assert.deepEqual(labels(menu([{ id: 'a', lang: 'chi', title: '國語' }, { id: 'b', lang: 'chi', title: '粵語' }], { serverLanguages: [] }).top), [
+  assert.deepEqual(labels(menuEntries(menu([{ id: 'a', lang: 'chi', title: '國語' }, { id: 'b', lang: 'chi', title: '粵語' }], { serverLanguages: [] }))), [
     'Chinese · Mandarin',
     'Chinese · Cantonese',
   ]);
@@ -345,11 +414,11 @@ test('a language\'s region in a title lists the track with that region', () => {
     { id: 'la', lang: 'spa', title: 'Español (Latinoamérica)' },
     { id: 'la2', lang: 'es-419' },
   ];
-  const m = menu(tracks, { serverLanguages: [] });
+  const m = menuEntries(menu(tracks, { serverLanguages: [] }));
   // The same region twice is one; Spain and Latin America are two, a run
   // each, in alphabetical order.
-  assert.deepEqual(labels(m.top), ['Spanish (Latin America)', 'Spanish (Spain)']);
-  assert.deepEqual(m.top.map((e) => e.tag), ['es-419', 'es-ES']);
+  assert.deepEqual(labels(m), ['Spanish (Latin America)', 'Spanish (Spain)']);
+  assert.deepEqual(m.map((e) => e.tag), ['es-419', 'es-ES']);
   // A region's adjective reads as the region: the file's Brazilian
   // Portuguese and the server's are one, the file's own.
   const brazil: SubtitleSource[] = [
@@ -414,16 +483,15 @@ test('each region or script a run of its own: the bare name first, the others al
     'Portuguese (Brazil) · for deaf and hard of hearing',
     'Portuguese (Portugal)',
   ]);
-  // Without the server's languages, in the file's order by language, each
-  // language's runs the same way.
-  assert.deepEqual(labels(menu(tracks, { preferred: 'off', serverLanguages: [] }).top), [
-    ...chinese,
+  // Without the server's languages, the browser's language on top, the
+  // rest under "more languages", each language's runs the same way.
+  const own = menu(tracks, { preferred: 'off', device: 'pt-BR', serverLanguages: [] });
+  assert.deepEqual(labels(own.top), [
     'Portuguese (Brazil)',
     'Portuguese (Brazil) · for deaf and hard of hearing',
     'Portuguese (Portugal)',
-    'Korean',
-    'Arabic',
   ]);
+  assert.deepEqual(labels(own.more), ['Arabic', ...chinese, 'Korean']);
   // A track in no language is sorted by its own name, as a reader sorts
   // it - not by its letters' codes, which put "Spanish" before "signs".
   const signs: SubtitleSource[] = [
