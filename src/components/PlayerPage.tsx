@@ -17,6 +17,9 @@ import {
   PICTURE_BUTTON_ON,
   PICTURE_CARD,
   PLAYBACK_RATES,
+  WAITING_DETAIL,
+  WAITING_LINE,
+  WAITING_PANEL,
   speedName,
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
@@ -3957,17 +3960,22 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         />
       )}
 
+      {/* Waiting for the picture: the spinner and its line on a solid
+          panel in the middle, as every control over the picture
+          (WAITING_PANEL) - the picture under it undimmed. */}
       {buffering && !fatalError && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none bg-black/30">
-          <Loader2 className="w-12 h-12 animate-spin text-white/80" />
-          <p className="mt-4 text-white/90 text-sm">
-            {actionLabel ?? LOADING_MESSAGES[loadingMsgIdx]}
-          </p>
-          {effectiveMode === 'transcode' && info && (
-            <p className="mt-2 text-white/50 text-xs">
-              Transcoding {info.video_codec.toUpperCase()} → H.264 · {qualityName}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className={WAITING_PANEL}>
+            <Loader2 className="w-12 h-12 animate-spin text-chino-fg" />
+            <p className={WAITING_LINE}>
+              {actionLabel ?? LOADING_MESSAGES[loadingMsgIdx]}
             </p>
-          )}
+            {effectiveMode === 'transcode' && info && (
+              <p className={WAITING_DETAIL}>
+                Transcoding {info.video_codec.toUpperCase()} → H.264 · {qualityName}
+              </p>
+            )}
+          </div>
         </div>
       )}
 

@@ -1,7 +1,17 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MENU_HEADER, MENU_HEADERS, OVER_PICTURE, OVER_PICTURE_HOVER, PLAYBACK_RATES, speedName } from './playerMenus.ts';
+import {
+  MENU_HEADER,
+  MENU_HEADERS,
+  OVER_PICTURE,
+  OVER_PICTURE_HOVER,
+  PLAYBACK_RATES,
+  WAITING_DETAIL,
+  WAITING_LINE,
+  WAITING_PANEL,
+  speedName,
+} from './playerMenus.ts';
 
 test('the menus are headed in lowercase, in the mono face', () => {
   assert.deepEqual(Object.values(MENU_HEADERS), ['subtitles', 'audio', 'quality', 'speed', 'timing']);
@@ -20,4 +30,11 @@ test('what sits over the picture sits on a solid surface', () => {
     if (/^(hover:)?bg-/.test(cls)) assert.doesNotMatch(cls, /\/\d+$|black|white|transparent/, cls);
   }
   assert.match(OVER_PICTURE, /\bbg-chino-surface\b/);
+});
+
+test('the spinner and its line while the player waits: on the solid surface, in token colours - no see-through wash or text', () => {
+  assert.ok(WAITING_PANEL.includes(OVER_PICTURE));
+  for (const cls of `${WAITING_PANEL} ${WAITING_LINE} ${WAITING_DETAIL}`.split(/\s+/)) {
+    if (/^(bg|text)-/.test(cls) && !/^text-(xs|sm|base|lg|center)$/.test(cls)) assert.match(cls, /^(bg|text)-chino-[a-z0-9-]+$/, cls);
+  }
 });
