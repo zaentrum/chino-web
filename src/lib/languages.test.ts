@@ -433,9 +433,24 @@ test('a code that only repeats the tag\'s region goes: "GB" on en-GB, "AT" on de
   assert.equal(subtitleLabel({ lang: 'de-AT', title: 'AT (Forced)' }), 'German (Austria) · foreign-language parts only');
   // So the track reads as its untitled twin, and the menu shows it once.
   assert.equal(subtitleLabel({ lang: 'en-GB', title: 'GB' }), subtitleLabel({ lang: 'en-GB' }));
+  // Beside the name too, in any language: the code goes with it.
+  const beside: [string, string, string][] = [
+    ['en-GB', 'English GB', 'English (United Kingdom)'],
+    ['de-AT', 'German AT', 'German (Austria)'],
+    ['de-AT', 'Deutsch AT', 'German (Austria)'],
+    ['de-CH', 'German CH', 'German (Switzerland)'],
+    ['es-MX', 'Spanish MX', 'Spanish (Mexico)'],
+    ['zh-TW', 'Chinese TW', 'Chinese (Taiwan)'],
+  ];
+  for (const [lang, title, label] of beside) assert.equal(subtitleLabel({ lang, title }), label, title);
+  const twins = subtitleLabels([{ lang: 'en-GB' }, { lang: 'en-GB', title: 'English GB' }]);
+  assert.equal(twins[0], twins[1]);
+  // Among other words it stays a word.
+  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'AT Commentary' }), 'German (Austria) · AT Commentary');
   // Another region than the tag's, or one on a tag with none, stays.
   assert.equal(subtitleLabel({ lang: 'de-AT', title: 'CH' }), 'German (Austria) · CH');
   assert.equal(subtitleLabel({ lang: 'eng', title: 'GB' }), 'English · GB');
+  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'German CH' }), 'German (Austria) · CH');
   // "AI" stays, even where it is the tag's region too.
   assert.equal(subtitleLabel({ lang: 'en-AI', title: 'AI' }), 'English (Anguilla) · AI');
 });

@@ -557,19 +557,23 @@ type Says = { language: true } | { script: string; region: string } | { words: s
  *  the word list's words ("粵語": "Cantonese"); null for none of these. In
  *  brackets, a region's code says the region where it is one of the
  *  language's ("Português (BR)": regionCodesOf). Words inside a longer
- *  piece name the language by a name, never by a code: "und" is a German
- *  word. */
+ *  piece name the language by a name, never by a code ("und" is a German
+ *  word) - but for the tag's own region in capitals ("GB" of "English GB"
+ *  on en-GB). */
 function pieceSays(text: string, code: string | undefined, whole: boolean, bracketed = false): Says | null {
   const t = text.trim();
   if (!t) return null;
   const lower = t.toLocaleLowerCase();
   const base = normalizeLang(code);
+  // The tag's own region again, as a code ("GB" on en-GB, "AT" on de-AT),
+  // alone or beside the name ("English GB", "Deutsch AT"): it says nothing
+  // the name doesn't. Among other words it stays a word (readParts). Never
+  // "AI", which says the platform made the track.
+  if (base && BRACKETED_REGION.test(t) && t !== 'AI' && t === regionOf(namedTag(languageTag(code)))) {
+    return { script: '', region: t };
+  }
   if (whole && base) {
     if (bracketed && BRACKETED_REGION.test(t) && regionCodesOf(base).has(t)) return { script: '', region: t };
-    // The tag's own region again, as a code ("GB" on en-GB, "AT" on de-AT):
-    // it says nothing the name doesn't. Never "AI", which says the platform
-    // made the track.
-    if (BRACKETED_REGION.test(t) && t !== 'AI' && t === regionOf(namedTag(languageTag(code)))) return { script: '', region: t };
     const said = codeSays(t, code);
     if (said && (said.script || said.region)) return said;
   }
