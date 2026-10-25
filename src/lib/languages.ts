@@ -566,6 +566,10 @@ function pieceSays(text: string, code: string | undefined, whole: boolean, brack
   const base = normalizeLang(code);
   if (whole && base) {
     if (bracketed && BRACKETED_REGION.test(t) && regionCodesOf(base).has(t)) return { script: '', region: t };
+    // The tag's own region again, as a code ("GB" on en-GB, "AT" on de-AT):
+    // it says nothing the name doesn't. Never "AI", which says the platform
+    // made the track.
+    if (BRACKETED_REGION.test(t) && t !== 'AI' && t === regionOf(namedTag(languageTag(code)))) return { script: '', region: t };
     const said = codeSays(t, code);
     if (said && (said.script || said.region)) return said;
   }
@@ -725,16 +729,34 @@ function startsWord(text: string, words: string): boolean {
   return false;
 }
 
+/** What a title says besides the language's name, where it begins or ends
+ *  with the name as whole words ("AI" of "English AI", "Commentary" of
+ *  "Commentary - English"), '' where it is only the name; null where the
+ *  name is not at its edge. */
+function besideName(title: string, name: string): string | null {
+  const t = title.trim();
+  const [lower, n] = [t.toLocaleLowerCase(), name.toLocaleLowerCase()];
+  if (!n || lower.length < n.length) return null;
+  const apart = (c: string | undefined) => c === undefined || !/[\p{L}\p{N}]/u.test(c);
+  let rest: string | null = null;
+  if (lower.startsWith(n) && apart(t[n.length])) rest = t.slice(n.length);
+  else if (lower.endsWith(n) && apart(t[t.length - n.length - 1])) rest = t.slice(0, t.length - n.length);
+  return rest === null ? null : rest.replace(EDGE_SEPARATORS, '').trim();
+}
+
 /**
  * One subtitle's label: the language's name, its script or region in it
  * ("German", "Chinese (Simplified)", "No dialogue" for zxx) - a script or a
  * region the track's own title gives, where its tag names none, too
  * ("Chinese (Traditional)" for "繁體中文", "Spanish (Latin America)" for
  * "Español (Latinoamérica)"); the track's own title where it says more than
- * that ("English · Commentary", "German · AI", "Chinese · Cantonese") - not
+ * that ("English · Commentary", "German · AI", "Chinese · Cantonese"), the
+ * name said once where the title begins or ends with it ("English AI" is
+ * "English · AI") - not
  * the words of it that only name the language again, in any language or
  * cut short ("Deutsch", "中文", "BR" on Brazilian Portuguese, "Trad" on
- * Traditional Chinese) - or alone for a track tagged with no language, else
+ * Traditional Chinese), or the tag's own region as a code ("GB" on en-GB,
+ * "AT" on de-AT) - or alone for a track tagged with no language, else
  * "Unknown"; then its kind in words - "foreign-language parts only" for a
  * forced one, "for deaf and hard of hearing" for one with sound described,
  * both in that order. A title that says the kind itself ("English SDH",
@@ -749,8 +771,13 @@ export function subtitleLabel(track: SubtitleLabelInput): string {
   const name = languageName(lang);
   const lower = title.toLowerCase();
   let label: string;
+  const rest = title ? besideName(title, name) : null;
   if (!title || lower === name.toLowerCase() || namesLanguage(title, lang)) label = name;
   else if (!hasLanguage(lang)) label = title;
+  // The name, then what the title adds: "English AI" is "English · AI",
+  // "English Commentary" "English · Commentary".
+  else if (rest !== null) label = rest ? `${name} · ${rest}` : name;
+  // The name among the title's words, not at its edge: the title says it.
   else if (lower.includes(name.toLowerCase())) label = title;
   // "English" on a British English track, "BR" on a Brazilian one, "Trad"
   // on a Traditional Chinese one: the name says it already - from the start
