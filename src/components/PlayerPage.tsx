@@ -1098,7 +1098,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         void renewStreamToken(bearerRef.current).then((fresh) => {
           if (fresh) return;
           giveUp(
-            'Playback failed',
+            PLAYBACK_FAILED,
             streamFailureReason(401),
             ['stream token refused (401), and none minted again', `details: ${data.details}`, `item: ${itemId}`].join('\n'),
             String(data.type),
@@ -1202,7 +1202,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             // accepted - by the last answer's status, never a guess at
             // the viewer's connection when the server answered.
             giveUp(
-              'Playback failed',
+              PLAYBACK_FAILED,
               streamFailureReason(lastStreamErrorRef.current?.status),
               techDetail,
               String(data.type),
@@ -1256,7 +1256,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             } else {
               reportEvent('circuit_breaker', { kind: 'media_terminal', attempts: mediaRecoverCount, lastDetails: data.details });
               giveUp(
-                'Playback failed',
+                PLAYBACK_FAILED,
                 'Playback failed — this file could not be decoded.',
                 techDetail,
                 String(data.type),
@@ -1269,7 +1269,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           break;
         default:
           reportEvent('circuit_breaker', { kind: 'other', type: data.type, lastDetails: data.details });
-          giveUp('Playback failed', 'Playback failed unexpectedly.', techDetail, String(data.type), String(data.details));
+          giveUp(PLAYBACK_FAILED, 'Playback failed unexpectedly.', techDetail, String(data.type), String(data.details));
       }
     });
     hlsRef.current = hls;
@@ -2826,7 +2826,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         }),
       });
       giveUp(
-        extra ? "This trailer won't start" : "This title won't start",
+        extra ? "this trailer won't start" : "this title won't start",
         `Nothing playable came from the server within ${STARTUP_DEADLINE_MS / 1000} seconds.`,
         tech,
         'StartupTimeout',
@@ -4831,6 +4831,10 @@ interface FailureLink {
 
 /** What the player says when it gave up, and what the viewer can do - for
  *  an extra, also its title's trailer online (`link`). */
+/** The give-up's title when every way to play failed: in the mono face,
+ *  lowercase, as its buttons beside it. */
+const PLAYBACK_FAILED = 'playback failed';
+
 function PlaybackFailure({
   title,
   label,
@@ -4852,7 +4856,7 @@ function PlaybackFailure({
   return (
     <div role="alert" className="flex flex-col items-center px-6 text-center">
       <AlertTriangle className="w-10 h-10 text-chino-red mb-3" aria-hidden />
-      <h2 className="text-white text-lg font-medium">{title}</h2>
+      <h2 className="font-mono text-white text-lg font-medium">{title}</h2>
       <p className="mt-1 text-sm text-chino-muted max-w-md">{label}</p>
       {reportedId != null ? (
         <p className="mt-2 text-xs text-chino-muted">Reported automatically as #{reportedId}.</p>
