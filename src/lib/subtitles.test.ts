@@ -327,10 +327,11 @@ test('no server languages: the preferred language first, the whole of it, its ru
   const pt = menu(portugal, { preferred: 'pt-PT', serverLanguages: [] });
   assert.deepEqual(labels(pt.top), ['Portuguese', 'Portuguese (Brazil)', 'Portuguese (Portugal)']);
   assert.deepEqual(labels(pt.more), ['English']);
-  // What comes on by itself is as before: the language's first track the
-  // preference takes, the bare one.
-  assert.equal(autoSubtitle(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'emb-4');
-  assert.equal(autoSubtitle(menu(portugal, { preferred: 'pt-PT', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'pt-PT' }), 'emb-5');
+  // What comes on by itself respects the setting's script or region: the
+  // Traditional Chinese, Portugal's Portuguese - not the bare name the menu
+  // lists first.
+  assert.equal(autoSubtitle(menu(chinese, { preferred: 'zh-Hant', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'emb-3');
+  assert.equal(autoSubtitle(menu(portugal, { preferred: 'pt-PT', serverLanguages: [] }), { audioLang: 'eng', subtitlePref: 'pt-PT' }), 'emb-4');
 });
 
 test('a packaged title follows the general rule: the viewer\'s language, the server\'s, then "more languages" for the rest', () => {
@@ -600,6 +601,47 @@ test('what comes on by itself: else the foreign-language parts only in the audio
   assert.equal(autoSubtitle(menu(ORIGINAL), { audioLang: 'jpn', subtitlePref: 'ita' }), null);
   // The audio's language not known: nothing.
   assert.equal(autoSubtitle(m, { audioLang: 'und', subtitlePref: 'eng' }), null);
+});
+
+test('what comes on by itself respects the setting\'s script or region, where the title has it', () => {
+  // The menu lists the bare "Chinese" first; a Traditional setting turns
+  // on the Traditional - told by its tag or by its title alone.
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'chi', embedded: true },
+    { id: 'emb-3', lang: 'chi', title: '简体中文', embedded: true },
+    { id: 'emb-4', lang: 'chi', title: '繁體中文', embedded: true },
+    { id: 'side-zh', lang: 'zh-Hans', title: 'AI' },
+  ];
+  const on = (list: readonly SubtitleSource[], subtitlePref: string, audioLang = 'eng') =>
+    autoSubtitle(menu(list, { preferred: subtitlePref, serverLanguages: SERVER }), { audioLang, subtitlePref });
+  assert.equal(on(tracks, 'zh-Hant'), 'emb-4');
+  assert.equal(on(tracks, 'zh-Hans'), 'emb-3');
+  // A bare setting takes the first the menu lists, as before.
+  assert.equal(on(tracks, 'zh'), 'emb-2');
+  // No Traditional: a track that names no script before the Simplified...
+  assert.equal(on(tracks.filter((t) => t.id !== 'emb-4'), 'zh-Hant'), 'emb-2');
+  // ...and the Simplified where it is all there is: still Chinese.
+  assert.equal(on([tracks[1], tracks[3]], 'zh-Hant'), 'emb-3');
+  // A region that stands for the script: Taiwan's Chinese is Traditional.
+  assert.equal(on([tracks[0], tracks[1], { id: 'emb-5', lang: 'zh-TW', embedded: true }], 'zh-Hant'), 'emb-5');
+  // The setting's region: Portugal's Portuguese before the bare one and
+  // Brazil's.
+  const portuguese: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'pt-BR', embedded: true },
+    { id: 'emb-3', lang: 'por', embedded: true },
+    { id: 'emb-4', lang: 'pt-PT', embedded: true },
+  ];
+  assert.equal(on(portuguese, 'pt-PT'), 'emb-4');
+  assert.equal(on(portuguese, 'pt-BR'), 'emb-2');
+  assert.equal(on(portuguese.slice(0, 2), 'pt-PT'), 'emb-3');
+  // A full track before the foreign-language parts only, whatever its script.
+  const forced: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'zh-Hant', forced: true, embedded: true },
+    { id: 'emb-3', lang: 'zh-Hans', embedded: true },
+  ];
+  assert.equal(on(forced, 'zh-Hant'), 'emb-3');
+  // Never with the audio in the setting's language, whatever its script.
+  assert.equal(on(tracks, 'zh-Hant', 'chi'), null);
 });
 
 test('one at a time: a pick replaces the one on, "off" leaves none', () => {

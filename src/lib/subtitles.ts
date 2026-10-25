@@ -339,8 +339,10 @@ export function menuEntries<T extends SubtitleSource>(menu: SubtitleMenu<T>): Su
  * preferred subtitle language (Settings) where the title has it and the
  * audio playing is in another language - compared with the audio that
  * plays, never the audio language they prefer - its first track in the menu
- * that is not the foreign-language parts only, or its foreign-language
- * parts only where the title has no other track in it (the phone app's
+ * that is not the foreign-language parts only, the setting's script or
+ * region first (a "zh-Hant" setting turns on "Chinese (Traditional)" where
+ * the title has it, not the bare "Chinese" the menu lists before it), or its
+ * foreign-language parts only where the title has no other track in it (the phone app's
  * defaultSubtitleTrack too); else the foreign-language parts only in the
  * language of the audio playing, a text one before a picture one. Never
  * another language, and never a track because it comes first or a file

@@ -906,17 +906,56 @@ export function defaultSubtitleLang({ audioLang, subtitlePref }: SubtitleDefault
   return want;
 }
 
+/** The script a tag is written in: the one it names, else, for a tag with a
+ *  region, the one Intl's likely subtags give it ("Hant" for "zh-TW",
+ *  "Hans" for "zh-CN"); '' for a bare language, which says none. */
+function scriptFor(tag: string): string {
+  const named = scriptOf(tag);
+  if (named || !regionOf(tag)) return named;
+  try {
+    return new Intl.Locale(tag).maximize().script ?? '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * How well a track's tag answers the script and the region a setting names:
+ * 0 where it is in them ("zh-Hant", "zh-Hant-TW" and "zh-TW" for a
+ * "zh-Hant" setting; "pt-PT" for "pt-PT"), 1 where it names neither
+ * against them (a bare "zh"), 2 where it names another ("zh-Hans", "zh-CN";
+ * "pt-BR"). A setting with neither, a bare language, takes every track the
+ * same (1).
+ */
+function formRank(setting: string, tag: string): 0 | 1 | 2 {
+  const [wantScript, wantRegion] = [scriptFor(setting), regionOf(setting)];
+  if (!wantScript && !wantRegion) return 1;
+  const [script, region] = [scriptFor(tag), regionOf(tag)];
+  if ((wantScript && script && script !== wantScript) || (wantRegion && region && region !== wantRegion)) return 2;
+  const inIt = (!wantScript || script === wantScript) && (!wantRegion || region === wantRegion);
+  return inIt ? 0 : 1;
+}
+
 /** The track to switch on by default, or null: one in the language
  *  defaultSubtitleLang names, a full one rather than a forced one - the
- *  forced one where it is the only one in that language. */
-export function defaultSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean }>(
+ *  forced one where it is the only one in that language. Within the
+ *  language, the setting's script or region first: a "zh-Hant" setting
+ *  turns on "Chinese (Traditional)" where the title has it, before a bare
+ *  "Chinese" or the Simplified; then a track that names neither, then the
+ *  rest of the language - each in the order given (the menu's). A track
+ *  is in the language its tag says (`tag`, the menu's: "chi" titled
+ *  "繁體中文" is "zh-Hant"), else its code. */
+export function defaultSubtitleTrack<T extends { id: string; lang?: string; tag?: string; forced?: boolean }>(
   tracks: readonly T[],
   defaults: SubtitleDefaults,
 ): string | null {
   const want = defaultSubtitleLang(defaults);
   if (!want) return null;
-  const inLang = tracks.filter((t) => normalizeLang(t.lang) === want);
-  return (inLang.find((t) => !t.forced) ?? inLang[0])?.id ?? null;
+  const setting = languageTag(defaults.subtitlePref);
+  const tagOf = (t: T) => languageTag(t.tag || t.lang);
+  const inLang = tracks.filter((t) => normalizeLang(tagOf(t)) === want);
+  const ranked = [0, 1, 2].flatMap((rank) => inLang.filter((t) => formRank(setting, tagOf(t)) === rank));
+  return (ranked.find((t) => !t.forced) ?? ranked[0])?.id ?? null;
 }
 
 // Subtitle formats drawn as pictures: PGS, and the bitmap kinds the player
@@ -965,7 +1004,7 @@ export interface AutoSubtitles extends SubtitleDefaults {
  * along. Asked again whenever the audio's language changes. Nothing after
  * the viewer's Off in the player.
  */
-export function autoSubtitleTrack<T extends { id: string; lang?: string; forced?: boolean; format?: string }>(
+export function autoSubtitleTrack<T extends { id: string; lang?: string; tag?: string; forced?: boolean; format?: string }>(
   tracks: readonly T[],
   state: AutoSubtitles,
 ): string | null {

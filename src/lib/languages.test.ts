@@ -676,6 +676,33 @@ test('the track: one in that language, a full one before a forced one; the file\
   assert.equal(defaultSubtitleTrack(tracks, { audioLang: 'fre', subtitlePref: 'ita' }), null);
 });
 
+test('the track: the setting\'s script or region first, then one that names neither, then the rest of the language', () => {
+  const chinese = [
+    { id: 'zh', lang: 'chi' },
+    { id: 'hans', lang: 'zh-Hans' },
+    { id: 'hant', lang: 'zh-Hant' },
+  ];
+  assert.equal(defaultSubtitleTrack(chinese, { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'hant');
+  assert.equal(defaultSubtitleTrack(chinese, { audioLang: 'eng', subtitlePref: 'zh-hans' }), 'hans');
+  assert.equal(defaultSubtitleTrack(chinese, { audioLang: 'eng', subtitlePref: 'zho' }), 'zh');
+  assert.equal(defaultSubtitleTrack(chinese.slice(0, 2), { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'zh');
+  // The menu's tag, where its title gives the script its code doesn't.
+  assert.equal(
+    defaultSubtitleTrack([{ id: 'zh', lang: 'chi' }, { id: 'trad', lang: 'chi', tag: 'zh-Hant' }], { audioLang: 'eng', subtitlePref: 'zh-Hant' }),
+    'trad',
+  );
+  // A region's likely script: Hong Kong's and Taiwan's Chinese are
+  // Traditional, China's Simplified.
+  const regions = [{ id: 'cn', lang: 'zh-CN' }, { id: 'hk', lang: 'zh-HK' }];
+  assert.equal(defaultSubtitleTrack(regions, { audioLang: 'eng', subtitlePref: 'zh-Hant' }), 'hk');
+  assert.equal(defaultSubtitleTrack(regions, { audioLang: 'eng', subtitlePref: 'zh-Hans' }), 'cn');
+  // A region: English (United Kingdom) for an en-GB setting.
+  const english = [{ id: 'us', lang: 'en-US' }, { id: 'en', lang: 'eng' }, { id: 'gb', lang: 'en-GB' }];
+  assert.equal(defaultSubtitleTrack(english, { audioLang: 'fre', subtitlePref: 'en-GB' }), 'gb');
+  assert.equal(defaultSubtitleTrack(english.slice(0, 2), { audioLang: 'fre', subtitlePref: 'en-GB' }), 'en');
+  assert.equal(defaultSubtitleTrack(english.slice(0, 1), { audioLang: 'fre', subtitlePref: 'en-GB' }), 'us');
+});
+
 test('forced subtitles in the audio\'s language come on where no subtitles would: the audio is the viewer\'s own', () => {
   const tracks = [
     { id: 'en', lang: 'eng' },
