@@ -6,6 +6,8 @@ import {
   ACTION_HEIGHT,
   ACTION_LABEL,
   PLAY,
+  REMOVE_FROM_CONTINUE_WATCHING,
+  RESUME,
   SEE_DETAILS,
   START_OVER,
   TRAILER,
@@ -124,4 +126,14 @@ test("a series' first button names the episode by its code, which keeps its capi
   // The code not known: the verb alone, no clock.
   assert.equal(seriesPlayLabel(true, null), 'resume');
   assert.equal(seriesPlayLabel(false, undefined), 'play');
+});
+
+test("a card's menu says its actions as the title row does, lowercase for the mono face", () => {
+  // Never "Resume", "Mark as watched" or "Remove from Continue Watching".
+  assert.equal(RESUME, 'resume');
+  assert.equal(PLAY, 'play');
+  assert.equal(watchedName(false), 'mark as watched');
+  assert.equal(watchedName(true), 'watched');
+  assert.equal(REMOVE_FROM_CONTINUE_WATCHING, 'remove from continue watching');
+  for (const w of [RESUME, PLAY, watchedName(false), watchedName(true), REMOVE_FROM_CONTINUE_WATCHING]) assert.equal(w, w.toLowerCase());
 });

@@ -59,6 +59,10 @@ export const START_OVER = 'start over';
 export const TRAILER = 'trailer';
 /** The hero's way to a title's page. */
 export const SEE_DETAILS = 'see details';
+/** A card's menu: where its title was stopped, without the position (the
+ *  card's bar shows it), and its way off Continue watching. */
+export const RESUME = 'resume';
+export const REMOVE_FROM_CONTINUE_WATCHING = 'remove from continue watching';
 
 /** A position as a clock shows it: "1:43", "1:02:05". */
 export function clockTime(sec: number): string {

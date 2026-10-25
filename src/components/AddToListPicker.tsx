@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { Check, Loader2, Plus, X } from 'lucide-react';
 import { useWatchlists, useMemberships, toggleMembership } from '../hooks/useWatchlists';
+import { MENU_HEADER } from '../lib/playerMenus';
 
 interface AddToListPickerProps {
   itemId: string;
@@ -117,7 +118,9 @@ export function AddToListPicker({ itemId, onClose, align = 'down', alignX = 'rig
       className={`absolute ${alignX === 'left' ? 'left-0' : 'right-0'} ${align === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'} z-50 w-64 max-h-80 overflow-y-auto bg-chino-surface border border-chino-border rounded-md shadow-xl py-1`}
     >
       <div className="px-3 py-2 flex items-center justify-between border-b border-chino-border">
-        <span className="text-xs uppercase tracking-wide text-chino-muted">Add to list</span>
+        {/* A menu's header: mono, lowercase in every language - never
+            capitals by CSS. */}
+        <span className={MENU_HEADER}>add to list</span>
         <button
           onClick={onClose}
           className="text-chino-muted hover:text-white"

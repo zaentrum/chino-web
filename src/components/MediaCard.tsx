@@ -7,6 +7,7 @@ import { usePlayTitle } from '../hooks/usePlayTitle';
 import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
 import { StatusMark } from './TitleActions';
+import { PLAY, REMOVE_FROM_CONTINUE_WATCHING, RESUME, watchedName } from '../lib/titleActions';
 
 interface MediaCardProps {
   id?: string;
@@ -123,7 +124,9 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
   // too; until then the optimistic unmount keeps it out of view.
   if (dismissed) return null;
 
-  const menuItem = 'w-full flex items-center gap-2 text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2';
+  // An action menu's items: one action a line, in the mono face,
+  // lowercase, as the account menu's.
+  const menuItem = 'w-full flex items-center gap-2 text-left px-3 py-2 text-sm font-mono text-chino-text hover:bg-chino-surface-2';
   return (
     <div
       // scale-[1.03] is subtle on purpose: at 4K the overview grid is
@@ -232,7 +235,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                   role="menuitem"
                 >
                   <Play aria-hidden className="w-4 h-4 shrink-0" />
-                  {resumes ? 'Resume' : 'Play'}
+                  {resumes ? RESUME : PLAY}
                 </button>
                 <button
                   className={menuItem}
@@ -244,7 +247,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                 >
                   <Check aria-hidden className="w-4 h-4 shrink-0" />
                   {/* Its state, in the words of the title page's toggle. */}
-                  {watched ? 'Watched' : 'Mark as watched'}
+                  {watchedName(watched)}
                 </button>
                 {onRemoveFromContinueWatching && (
                   <button
@@ -256,7 +259,7 @@ export function MediaCard({ id, title, image, year, rating, type, episode, progr
                     role="menuitem"
                   >
                     <X aria-hidden className="w-4 h-4 shrink-0" />
-                    Remove from Continue Watching
+                    {REMOVE_FROM_CONTINUE_WATCHING}
                   </button>
                 )}
               </div>
