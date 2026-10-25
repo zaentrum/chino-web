@@ -376,8 +376,22 @@ test('a sidecar the server made says " · AI" after the language', () => {
     'Ukrainian · AI',
     'Haitian Creole · AI',
   ]);
+  // Nor the start of a word: "AI" begins "Ainu", but a made track says so.
+  assert.equal(subtitleLabel({ lang: 'ain', title: 'AI' }), 'Ainu · AI');
   // A word of the name still says it: "English" on a British track.
   assert.equal(subtitleLabel({ lang: 'en-GB', title: 'English' }), 'English (United Kingdom)');
+  // And so does the start of one, the region or the script cut short: the
+  // track reads as its untitled twin with the same tag, and shows once.
+  assert.deepEqual(
+    subtitleLabels([
+      { lang: 'es-419', title: 'LAT' },
+      { lang: 'pt-BR', title: 'BR' },
+      { lang: 'zh-Hant', title: 'Trad' },
+      { lang: 'es-419', title: 'Español LAT' },
+      { lang: 'por', title: 'Port' },
+    ]),
+    ['Spanish (Latin America)', 'Portuguese (Brazil)', 'Chinese (Traditional)', 'Spanish (Latin America)', 'Portuguese'],
+  );
 });
 
 test('the same label twice reads the same, never numbered; the server\'s number goes', () => {

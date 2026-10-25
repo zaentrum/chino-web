@@ -655,14 +655,21 @@ export function subtitleLanguage(track: { lang?: string; title?: string }): stri
   return languageTag(readTitle(titleWithoutKind((track.title ?? '').trim()), track.lang).code);
 }
 
-/** Whether `words` stand in `text` as words of their own, not letters
- *  inside a word: "english" in "english (united kingdom)", not "ai" in
- *  "thai". */
-function hasWords(text: string, words: string): boolean {
+/** Whether a track's own title says the platform made it ("AI"): the kind
+ *  a language lists last ("Chinese (Simplified) · AI"). */
+export function isAiSubtitle(title: string | undefined | null): boolean {
+  return !!title && /(^|[^A-Za-z])AI([^A-Za-z]|$)/.test(title);
+}
+
+/** Whether `words` stand in `text` from the start of a word of it, whole or
+ *  its first letters: "english" in "english (united kingdom)", "br" in
+ *  "portuguese (brazil)", "trad" in "chinese (traditional)" - not letters
+ *  inside a word, "ai" in "thai". */
+function startsWord(text: string, words: string): boolean {
   if (!words) return false;
   const letter = /[\p{L}\p{N}]/u;
   for (let i = text.indexOf(words); i >= 0; i = text.indexOf(words, i + 1)) {
-    if (!letter.test(text[i - 1] ?? '') && !letter.test(text[i + words.length] ?? '')) return true;
+    if (!letter.test(text[i - 1] ?? '')) return true;
   }
   return false;
 }
@@ -674,8 +681,9 @@ function hasWords(text: string, words: string): boolean {
  * ("Chinese (Traditional)" for "繁體中文", "Spanish (Latin America)" for
  * "Español (Latinoamérica)"); the track's own title where it says more than
  * that ("English · Commentary", "German · AI", "Chinese · Cantonese") - not
- * the words of it that only name the language again, in any language
- * ("Deutsch", "中文") - or alone for a track tagged with no language, else
+ * the words of it that only name the language again, in any language or
+ * cut short ("Deutsch", "中文", "BR" on Brazilian Portuguese, "Trad" on
+ * Traditional Chinese) - or alone for a track tagged with no language, else
  * "Unknown"; then its kind in words - "foreign-language parts only" for a
  * forced one, "for deaf and hard of hearing" for one with sound described,
  * both in that order. A title that says the kind itself ("English SDH",
@@ -693,9 +701,12 @@ export function subtitleLabel(track: SubtitleLabelInput): string {
   if (!title || lower === name.toLowerCase() || namesLanguage(title, lang)) label = name;
   else if (!hasLanguage(lang)) label = title;
   else if (lower.includes(name.toLowerCase())) label = title;
-  // "English" on a British English track: the name says it already - as
-  // words of it, not letters inside one ("AI" on a Thai track is no "Thai").
-  else if (hasWords(name.toLowerCase(), lower)) label = name;
+  // "English" on a British English track, "BR" on a Brazilian one, "Trad"
+  // on a Traditional Chinese one: the name says it already - from the start
+  // of a word of it, not letters inside one ("AI" on a Thai track is no
+  // "Thai"). A title that says the platform made the track always stays
+  // ("AI" on an Ainu one).
+  else if (!isAiSubtitle(title) && startsWord(name.toLowerCase(), lower)) label = name;
   else label = `${name} · ${title}`;
   const kinds = [forced ? FORCED_SUBTITLE_KIND : '', sdh ? SDH_SUBTITLE_KIND : ''].filter(Boolean);
   return [label, ...kinds].join(' · ');

@@ -11,6 +11,7 @@
 
 import {
   autoSubtitleTrack,
+  isAiSubtitle,
   isPictureSubtitle,
   isSdhSubtitle,
   languageName,
@@ -68,11 +69,9 @@ export type SubtitleEntry<T extends SubtitleSource = SubtitleSource> = T & {
   picture: boolean;
 };
 
-/** Whether a track's own title says the platform made it ("AI"): the kind
- *  a language lists last ("Chinese (Simplified) · AI"). */
-export function isAiSubtitle(title: string | undefined | null): boolean {
-  return !!title && /(^|[^A-Za-z])AI([^A-Za-z]|$)/.test(title);
-}
+// Whether a track's own title says the platform made it (languages.ts, where
+// a label keeps such a title).
+export { isAiSubtitle };
 
 /** The tracks as the menu names them: each with its label and its kind. */
 export function subtitleEntries<T extends SubtitleSource>(tracks: readonly T[]): SubtitleEntry<T>[] {
