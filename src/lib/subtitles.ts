@@ -13,6 +13,7 @@ import {
   autoSubtitleTrack,
   isPictureSubtitle,
   isSdhSubtitle,
+  languageName,
   languageTag,
   normalizeLang,
   regionOf,
@@ -125,16 +126,45 @@ function kindRank(e: SubtitleEntry): number {
   return e.ai ? 3 : e.forced ? 2 : e.sdh ? 1 : 0;
 }
 
-/** The tracks of one language by their kinds (kindRank), each kind in the
- *  order they come. */
+/** The tracks of one run by their kinds (kindRank), each kind in the order
+ *  they come. */
 function byKind<E extends SubtitleEntry>(group: readonly E[]): E[] {
   return [...group].sort((a, b) => kindRank(a) - kindRank(b));
 }
 
+// Names in alphabetical order, as a reader of English sorts them.
+const COLLATOR = new Intl.Collator('en');
+
+/** The script and region a track's tag names beside its language ("Hans" of
+ *  "zh-Hans", "BR" of "pt-BR"): its run within the language; '' for the
+ *  bare language. */
+function runOf(e: SubtitleEntry): string {
+  return [scriptOf(e.tag), regionOf(e.tag)].filter(Boolean).join('-');
+}
+
+/**
+ * The tracks of one language, a run for each of its regions and scripts:
+ * the bare language first, then the others in alphabetical order of their
+ * names ("Chinese", "Chinese (Simplified)", "Chinese (Simplified) · AI",
+ * "Chinese (Traditional)"), each run by its kinds (byKind).
+ */
+function byRun<E extends SubtitleEntry>(group: readonly E[]): E[] {
+  const runs = new Map<string, E[]>();
+  for (const e of group) {
+    const run = runOf(e);
+    const list = runs.get(run);
+    if (list) list.push(e);
+    else runs.set(run, [e]);
+  }
+  return [...runs.entries()]
+    .sort(([a, ea], [b, eb]) => (a === b ? 0 : a === '' ? -1 : b === '' ? 1 : COLLATOR.compare(languageName(ea[0].tag), languageName(eb[0].tag))))
+    .flatMap(([, entries]) => byKind(entries));
+}
+
 /** The tracks by language, in the order each language first comes: a
  *  language's tracks together, its regions and scripts with it ("zh-Hant"
- *  and "zh-Hans" with "zh"), by their kinds. A track in no language is on
- *  its own, in its place. */
+ *  and "zh-Hans" with "zh"), a run each (byRun). A track in no language is
+ *  on its own, in its place. */
 function byLanguage<E extends SubtitleEntry>(list: readonly E[]): { base: string; entries: E[] }[] {
   const groups = new Map<string, { base: string; entries: E[] }>();
   list.forEach((e, i) => {
@@ -144,7 +174,14 @@ function byLanguage<E extends SubtitleEntry>(list: readonly E[]): { base: string
     if (group) group.entries.push(e);
     else groups.set(key, { base, entries: [e] });
   });
-  return [...groups.values()].map((g) => ({ base: g.base, entries: byKind(g.entries) }));
+  return [...groups.values()].map((g) => ({ base: g.base, entries: byRun(g.entries) }));
+}
+
+/** Languages in alphabetical order of their names - a track in no language
+ *  by its own - as "more languages" lists them. */
+function alphabetical<E extends SubtitleEntry>(groups: readonly { base: string; entries: E[] }[]): { base: string; entries: E[] }[] {
+  const name = (g: { base: string; entries: E[] }) => (g.base ? languageName(g.base) : g.entries[0]?.label ?? '');
+  return [...groups].sort((a, b) => COLLATOR.compare(name(a), name(b)));
 }
 
 /**
@@ -181,14 +218,18 @@ function standsForBoth<T extends SubtitleSource>(
  * The subtitles menu of a title's tracks, given in the order they come (the
  * file's own streams first, in the file's order, then its sidecars). On
  * top: the viewer's subtitle language (Settings; "off" names none), then
- * each other subtitle language the server is set up for; each language's
- * tracks plain first, then for deaf and hard of hearing, then
- * foreign-language parts only, then the ones the platform made ("· AI").
- * Then "more languages" with the rest, by language in the order each first
- * comes, a language's regions and scripts with it, each language's kinds
- * the same way; a track in no language in its place. A packaged title is
- * no different: a package keeps the tracks outside the server's languages,
- * and they are under "more languages" as an original's are.
+ * each other subtitle language the server is set up for. Within a
+ * language, each region or script keeps a run of its own, the bare
+ * language first and the others in alphabetical order of their names
+ * ("Chinese", "Chinese (Simplified)", "Chinese (Simplified) · AI",
+ * "Chinese (Traditional)"), and within a run the plain track first, then
+ * for deaf and hard of hearing, then foreign-language parts only, then the
+ * ones the platform made ("· AI"). Then "more languages" with the rest, the
+ * languages in alphabetical order of their names (a track in no language
+ * by its own name), a language's regions and scripts with it, in runs the
+ * same way. A packaged title is no different: a package keeps the tracks
+ * outside the server's languages, and they are under "more languages" as
+ * an original's are.
  *
  * Without "more languages" only on a server set up for no subtitle
  * languages (an empty list, or an older server without the route), where
@@ -229,11 +270,11 @@ export function subtitleMenu<T extends SubtitleSource>(
   for (const w of wanted) {
     const group = unique.filter((e) => !placed.has(e) && sameLanguage(w, e.tag));
     group.forEach((e) => placed.add(e));
-    if (group.length) blocks.push({ base: normalizeLang(w), entries: byKind(group) });
+    if (group.length) blocks.push({ base: normalizeLang(w), entries: byRun(group) });
   }
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
   const noMore = !serverLanguages.some((l) => languageTag(l));
-  if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: rest.flatMap((g) => g.entries) };
+  if (!noMore) return { top: blocks.flatMap((b) => b.entries), more: alphabetical(rest).flatMap((g) => g.entries) };
   // All on top: the rest of a language on top right after its last block
   // there, the other languages after them in the file's order.
   for (const group of rest) {
