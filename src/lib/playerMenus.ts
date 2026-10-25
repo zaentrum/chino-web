@@ -64,11 +64,16 @@ export const SUBTITLES_MENU =
  *  leaves above the bar, a phone held sideways too. "off" stays outside it,
  *  with the header - "more languages" opened never scrolls it away - and
  *  takes its 2.5rem from the list's height, so the menu is never taller
- *  than its 24rem, 55vh and 100vh-18rem of list allowed before. */
-export const SUBTITLES_LIST = 'max-h-[min(21.5rem,calc(55vh-2.5rem),calc(100vh-20.5rem))] overflow-y-auto';
+ *  than its 24rem, 55vh and 100vh-18rem of list allowed before. Never
+ *  shorter than one row and the hairline over it, though: on a screen too
+ *  short for that (under 23rem high - a phone held sideways, 336 px in its
+ *  browser), one row still shows whole and the list scrolls a row at a
+ *  time, the menu then up to just under the top bar's back and home. */
+export const SUBTITLES_LIST =
+  'max-h-[max(calc(2.5rem+1px),min(21.5rem,calc(55vh-2.5rem),calc(100vh-20.5rem)))] overflow-y-auto';
 
 /** The height of a row of the menus, as "off" pinned with the header takes
- *  it from the list. */
+ *  it from the list, and as the list is never shorter than. */
 export const MENU_ROW_REM = 2.5;
 
 /** The list's top edge under "off": a hairline once the list is scrolled,

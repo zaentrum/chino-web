@@ -67,9 +67,18 @@ test('the subtitles menu opens above the whole control bar: never over the seek 
   // Its list scrolls, never taller than the screen leaves above the bar:
   // the list and "off" over it together as tall as the list was alone.
   assert.match(SUBTITLES_LIST, /overflow-y-auto/);
-  assert.match(SUBTITLES_LIST, /max-h-\[min\(21\.5rem,calc\(55vh-2\.5rem\),calc\(100vh-20\.5rem\)\)\]/);
+  assert.match(SUBTITLES_LIST, /max-h-\[max\(calc\(2\.5rem\+1px\),min\(21\.5rem,calc\(55vh-2\.5rem\),calc\(100vh-20\.5rem\)\)\)\]/);
   assert.equal(21.5 + MENU_ROW_REM, 24);
   assert.equal(18 + MENU_ROW_REM, 20.5);
+  // Never shorter than a row and the 1px hairline over it: a phone held
+  // sideways (336 px high in its browser) still shows one row whole.
+  assert.ok(SUBTITLES_LIST.includes(`max(calc(${MENU_ROW_REM}rem+1px),`));
+  assert.match(SUBTITLES_LIST_AT_TOP, /^border-t\b/);
+  const listPx = (vh: number) => Math.max(MENU_ROW_REM * 16 + 1, Math.min(21.5 * 16, 0.55 * vh - 40, vh - 20.5 * 16));
+  assert.equal(listPx(336), 41);
+  assert.equal(listPx(360), 41);
+  assert.equal(listPx(390), 62);
+  assert.equal(listPx(900), 344);
   // In the player, the bar is its anchor: between the bar and the menu no
   // wrapper is positioned, so bottom-full is the bar's top, above the seek
   // bar.
