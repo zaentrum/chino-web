@@ -7,6 +7,8 @@ import {
   DETAILS_BODY_START,
   DETAILS_DISCLOSURE,
   detailsBody,
+  KIND_BADGE,
+  kindWord,
   PAGE_HEADING,
   QUIET_BUTTON,
   SECTION_HEADING,
@@ -82,6 +84,25 @@ test('"unmute" says what fits every device, in the mono face - never "Tap to unm
     assert.match(source, /\{UNMUTE\}/, file);
     assert.match(source, /\$\{UNMUTE_LOOK\}/, file);
   }
+});
+
+test("a title's kind in the grid's word - a show, a movie - in a badge: mono, lowercase as written, on a solid panel", () => {
+  assert.equal(kindWord('series'), 'show');
+  assert.equal(kindWord('Series'), 'show');
+  assert.equal(kindWord('movie'), 'movie');
+  // Another kind as the catalogue names it, lowercase.
+  assert.equal(kindWord('music'), 'music');
+  const look = classes(KIND_BADGE);
+  assert.ok(look.includes('font-mono'));
+  assert.ok(look.includes('whitespace-nowrap'));
+  // Never capitalised by CSS.
+  for (const c of look) assert.doesNotMatch(c, /^(uppercase|capitalize)$/, c);
+  // A thin frame on a slightly lighter panel, solid: no see-through fill.
+  assert.ok(look.includes('border') && look.includes('bg-chino-surface-2'));
+  for (const c of look) assert.doesNotMatch(c, /^bg-.*\/\d+$|^bg-(white|black)/, c);
+  const detail = readFileSync(new URL('../components/DetailPage.tsx', import.meta.url), 'utf8');
+  assert.match(detail, /className=\{KIND_BADGE\}>\{kindWord\(data\.type\)\}/);
+  assert.doesNotMatch(detail, /uppercase/);
 });
 
 test('"see all" is one word on every row, lowercase in the mono face - never "See All" beside "See all"', () => {

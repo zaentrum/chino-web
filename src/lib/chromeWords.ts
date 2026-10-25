@@ -41,6 +41,21 @@ export const WATCHLIST_WORDS = {
   cancel: 'cancel',
 } as const;
 
+/** A title's kind as a viewer reads it - the grid's and the nav's word: a
+ *  "show" where the catalogue says series, a "movie"; another kind as the
+ *  catalogue names it. Lowercase, for the badge's mono face. */
+export function kindWord(type: string): string {
+  const kind = type.trim().toLowerCase();
+  return kind === 'series' ? 'show' : kind;
+}
+
+/** The kind's badge on a title's page, beside its year and rating: one
+ *  word, chrome - small, in the mono face, written lowercase rather than
+ *  capitalised by CSS - in a thin square frame on a slightly lighter
+ *  panel, never a see-through one over the backdrop; it never wraps. */
+export const KIND_BADGE =
+  'px-1.5 py-0.5 border border-chino-border-2 bg-chino-surface-2 text-chino-muted font-mono text-xs tracking-wide whitespace-nowrap';
+
 /** A row's way to all of it - the Home rails', the Watchlist's shelves'
  *  "see all" beside the title and as the tile at the row's end: one word,
  *  chrome, lowercase in the mono face, never "See All" beside "See all". */

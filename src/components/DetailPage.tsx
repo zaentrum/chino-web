@@ -18,6 +18,7 @@ import { toApp } from '../lib/basepath';
 import { groupCredits } from '../lib/credits';
 import { languageName } from '../lib/languages';
 import { ratingBadge } from '../lib/ratings';
+import { KIND_BADGE, kindWord } from '../lib/chromeWords';
 import { trailerChoice, trailerPath } from '../lib/trailers';
 import { episodeCode } from '../lib/episodeFiles';
 import { seriesPlayTarget } from '../lib/seriesPlay';
@@ -280,11 +281,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
                   {rated.text}
                 </span>
               ) : null}
-              {data.type ? (
-                <span className="px-2 py-0.5 bg-white/10 text-xs uppercase tracking-wide">
-                  {data.type}
-                </span>
-              ) : null}
+              {/* The kind in the grid's and the nav's word: a show, a
+                  movie - never the catalogue's "series". */}
+              {data.type ? <span className={KIND_BADGE}>{kindWord(data.type)}</span> : null}
             </div>
 
             {data.genres && data.genres.length > 0 ? (
