@@ -1,8 +1,9 @@
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useCatalogEvents } from '../hooks/useCatalogEvents';
-import { AlertTriangle } from 'lucide-react';
 import { LoadingState } from '../components/LoadingState';
+import { FailureDetails } from '../components/CouldntLoad';
+import { signInFailureReason } from '../lib/signInAgain';
 import { toApp } from '../lib/basepath';
 import { accountWasDeleted, forgetAccountDeleted } from './accountDeleted';
 import { oidcUserManager } from './oidc';
@@ -19,7 +20,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   // Auto-redirect to the IdP when we're not in flight and not signed
   // in. Same guard as before, plus we skip if there's a pending error
-  // — let the user click "Try again" instead of looping back to the
+  // — let the user click "sign in again" instead of looping back to the
   // failing redirect — and right after the person deleted their
   // account: the start screen says so first (below).
   useEffect(() => {
@@ -66,7 +67,7 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
             <img src={chinoIcon} alt="Chino" className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-semibold mb-2 text-white">Account Deleted</h1>
+          <h1 className="font-mono text-2xl font-semibold mb-2 text-white">account deleted</h1>
           <p className="text-sm text-chino-text mb-5">
             Your account is deleted, with everything this server kept of you, and you're signed out.
           </p>
@@ -75,9 +76,9 @@ export function AuthGate({ children }: AuthGateProps) {
               forgetAccountDeleted();
               void auth.signinRedirect();
             }}
-            className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
+            className="h-12 px-5 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium"
           >
-            Sign In
+            sign in
           </button>
         </main>
       </div>
@@ -91,29 +92,28 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
             <img src={chinoIcon} alt="Chino" className="w-10 h-10" />
           </div>
-          <h1 className="text-2xl font-semibold mb-2 text-white">Couldn't sign you in</h1>
-          <div className="flex items-start gap-2 mx-auto max-w-sm text-left bg-chino-surface border border-chino-red/30 rounded-lg p-3 mb-5">
-            <AlertTriangle className="w-4 h-4 text-chino-red mt-0.5 shrink-0" />
-            <p className="text-sm text-chino-text">{auth.error.message || 'The identity provider returned an error.'}</p>
-          </div>
+          {/* What is true and why, by the kind of the error - its own
+              words under details, for the people who fix things; sign in
+              again, or start the app over from home. */}
+          <h1 className="font-mono text-2xl font-semibold mb-2 text-white">couldn't sign you in</h1>
+          <p className="text-chino-muted mb-6">{signInFailureReason(auth.error)}</p>
           <div className="flex gap-2 justify-center">
             <button
               onClick={() => auth.signinRedirect()}
-              className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
+              className="h-12 px-5 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium"
             >
-              Try again
+              sign in again
             </button>
             <button
               onClick={() => window.location.assign(toApp('/'))}
-              className="px-5 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg"
+              className="h-12 px-5 bg-chino-surface-2 hover:bg-chino-border-2 text-chino-text font-mono font-medium"
             >
-              Reset
+              home
             </button>
           </div>
-          <p className="mt-6 text-xs text-chino-muted">
-            If this keeps happening, check your network connection or try a fresh browser
-            tab — sometimes the redirect cookies get stale.
-          </p>
+          <div className="mt-6">
+            <FailureDetails status={null} text={auth.error.message} />
+          </div>
         </div>
       </div>
     );

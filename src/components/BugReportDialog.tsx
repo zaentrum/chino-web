@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Camera, ExternalLink, Loader2, X } from 'lucide-react';
 import { captureScreenshot } from '../lib/screenshot';
-import { FeedbackOffError, submitBugReport, type FeedbackResult } from '../lib/feedback';
+import { submitBugReport, type FeedbackResult } from '../lib/feedback';
+import { feedbackFailure } from '../lib/feedbackStatus';
 import { baseContext } from '../lib/errorReporter';
 
 type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
@@ -88,13 +89,10 @@ export function BugReportDialog({
       setResult(r);
       setPhase('done');
     } catch (e) {
-      // Keep the text so the user can retry without retyping — unless the
-      // server has reporting switched off, where a retry cannot help.
-      setError(
-        e instanceof FeedbackOffError
-          ? "Bug reporting is switched off on this server, so this report can't be filed."
-          : "Couldn't file the report. Please try again in a moment.",
-      );
+      // Keep the text so the user can retry without retyping; say why it
+      // failed - reporting switched off, where a retry cannot help, or the
+      // case of the answer (lib/feedbackStatus.ts).
+      setError(feedbackFailure(e));
       setPhase('editing');
     }
   };

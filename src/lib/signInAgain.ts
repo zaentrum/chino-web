@@ -48,6 +48,24 @@ export function renewalFailure(error: unknown): 'unreachable' | 'refused' {
   return name === 'ErrorTimeout' ? 'unreachable' : 'refused';
 }
 
+/**
+ * What the sign-in screen says when a sign-in failed, by its error's kind
+ * (oidc-client-ts names them; never by its message, which goes under
+ * details): the sign-in service out of reach (the network, a timeout), the
+ * service saying no (an error answer), or a sign-in that didn't come back
+ * whole (its state lost, say). No guess at the viewer's connection, no
+ * "please".
+ */
+export function signInFailureReason(error: unknown): string {
+  const e = error as { name?: unknown; innerError?: unknown } | null;
+  const name = typeof e?.name === 'string' ? e.name : '';
+  if (error instanceof TypeError || name === 'TypeError' || name === 'ErrorTimeout' || e?.innerError instanceof TypeError) {
+    return "Can't reach the sign-in service.";
+  }
+  if (name === 'ErrorResponse') return "The sign-in service didn't accept the request.";
+  return "The sign-in didn't finish.";
+}
+
 const KEY = 'chino.signInAgain';
 let memory: SignInMarks = { renewedAt: null, signedInAt: null };
 

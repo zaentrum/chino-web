@@ -8,6 +8,7 @@ import {
   nextSignInStep,
   readSignInMarks,
   renewalFailure,
+  signInFailureReason,
 } from './signInAgain.ts';
 
 const none = { renewedAt: null, signedInAt: null };
@@ -52,4 +53,16 @@ test("a renewal that can't reach the sign-in service is the connection case; any
   assert.equal(renewalFailure(Object.assign(new Error('invalid_grant'), { name: 'ErrorResponse' })), 'refused');
   assert.equal(renewalFailure(new Error('No silent_redirect_uri configured')), 'refused');
   assert.equal(renewalFailure(null), 'refused');
+});
+
+test('a sign-in that failed says why by the kind of its error, never by its message, and guesses at nothing', () => {
+  // react-oidc-context hands the screen the error's name and message.
+  assert.equal(signInFailureReason({ name: 'TypeError', message: 'Failed to fetch' }), "Can't reach the sign-in service.");
+  assert.equal(signInFailureReason({ name: 'ErrorTimeout', message: 'IFrame timed out without a response' }), "Can't reach the sign-in service.");
+  assert.equal(signInFailureReason(new TypeError('Failed to fetch')), "Can't reach the sign-in service.");
+  assert.equal(signInFailureReason({ name: 'ErrorResponse', message: 'access_denied' }), "The sign-in service didn't accept the request.");
+  assert.equal(signInFailureReason({ name: 'Error', message: 'No matching state found in storage' }), "The sign-in didn't finish.");
+  for (const e of [{ name: 'TypeError' }, { name: 'ErrorResponse' }, { name: 'Error' }, null]) {
+    assert.doesNotMatch(signInFailureReason(e), /please|your (network|connection)|try again|cookies/i);
+  }
 });

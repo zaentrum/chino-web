@@ -106,9 +106,10 @@ export function shownCase(kind: FailureCase, signIn: SignInAgain | null): Failur
   return null;
 }
 
-/** The status under a disclosure named "details". */
-export function FailureDetails({ status }: { status: number | null }) {
-  const details = failureDetails(status);
+/** The status under a disclosure named "details" - or, where there is no
+ *  status (a sign-in that failed), the error's own words. */
+export function FailureDetails({ status, text }: { status: number | null; text?: string }) {
+  const details = failureDetails(status) ?? (text || null);
   if (!details) return null;
   return (
     <details className="text-xs text-chino-dim">

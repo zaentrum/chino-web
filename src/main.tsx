@@ -7,6 +7,8 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { buildOidcConfig } from './auth/oidc';
 import { loadRuntimeConfig, type RuntimeConfig } from './lib/runtimeConfig';
 import { installErrorReporting } from './lib/errorReporter';
+import { TRY_AGAIN, couldntLoad, failureCase, failureReason, failureStatus } from './lib/loadFailure';
+import { FailureDetails } from './components/CouldntLoad';
 
 // Global error / unhandled-rejection listeners → auto bug reports.
 // Installed before the first render so even a crash during mount is
@@ -30,35 +32,30 @@ function BootstrapLoading() {
   );
 }
 
-// On-brand config-load failure with a Retry that re-runs the bootstrap.
-function BootstrapError({ message, onRetry }: { message: string; onRetry: () => void }) {
+// The app couldn't start: what the server's /api/config answered says why,
+// by its case (lib/loadFailure.ts) - "Can't reach the server." only when
+// nothing answered - with try again, which runs the start-up again, and the
+// status under details. A 404 means the app and the server don't match.
+function BootstrapError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const status = failureStatus(error);
+  const reason = failureReason(failureCase(status, 'list')) || failureReason('refused');
   return (
-    <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
-      <div className="max-w-md w-full text-center">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">
-          <div className="w-8 h-8 border border-chino-red/40 text-chino-red flex items-center justify-center text-lg">
-            !
-          </div>
-        </div>
-        <h1 className="text-2xl font-semibold mb-2 text-white">Couldn't load configuration</h1>
-        <div className="mx-auto max-w-sm text-left bg-chino-surface border border-chino-red/30 rounded-lg p-3 mb-5">
-          <p className="text-sm text-chino-text">
-            The app couldn't load its configuration from <code>/api/config</code>.
-          </p>
-          <p className="mt-2 text-xs text-chino-muted break-words">{message}</p>
-        </div>
+    <main className="min-h-dvh bg-chino-bg text-white flex items-center justify-center p-6">
+      <div className="max-w-md w-full text-center flex flex-col items-center gap-3">
+        <h1 className="font-mono text-2xl md:text-3xl font-semibold">{couldntLoad('the app')}</h1>
+        <p className="text-chino-muted leading-relaxed">{reason}</p>
         <button
+          type="button"
           onClick={onRetry}
-          className="px-5 py-2 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg rounded-lg font-medium"
+          className="mt-5 h-12 px-5 inline-flex items-center gap-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium"
         >
-          Retry
+          {TRY_AGAIN}
         </button>
-        <p className="mt-6 text-xs text-chino-muted">
-          If this keeps happening, check your network connection or that the server is
-          reachable.
-        </p>
+        <div className="mt-3">
+          <FailureDetails status={status} />
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -89,10 +86,9 @@ async function bootstrap() {
     const cfg = await loadRuntimeConfig();
     renderApp(cfg);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     root.render(
       <StrictMode>
-        <BootstrapError message={message} onRetry={() => void bootstrap()} />
+        <BootstrapError error={err} onRetry={() => void bootstrap()} />
       </StrictMode>,
     );
   }

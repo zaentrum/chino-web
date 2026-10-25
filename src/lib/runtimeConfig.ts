@@ -9,6 +9,8 @@
 // `/api/config` is an ABSOLUTE path served by chino-api at `/api`; it is
 // NOT under the app's base path, so it must never be base-prefixed.
 
+import { HttpError } from './loadFailure.ts';
+
 export interface RuntimeConfig {
   /** Absolute base URL of chino-api, e.g. "https://host/api". */
   apiBase: string;
@@ -63,22 +65,24 @@ export function feedbackAvailable(): boolean {
  *   2. Build-time `VITE_OIDC_AUTHORITY` — fallback so a pure-static
  *      build (no /api/config) still works.
  *
- * Throws a clear error if the endpoint is unreachable, returns non-2xx,
- * or serves HTML (an SPA index.html fallback) instead of JSON.
+ * Throws a clear error if the endpoint is unreachable (the network's), returns
+ * non-2xx (an HttpError with its status), or serves HTML (an SPA index.html
+ * fallback) instead of JSON (a SyntaxError: an answer that couldn't be read),
+ * so the start-up screen says why by its case (lib/loadFailure.ts).
  */
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
   const res = await fetch('/api/config', {
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) {
-    throw new Error(`/api/config responded ${res.status} ${res.statusText}`);
+    throw new HttpError(res.status, '/api/config');
   }
   // Guard against an SPA fallback (index.html) being served for
   // /api/config — that would parse as JSON-failure or, worse, silently
   // succeed on a lenient server. Require an explicit JSON content type.
   const contentType = res.headers.get('content-type') ?? '';
   if (!contentType.toLowerCase().includes('application/json')) {
-    throw new Error(
+    throw new SyntaxError(
       `/api/config returned non-JSON content-type "${contentType || 'unknown'}" ` +
         '(likely an SPA HTML fallback — the server is not exposing the config endpoint).',
     );

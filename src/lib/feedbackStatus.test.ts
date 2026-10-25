@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { featuresFrom } from './runtimeConfig.ts';
-import { FeedbackOffError, feedbackError } from './feedbackStatus.ts';
+import { FeedbackOffError, feedbackError, feedbackFailure } from './feedbackStatus.ts';
 
 test('feedback is offered only when the server says true', () => {
   assert.deepEqual(featuresFrom({ features: { feedback: true } }), { feedback: true });
@@ -24,4 +24,12 @@ test('a 503 from the feedback endpoint means reporting is off', () => {
     assert.ok(!(e instanceof FeedbackOffError), `status ${status}`);
     assert.equal(e.message, `chino-api ${status}`);
   }
+});
+
+test('a report that could not be filed says why, and never asks to try again', () => {
+  assert.equal(feedbackFailure(feedbackError(502)), "Couldn't file the report. The server ran into a problem.");
+  assert.equal(feedbackFailure(feedbackError(429)), "Couldn't file the report. The server is busy.");
+  assert.equal(feedbackFailure(new TypeError('Failed to fetch')), "Couldn't file the report. Can't reach the server.");
+  assert.equal(feedbackFailure(feedbackError(503)), "Bug reporting is switched off on this server, so this report can't be filed.");
+  for (const s of [400, 401, 403, 413, 500]) assert.doesNotMatch(feedbackFailure(feedbackError(s)), /please|in a moment|try again/i, String(s));
 });
