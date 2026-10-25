@@ -11,11 +11,13 @@ import {
   playerChooses,
   sameLanguage,
   serverSubtitleLanguages,
+  settingsSubtitleLanguages,
   subtitleEntries,
   subtitleMenu,
   viewerPicks,
   type SubtitleSource,
 } from './subtitles.ts';
+import { caseOf } from './loadFailure.ts';
 
 const SERVER = ['en', 'de', 'zh-Hans'];
 
@@ -554,4 +556,31 @@ test('no answer counts as none for now; the next playback asks again', async () 
   assert.equal(languagesFromResponse(200, { other: 1 }), null);
   assert.deepEqual(languagesFromResponse(200, { languages: ['en', 7, 'und', 'zh-Hans'] }), ['en', 'zh-Hans']);
   assert.deepEqual(languagesFromResponse(200, { languages: [] }), []);
+});
+
+test("Settings' languages: a failure is said with its status, not taken for none; a 404 is none", async () => {
+  const storage = memoryStorage();
+  forgetServerSubtitleLanguages(storage);
+  // The server ran into a problem: the status, for the screen to say why.
+  await assert.rejects(settingsSubtitleLanguages(async () => ({ status: 503, body: null }), storage), (e: unknown) => {
+    assert.equal(caseOf(e, 'list'), 'server');
+    return true;
+  });
+  // No answer: the network's error, as it came.
+  await assert.rejects(
+    settingsSubtitleLanguages(async () => {
+      throw new TypeError('Failed to fetch');
+    }, storage),
+    (e: unknown) => caseOf(e, 'list') === 'unreachable',
+  );
+  // An answer that couldn't be read is the server's.
+  await assert.rejects(settingsSubtitleLanguages(async () => ({ status: 200, body: 'nope' }), storage), (e: unknown) => caseOf(e, 'list') === 'server');
+  // Nothing was kept on the way: the player still asks.
+  assert.deepEqual(await settingsSubtitleLanguages(async () => ({ status: 200, body: { languages: ['en', 'de'] } }), storage), ['en', 'de']);
+  // Kept for the session, as the player keeps them.
+  assert.deepEqual(await serverSubtitleLanguages(async () => ({ status: 503, body: null }), storage), ['en', 'de']);
+  forgetServerSubtitleLanguages(storage);
+  // A server without the route names none: every language is offered.
+  assert.deepEqual(await settingsSubtitleLanguages(async () => ({ status: 404, body: null }), storage), []);
+  forgetServerSubtitleLanguages(storage);
 });

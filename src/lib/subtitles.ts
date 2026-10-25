@@ -23,6 +23,7 @@ import {
   subtitleLanguage,
   type SubtitleDefaults,
 } from './languages.ts';
+import { HttpError } from './loadFailure.ts';
 
 /** The text under Settings' subtitle language, the same in every chino app
  *  (docs/chino, subtitles: the setting) - what autoSubtitle does, and how
@@ -360,6 +361,24 @@ export async function serverSubtitleLanguages(
   ask: () => Promise<{ status: number; body: unknown }>,
   storage: Pick<Storage, 'getItem' | 'setItem'> | null = sessionStore(),
 ): Promise<readonly string[]> {
+  const kept = keptLanguages(storage);
+  if (kept) return kept;
+  if (!asking) {
+    asking = ask()
+      .then(({ status, body }) => languagesFromResponse(status, body))
+      .catch(() => null)
+      .then((list) => {
+        asking = null;
+        if (!list) return [];
+        return remember(list, storage);
+      });
+  }
+  return asking;
+}
+
+/** The kept languages, from this page or the tab's storage; null when
+ *  there are none yet. */
+function keptLanguages(storage: Pick<Storage, 'getItem'> | null): readonly string[] | null {
   if (known) return known;
   try {
     const raw = storage?.getItem(LANGUAGES_KEY);
@@ -371,23 +390,37 @@ export async function serverSubtitleLanguages(
   } catch {
     /* storage off, or not ours */
   }
-  if (!asking) {
-    asking = ask()
-      .then(({ status, body }) => languagesFromResponse(status, body))
-      .catch(() => null)
-      .then((list) => {
-        asking = null;
-        if (!list) return [];
-        known = list;
-        try {
-          storage?.setItem(LANGUAGES_KEY, JSON.stringify(list));
-        } catch {
-          /* storage off: this page keeps them */
-        }
-        return list;
-      });
+  return null;
+}
+
+/** Keeps the server's answer for the session. */
+function remember(list: readonly string[], storage: Pick<Storage, 'setItem'> | null): readonly string[] {
+  known = list;
+  try {
+    storage?.setItem(LANGUAGES_KEY, JSON.stringify(list));
+  } catch {
+    /* storage off: this page keeps them */
   }
-  return asking;
+  return list;
+}
+
+/**
+ * The server's subtitle languages for Settings, kept as the player keeps
+ * them (serverSubtitleLanguages) - but a failure is said, not taken for
+ * none: the answer's status as an HttpError (0 for a body that couldn't be
+ * read), or the network's error, for the screen to say why
+ * (lib/loadFailure.ts). A server without the route (404) has none.
+ */
+export async function settingsSubtitleLanguages(
+  ask: () => Promise<{ status: number; body: unknown }>,
+  storage: Pick<Storage, 'getItem' | 'setItem'> | null = sessionStore(),
+): Promise<readonly string[]> {
+  const kept = keptLanguages(storage);
+  if (kept) return kept;
+  const { status, body } = await ask();
+  const list = languagesFromResponse(status, body);
+  if (!list) throw new HttpError(status >= 200 && status < 300 ? 0 : status);
+  return remember(list, storage);
 }
 
 /** Forgets the server's subtitle languages (tests; a server change). */

@@ -30,6 +30,10 @@ const T_TO_1: Record<string, string> = {
   urd: 'ur', uzb: 'uz', vie: 'vi', yid: 'yi', zho: 'zh', zul: 'zu',
 };
 
+/** The languages a library is likely to carry, by their ISO 639-1 codes
+ *  ("de", "ja"): what Settings offers where the server names none. */
+export const LIBRARY_LANGUAGES: readonly string[] = Object.values(T_TO_1);
+
 // ISO 639-1 → 639-2/T: the table above the other way round.
 const ONE_TO_T: Record<string, string> = Object.fromEntries(Object.entries(T_TO_1).map(([t, one]) => [one, t]));
 

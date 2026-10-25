@@ -1,9 +1,47 @@
-import { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { useAuth } from 'react-oidc-context';
 import { Bug } from 'lucide-react';
 import { useSettings, DEFAULT_SETTINGS } from '../../lib/settings';
 import { BugReportDialog } from '../BugReportDialog';
+import { CouldntLoad } from '../CouldntLoad';
+import { LoadingState } from '../LoadingState';
 import { feedbackAvailable } from '../../lib/runtimeConfig';
-import { SUBTITLE_SETTING_TEXT } from '../../lib/subtitles';
+import { SUBTITLE_SETTING_TEXT, settingsSubtitleLanguages } from '../../lib/subtitles';
+import { couldntLoad } from '../../lib/loadFailure';
+import { AUDIO_SETTING_TEXT, audioOptions, sameChoice, subtitleOptions, type LanguageOptions } from '../../lib/settingsLanguages';
+
+/**
+ * The server's subtitle languages for Settings (GET
+ * /api/v1/subtitles/languages, lib/subtitles.ts settingsSubtitleLanguages):
+ * the list, or why it couldn't load, and try again.
+ */
+function useSubtitleLanguages() {
+  const auth = useAuth();
+  const token = auth.user?.access_token;
+  const [state, setState] = useState<{ list: readonly string[] | null; error: unknown }>({ list: null, error: null });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    setState({ list: null, error: null });
+    settingsSubtitleLanguages(async () => {
+      const r = await fetch('/api/v1/subtitles/languages', { headers: { Authorization: `Bearer ${token}` } });
+      return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+    })
+      .then((list) => {
+        if (live) setState({ list, error: null });
+      })
+      .catch((error: unknown) => {
+        if (live) setState({ list: null, error });
+      });
+    return () => {
+      live = false;
+    };
+    // A renewed bearer asks nothing new; try again does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!token, attempt]);
+  return { ...state, retry: () => setAttempt((a) => a + 1) };
+}
 
 /**
  * Client-side settings page. All values live in localStorage; the
@@ -13,6 +51,7 @@ import { SUBTITLE_SETTING_TEXT } from '../../lib/subtitles';
 export function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [bugDialogOpen, setBugDialogOpen] = useState(false);
+  const subtitleLanguages = useSubtitleLanguages();
   const binge = settings.binge;
 
   const updateBinge = (patch: Partial<typeof binge>) =>
@@ -49,49 +88,37 @@ export function SettingsPage() {
         />
       </Section>
 
-      <Section
-        title="Audio"
-        subtitle="Default audio language. Picks the closest matching audio track on each item. Choose Original to follow the item's source language (e.g. Japanese for anime). Manual switches in the audio menu only affect the current playback."
-      >
-        <ChipRow
+      <Section title="Audio" subtitle={AUDIO_SETTING_TEXT}>
+        <LanguageSetting
           label="Preferred language"
           value={settings.audio.preferredLang}
-          onChange={(v) =>
-            setSettings({ ...settings, audio: { preferredLang: v } })
-          }
-          options={[
-            { value: 'orig', label: 'Original (per item)' },
-            { value: 'eng', label: 'English' },
-            { value: 'deu', label: 'German' },
-            { value: 'fra', label: 'French' },
-            { value: 'spa', label: 'Spanish' },
-            { value: 'ita', label: 'Italian' },
-            { value: 'jpn', label: 'Japanese' },
-            { value: 'por', label: 'Portuguese' },
-            { value: 'nld', label: 'Dutch' },
-          ]}
+          options={audioOptions(settings.audio.preferredLang)}
+          onChange={(v) => setSettings({ ...settings, audio: { preferredLang: v } })}
         />
       </Section>
 
+      {/* The server's subtitle languages, named as the player's menus name
+          them; every language where the server names none; why, where they
+          couldn't load. */}
       <Section title="Subtitles" subtitle={SUBTITLE_SETTING_TEXT}>
-        <ChipRow
-          label="Preferred language"
-          value={settings.subtitles.preferredLang}
-          onChange={(v) =>
-            setSettings({ ...settings, subtitles: { preferredLang: v } })
-          }
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'eng', label: 'English' },
-            { value: 'deu', label: 'German' },
-            { value: 'fra', label: 'French' },
-            { value: 'spa', label: 'Spanish' },
-            { value: 'ita', label: 'Italian' },
-            { value: 'jpn', label: 'Japanese' },
-            { value: 'por', label: 'Portuguese' },
-            { value: 'nld', label: 'Dutch' },
-          ]}
-        />
+        {subtitleLanguages.error ? (
+          <CouldntLoad
+            title={couldntLoad('the subtitle languages')}
+            error={subtitleLanguages.error}
+            onRetry={subtitleLanguages.retry}
+          />
+        ) : subtitleLanguages.list ? (
+          <LanguageSetting
+            label="Preferred language"
+            value={settings.subtitles.preferredLang}
+            options={subtitleOptions(subtitleLanguages.list, settings.subtitles.preferredLang)}
+            onChange={(v) => setSettings({ ...settings, subtitles: { preferredLang: v } })}
+          />
+        ) : (
+          <div className="p-4">
+            <LoadingState message="Loading the subtitle languages…" />
+          </div>
+        )}
       </Section>
 
       {/* Offered only when this server files reports; otherwise the form would fail. */}
@@ -228,6 +255,43 @@ function NumberField({
   );
 }
 
+/** A language setting: the few the server names as chips, every language
+ *  as a list to pick from. */
+function LanguageSetting({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: LanguageOptions;
+  onChange: (v: string) => void;
+}) {
+  const id = useId();
+  if (!options.every) return <ChipRow label={label} value={value} options={options.choices} onChange={onChange} />;
+  const picked = options.choices.find((c) => sameChoice(c.value, value))?.value ?? value;
+  return (
+    <div className="p-4">
+      <label htmlFor={id} className="block text-white font-medium mb-3">
+        {label}
+      </label>
+      <select
+        id={id}
+        value={picked}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full sm:w-72 h-10 px-3 bg-chino-bg border border-chino-border text-sm text-chino-text focus:outline-none focus:border-chino-accent"
+      >
+        {options.choices.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function ChipRow({
   label,
   value,
@@ -244,7 +308,7 @@ function ChipRow({
       <span className="block text-white font-medium mb-3">{label}</span>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => {
-          const active = value === o.value;
+          const active = sameChoice(o.value, value);
           return (
             <button
               key={o.value}
