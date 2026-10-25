@@ -16,7 +16,7 @@ import { MediaRow } from '../MediaRow';
 import { LoadingState } from '../LoadingState';
 import { CouldntLoad } from '../CouldntLoad';
 import { couldntLoad } from '../../lib/loadFailure';
-import { PAGE_HEADING, WATCHLIST_WORDS } from '../../lib/chromeWords';
+import { PAGE_HEADING, SEE_ALL, SEE_ALL_LOOK, WATCHLIST_WORDS } from '../../lib/chromeWords';
 import {
   useWatchlists,
   getWatchlist,
@@ -30,7 +30,7 @@ import type { ItemDetail } from '../../hooks/useItem';
 /**
  * The Watchlist HUB — the cross-client lists surface. A vertical stack
  * of horizontal poster shelves (the home-rail idiom: MediaRow + the
- * trailing "See all" tile), one shelf per user list, default list first
+ * trailing "see all" tile), one shelf per user list, default list first
  * (GET /me/watchlists returns that order). Each shelf shows the list's
  * newest dozen items; the shelf header and the See-All affordances open
  * the per-list MORE view — the full grid with rename/delete actions
@@ -130,7 +130,7 @@ interface ShelfProps {
 
 /**
  * One hub shelf. Non-empty lists render the home-rail MediaRow (header
- * + horizontal cards + trailing "See all" tile); empty lists keep their
+ * + horizontal cards + trailing "see all" tile); empty lists keep their
  * header + an empty-state hint so the MORE view (rename/delete) stays
  * reachable. Each shelf fetches its own list detail, so the hub fans
  * out the per-list requests in parallel like the home rails do.
@@ -170,8 +170,8 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
           onClick={onOpen}
           className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
         >
-          <span className="text-sm">See All</span>
-          <ChevronRight className="w-4 h-4" />
+          <span className={SEE_ALL_LOOK}>{SEE_ALL}</span>
+          <ChevronRight aria-hidden className="w-4 h-4" />
         </button>
       </div>
       {loading || itemsLoading ? (

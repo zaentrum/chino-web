@@ -10,6 +10,8 @@ import {
   PAGE_HEADING,
   QUIET_BUTTON,
   SECTION_HEADING,
+  SEE_ALL,
+  SEE_ALL_LOOK,
   SETTINGS_WORDS,
   START_PLAYBACK,
   START_PLAYBACK_BUTTON,
@@ -60,6 +62,19 @@ test('"unmute" says what fits every device, in the mono face - never "Tap to unm
     assert.doesNotMatch(source, />\s*Tap to unmute\s*</i, file);
     assert.match(source, /\{UNMUTE\}/, file);
     assert.match(source, /\$\{UNMUTE_LOOK\}/, file);
+  }
+});
+
+test('"see all" is one word on every row, lowercase in the mono face - never "See All" beside "See all"', () => {
+  assert.equal(SEE_ALL, 'see all');
+  assert.ok(classes(SEE_ALL_LOOK).includes('font-mono'));
+  // The rails' header and end tile, and the Watchlist's empty shelf.
+  for (const [file, uses] of [['../components/MediaRow.tsx', 2], ['../components/sections/WatchlistSection.tsx', 1]] as const) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, />\s*See [Aa]ll\s*</, file);
+    assert.doesNotMatch(source, /`See [Aa]ll/, file);
+    assert.equal(source.match(/\{SEE_ALL\}<\/span>/g)?.length, uses, file);
+    assert.equal(source.match(/className=\{(`\$\{)?SEE_ALL_LOOK/g)?.length, uses, file);
   }
 });
 

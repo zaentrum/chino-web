@@ -32,6 +32,14 @@ export const WATCHLIST_WORDS = {
   cancel: 'cancel',
 } as const;
 
+/** A row's way to all of it - the Home rails', the Watchlist's shelves'
+ *  "see all" beside the title and as the tile at the row's end: one word,
+ *  chrome, lowercase in the mono face, never "See All" beside "See all". */
+export const SEE_ALL = 'see all';
+
+/** Its words' look. */
+export const SEE_ALL_LOOK = 'font-mono text-sm';
+
 /** The button that starts a title the browser wouldn't start by itself:
  *  "play" - never "click", which a touch screen has none of. */
 export const START_PLAYBACK = 'play';

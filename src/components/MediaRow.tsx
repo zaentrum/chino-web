@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MediaCard } from './MediaCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { SEE_ALL, SEE_ALL_LOOK } from '../lib/chromeWords';
 
 interface Media {
   id: string;
@@ -28,7 +29,7 @@ interface Media {
 interface MediaRowProps {
   title: string;
   items: Media[];
-  /** Called when the user clicks "See All". Omit to hide the button. */
+  /** Called on "see all". Omit to hide the button. */
   onSeeAll?: () => void;
   /**
    * Makes the row title itself a click target (the Watchlist hub's
@@ -57,7 +58,7 @@ interface MediaRowProps {
  */
 export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false }: MediaRowProps) {
   // Rows that expose an explicit overview link should never loop. The
-  // "See All →" affordance is the escape hatch — wrapping around to
+  // "see all →" affordance is the escape hatch — wrapping around to
   // the first item would make the row look infinite (#150). Treat
   // onSeeAll as an implicit noLoop.
   const finite = noLoop || !!onSeeAll;
@@ -227,8 +228,8 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
             onClick={onSeeAll}
             className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
           >
-            <span className="text-sm">See All</span>
-            <ChevronRight className="w-4 h-4" />
+            <span className={SEE_ALL_LOOK}>{SEE_ALL}</span>
+            <ChevronRight aria-hidden className="w-4 h-4" />
           </button>
         ) : null}
       </div>
@@ -308,7 +309,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
               <MediaCard {...item} />
             </div>
           ))}
-          {/* End-of-row "See All →" tile. Renders only when the row
+          {/* End-of-row "see all →" tile. Renders only when the row
               opts into a finite layout AND wires an onSeeAll handler.
               Same dimensions as a MediaCard so the row keeps a flush
               right edge — feels like a button, not an empty card. */}
@@ -317,10 +318,10 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
               type="button"
               onClick={onSeeAll}
               className="shrink-0 w-32 sm:w-40 md:w-44 lg:w-48 xl:w-52 rounded-lg bg-chino-surface border border-chino-border hover:bg-chino-surface-2 hover:border-chino-accent transition-colors flex flex-col items-center justify-center gap-2 text-chino-accent aspect-[2/3]"
-              aria-label={`See all ${title}`}
+              aria-label={`${SEE_ALL} ${title}`}
             >
-              <ChevronRight className="w-8 h-8" />
-              <span className="text-sm font-medium">See all</span>
+              <ChevronRight aria-hidden className="w-8 h-8" />
+              <span className={`${SEE_ALL_LOOK} font-medium`}>{SEE_ALL}</span>
             </button>
           ) : null}
         </div>

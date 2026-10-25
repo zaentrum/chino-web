@@ -53,7 +53,7 @@ function cwToCard(it: ContinueWatchingEntry, onRemove?: (id: string) => void) {
 }
 
 interface HomeSectionProps {
-  /** Lifted from ChinoApp so each "See All" button can switch the
+  /** Lifted from ChinoApp so each "see all" button can switch the
       active section without going through URL routing (the SPA shell
       manages section selection in component state). */
   onNavigate?: (section: 'home' | 'movies' | 'series') => void;
@@ -70,7 +70,7 @@ interface HomeSectionProps {
  *   4. Top rated — sorted by rating server-side.
  */
 export function HomeSection({ onNavigate }: HomeSectionProps) {
-  // Home rails: each capped at 20 items + a "See All →" tile at the
+  // Home rails: each capped at 20 items + a "see all →" tile at the
   // end of the row that jumps to the full overview. 20 is the per-#150
   // contract — the previous looping carousel rendered each shelf twice
   // in the DOM and made it look like the catalogue was bigger than it
