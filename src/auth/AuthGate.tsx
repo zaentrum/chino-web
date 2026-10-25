@@ -5,6 +5,7 @@ import { AlertTriangle } from 'lucide-react';
 import { LoadingState } from '../components/LoadingState';
 import { toApp } from '../lib/basepath';
 import { accountWasDeleted, forgetAccountDeleted } from './accountDeleted';
+import { oidcUserManager } from './oidc';
 import chinoIcon from '../imports/chino_icon.svg';
 
 interface AuthGateProps {
@@ -46,7 +47,10 @@ export function AuthGate({ children }: AuthGateProps) {
       // expires_at is unix seconds; treat <60s as "renew now".
       const expiresAt = auth.user?.expires_at;
       if (expiresAt && expiresAt * 1000 - Date.now() < 60_000) {
-        auth.signinSilent().catch(() => undefined);
+        // Through the UserManager itself: the provider's signinSilent
+        // shows the splash below, unmounting the page (auth/oidc.ts).
+        const manager = oidcUserManager();
+        void (manager ? manager.signinSilent() : auth.signinSilent()).catch(() => undefined);
       }
     };
     document.addEventListener('visibilitychange', onVisible);

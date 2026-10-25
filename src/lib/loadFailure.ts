@@ -25,8 +25,17 @@ export function okOrThrow(r: Response, what = 'chino-api'): Response {
   return r;
 }
 
-/** Why it couldn't load. */
-export type FailureCase = 'unreachable' | 'server' | 'busy' | 'refused' | 'removed' | 'no-access' | 'signed-out';
+/** Why it couldn't load. 'sign-in-refused' is a 401 that stayed one: the
+ *  server refused even a sign-in just renewed or made (lib/signInAgain.ts). */
+export type FailureCase =
+  | 'unreachable'
+  | 'server'
+  | 'busy'
+  | 'refused'
+  | 'removed'
+  | 'no-access'
+  | 'signed-out'
+  | 'sign-in-refused';
 
 /** Where it couldn't load: a screen of one thing (a title, a person), or a
  *  list (a browse screen, search, the Watchlist, Settings' languages). */
@@ -73,6 +82,8 @@ const REASONS: Readonly<Record<FailureCase, string>> = {
   'no-access': '',
   // Not said: the app signs in again (useSignInAgain).
   'signed-out': '',
+  // Signed in again, and still not: no app update can help.
+  'sign-in-refused': "The server didn't accept your sign-in.",
 };
 
 /** What the description says: the reason alone. '' for the cases that
@@ -83,7 +94,7 @@ export function failureReason(kind: FailureCase): string {
 
 /** Whether "try again" can help. */
 export function canTryAgain(kind: FailureCase): boolean {
-  return kind === 'unreachable' || kind === 'server' || kind === 'busy' || kind === 'refused';
+  return kind === 'unreachable' || kind === 'server' || kind === 'busy' || kind === 'refused' || kind === 'sign-in-refused';
 }
 
 /** The title, in the screen's own words: "couldn't load the movies". */

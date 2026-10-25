@@ -4,7 +4,7 @@ import { useSearch } from '../hooks/useSearch';
 import { toApp } from '../lib/basepath';
 import { searchHeadline } from '../lib/search';
 import { ExtensionSlot } from './ExtensionSlot';
-import { FailureDetails, useSignInAgain } from './CouldntLoad';
+import { FailureDetails, shownCase, useSignInAgain } from './CouldntLoad';
 import { TRY_AGAIN, canTryAgain, caseOf, failureReason, failureStatus } from '../lib/loadFailure';
 import { RotateCw } from 'lucide-react';
 
@@ -131,8 +131,9 @@ export function SearchPage({ query }: SearchPageProps) {
 /** Under the heading of a search that couldn't be made: why, and try again.
  *  The heading is the title ("couldn't search for …"). */
 function SearchFailed({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const kind = caseOf(error, 'list');
-  useSignInAgain(kind === 'signed-out', onRetry);
+  const signIn = useSignInAgain(caseOf(error, 'list') === 'signed-out', onRetry);
+  const kind = shownCase(caseOf(error, 'list'), signIn);
+  if (!kind) return null;
   const reason = failureReason(kind);
   return (
     <div role="alert" className="flex flex-col items-start gap-3">

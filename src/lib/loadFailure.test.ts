@@ -42,6 +42,13 @@ test('the case by the status alone: no answer, the server, busy, not accepted', 
   for (const kind of ['unreachable', 'server', 'busy', 'refused'] as const) assert.equal(canTryAgain(kind), true, kind);
 });
 
+test('a 401 that stays one after signing in again says so, and no app update can help', () => {
+  // lib/signInAgain.ts: renewed, signed in, and the server still says 401.
+  assert.equal(failureReason('sign-in-refused'), "The server didn't accept your sign-in.");
+  assert.doesNotMatch(failureReason('sign-in-refused'), /app update|please|try again/i);
+  assert.equal(canTryAgain('sign-in-refused'), true);
+});
+
 test("an error's status, never its message", () => {
   assert.equal(failureStatus(new HttpError(503)), 503);
   // The Watchlist's helpers carry the status on the error.

@@ -11,7 +11,7 @@ import {
   failureStatus,
   removedTitle,
 } from '../lib/loadFailure';
-import { FailureDetails, useSignInAgain } from './CouldntLoad';
+import { FailureDetails, shownCase, useSignInAgain } from './CouldntLoad';
 
 interface StatusPageProps {
   /** What is true, as the page's heading, lowercase in the mono face:
@@ -96,9 +96,9 @@ export function CouldntLoadPage({
   onRetry: () => void;
 }) {
   const status = failureStatus(error);
-  const kind = failureCase(status, 'one');
-  useSignInAgain(kind === 'signed-out', onRetry);
-  if (kind === 'signed-out') {
+  const signIn = useSignInAgain(failureCase(status, 'one') === 'signed-out', onRetry);
+  const kind = shownCase(failureCase(status, 'one'), signIn);
+  if (!kind) {
     return (
       <div className="min-h-screen bg-chino-bg text-chino-muted flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin" aria-label="Loading" />

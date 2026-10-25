@@ -1,7 +1,8 @@
 import type { AuthProviderProps } from 'react-oidc-context';
-import { WebStorageStateStore } from 'oidc-client-ts';
+import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { toApp } from '../lib/basepath';
 import { returnPath } from '../lib/loadFailure';
+import { markSignedIn } from '../lib/signInAgain';
 import type { RuntimeConfig } from '../lib/runtimeConfig';
 
 const env = import.meta.env;
@@ -10,13 +11,28 @@ const env = import.meta.env;
 // `/api/config` (see lib/runtimeConfig.ts) — they are no longer static
 // exports, so the same published image works against any Keycloak.
 // Build react-oidc-context's props from the resolved runtime config.
+//
+// The app makes the UserManager itself and hands it to the provider, so a
+// screen that got a 401 can renew the sign-in through it directly
+// (components/CouldntLoad.tsx useSignInAgain): its errors come back to that
+// screen, which tells a sign-in service it can't reach from one that said
+// no, and the app stays on screen while it renews - the provider's own
+// signinSilent shows the sign-in splash, unmounting the page, and keeps the
+// error for the sign-in screen.
+let manager: UserManager | null = null;
+
+/** The app's one UserManager, once the runtime config made it. */
+export function oidcUserManager(): UserManager | null {
+  return manager;
+}
+
 export function buildOidcConfig(cfg: RuntimeConfig): AuthProviderProps {
   const redirectUri =
     env.VITE_OIDC_REDIRECT_URI ?? `${window.location.origin}/auth/callback`;
   const postLogoutRedirectUri =
     env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI ?? window.location.origin;
 
-  return {
+  manager = new UserManager({
     authority: cfg.oidcIssuer,
     client_id: cfg.oidcClientId.web,
     // The redirect_uri stays the SITE-ROOT `/auth/callback` (registered
@@ -28,7 +44,13 @@ export function buildOidcConfig(cfg: RuntimeConfig): AuthProviderProps {
     scope: 'openid profile email',
     automaticSilentRenew: true,
     userStore: new WebStorageStateStore({ store: window.localStorage }),
+  });
+  return {
+    userManager: manager,
     onSigninCallback: (user) => {
+      // Signed in just now: a 401 from here on is the server refusing it,
+      // not a sign-in to renew (lib/signInAgain.ts).
+      markSignedIn(Date.now());
       // After handling the callback, back to the page a refused sign-in
       // left (components/CouldntLoad.tsx useSignInAgain), else the app
       // HOME under the configured base (`/` or `/chino/`). The router
