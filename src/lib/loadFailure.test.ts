@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   HttpError,
   NO_ACCESS,
+  REFUSED,
   TRY_AGAIN,
   canTryAgain,
   caseOf,
@@ -24,8 +25,10 @@ test('the case by the status alone: no answer, the server, busy, not accepted', 
   assert.equal(failureReason(failureCase(408, 'list')), "Can't reach the server.");
   for (const s of [500, 502, 503, 504]) assert.equal(failureReason(failureCase(s, 'list')), 'The server ran into a problem.', String(s));
   assert.equal(failureReason(failureCase(429, 'list')), 'The server is busy.');
+  // A request not accepted, as the web says it: never an app update to
+  // check for - a web page updates itself.
   for (const s of [400, 405, 409, 415, 422]) {
-    assert.equal(failureReason(failureCase(s, 'list')), "The server didn't accept the request. Check for an app update.", String(s));
+    assert.equal(failureReason(failureCase(s, 'list')), "The server didn't accept the request.", String(s));
   }
   // On a list screen a list can't be removed: 404 and 410 mean the app and
   // the server don't match.
@@ -103,8 +106,8 @@ test("the player's give-up after every rung failed says the cause the same way",
   // The server answered: no guess about the viewer's connection.
   assert.equal(streamFailureReason(502), 'The server ran into a problem.');
   assert.equal(streamFailureReason(429), 'The server is busy.');
-  assert.equal(streamFailureReason(404), "The server didn't accept the request. Check for an app update.");
-  assert.equal(streamFailureReason(403), "The server didn't accept the request. Check for an app update.");
+  assert.equal(streamFailureReason(404), "The server didn't accept the request.");
+  assert.equal(streamFailureReason(403), "The server didn't accept the request.");
   // A 401, after the player minted a new stream token: the sign-in the
   // server refused - never an app update.
   assert.equal(streamFailureReason(401), "The server didn't accept your sign-in.");
@@ -146,6 +149,23 @@ test("the start-up screen: \"couldn't load the app\", the reason by /api/config'
     assert.doesNotMatch(reason, /app update/i, String(s));
   }
   // A list screen's "not found" still means the app and the server don't
-  // match, in every app (docs/chino, playback).
-  assert.equal(failureReason(caseOf(new HttpError(404), 'list')), "The server didn't accept the request. Check for an app update.");
+  // match (docs/chino, playback) - on the web, the request not accepted,
+  // without the TV's and the phone's app update.
+  assert.equal(failureReason(caseOf(new HttpError(404), 'list')), "The server didn't accept the request.");
+});
+
+test('the web never says to check for an app update: not a screen, not the player, not a bug report', () => {
+  assert.equal(REFUSED, "The server didn't accept the request.");
+  assert.equal(failureReason('refused'), REFUSED);
+  const statuses = [null, 0, 400, 401, 403, 404, 405, 408, 409, 410, 413, 415, 422, 429, 500, 502, 503, 504];
+  for (const s of statuses) {
+    for (const where of ['one', 'list'] as const) {
+      assert.doesNotMatch(failureReason(failureCase(s, where)), /app update|update the app/i, `${s} ${where}`);
+    }
+    assert.doesNotMatch(streamFailureReason(s), /app update/i, String(s));
+    assert.doesNotMatch(startupFailure(s === null ? new TypeError('x') : s === 0 ? new SyntaxError('x') : new HttpError(s)).reason, /app update/i, String(s));
+  }
+  for (const kind of ['unreachable', 'server', 'busy', 'refused', 'removed', 'no-access', 'signed-out', 'sign-in-refused'] as const) {
+    assert.doesNotMatch(failureReason(kind), /app update/i, kind);
+  }
 });

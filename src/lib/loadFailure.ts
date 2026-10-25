@@ -6,8 +6,11 @@
 // and the server don't match, the not-accepted case - 403 no access, 401
 // signed out, any other 4xx not accepted. The title names what couldn't load
 // in the screen's own words ("couldn't load the movies"); the description is
-// the reason alone, "try again" being the button. Pure: loadFailure.test.ts
-// runs it under node --test.
+// the reason alone, "try again" being the button. A request not accepted is
+// "The server didn't accept the request." on the web: the spec's "Check for
+// an app update." is the TV's and the phone's - a web page updates itself
+// (a new version offers its reload, UpdateAvailable), so the viewer has none
+// to check for. Pure: loadFailure.test.ts runs it under node --test.
 
 /** A request the server answered with an error status. */
 export class HttpError extends Error {
@@ -71,18 +74,23 @@ export function caseOf(error: unknown, where: FailureWhere): FailureCase {
   return failureCase(failureStatus(error), where);
 }
 
+/** A request the server didn't accept, as the web says it: the reason
+ *  alone - never to check for an app update, as a web page updates itself
+ *  (the TV and the phone apps keep that sentence). */
+export const REFUSED = "The server didn't accept the request.";
+
 const REASONS: Readonly<Record<FailureCase, string>> = {
   unreachable: "Can't reach the server.",
   server: 'The server ran into a problem.',
   busy: 'The server is busy.',
-  refused: "The server didn't accept the request. Check for an app update.",
+  refused: REFUSED,
   // Trying again can't bring these back: the screen says what is true
   // instead, with back (removedTitle, NO_ACCESS).
   removed: '',
   'no-access': '',
   // Not said: the app signs in again (useSignInAgain).
   'signed-out': '',
-  // Signed in again, and still not: no app update can help.
+  // Signed in again, and still not.
   'sign-in-refused': "The server didn't accept your sign-in.",
 };
 
@@ -108,24 +116,22 @@ export function couldntLoad(what: string): string {
 export const NO_SERVER_HERE = 'No chino server answers at this address.';
 
 /** What the web app's start-up says for any other request the server
- *  didn't accept: the reason alone, without an app update to check for. */
-export const STARTUP_REFUSED = "The server didn't accept the request.";
+ *  didn't accept: as every screen says it (REFUSED). */
+export const STARTUP_REFUSED = REFUSED;
 
 /**
  * What the start-up screen says when the app couldn't start - /api/config
  * failed: "couldn't load the app", the reason by the answer's case ("Can't
  * reach the server." only when nothing answered), "try again", and the
  * status under details. On the web the page and the config come from one
- * address: a 404 means no chino server answers there, and nothing says to
- * check for an app update (the TV and the phone apps keep that sentence).
+ * address: a 404 means no chino server answers there.
  * The config is asked before anyone signs in, so a 401 or a 403 is a
  * request the server didn't accept.
  */
 export function startupFailure(error: unknown): { title: string; reason: string; status: number | null } {
   const status = failureStatus(error);
   const kind = failureCase(status, 'list');
-  const reason =
-    status === 404 || status === 410 ? NO_SERVER_HERE : kind === 'refused' || !failureReason(kind) ? STARTUP_REFUSED : failureReason(kind);
+  const reason = status === 404 || status === 410 ? NO_SERVER_HERE : failureReason(kind) || STARTUP_REFUSED;
   return { title: couldntLoad('the app'), reason, status };
 }
 
@@ -185,7 +191,7 @@ export function returnPath(state: unknown): string | null {
  * the last request that did (hls.js gives 0 for no answer): the reason as a
  * page says it - "Can't reach the server." only when nothing answered. A
  * 401 the player already minted a new stream token for is the sign-in the
- * server refused, which no app update helps.
+ * server refused.
  */
 export function streamFailureReason(status: number | null | undefined): string {
   const answered = typeof status === 'number' && status > 0 ? status : null;

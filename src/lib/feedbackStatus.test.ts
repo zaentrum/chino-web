@@ -32,6 +32,13 @@ test('a report that could not be filed says why, and never asks to try again', (
   assert.equal(feedbackFailure(new TypeError('Failed to fetch')), "Couldn't file the report. Can't reach the server.");
   assert.equal(feedbackFailure(feedbackError(503)), "Bug reporting is switched off on this server, so this report can't be filed.");
   for (const s of [400, 401, 403, 413, 500]) assert.doesNotMatch(feedbackFailure(feedbackError(s)), /please|in a moment|try again/i, String(s));
+  // A report the server didn't accept: the reason alone - on the web never
+  // an app update to check for, which a web page has none of.
+  assert.equal(feedbackFailure(feedbackError(400)), "Couldn't file the report. The server didn't accept the request.");
+  assert.equal(feedbackFailure(feedbackError(413)), "Couldn't file the report. The server didn't accept the request.");
+  assert.equal(feedbackFailure(feedbackError(404)), "Couldn't file the report. The server didn't accept the request.");
+  assert.equal(feedbackFailure(feedbackError(401)), "Couldn't file the report. The server didn't accept your sign-in.");
+  for (const s of [400, 401, 403, 404, 409, 410, 413, 422, 429, 500]) assert.doesNotMatch(feedbackFailure(feedbackError(s)), /app update/i, String(s));
 });
 
 test('the bug-report dialog: its title and buttons lowercase for the mono face, a verb and its object, never "submit"', () => {
