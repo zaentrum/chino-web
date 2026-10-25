@@ -9,6 +9,7 @@ import { feedbackAvailable } from '../../lib/runtimeConfig';
 import { SUBTITLE_SETTING_TEXT, settingsSubtitleLanguages } from '../../lib/subtitles';
 import { couldntLoad } from '../../lib/loadFailure';
 import { AUDIO_SETTING_TEXT, audioOptions, sameChoice, subtitleOptions, type LanguageOptions } from '../../lib/settingsLanguages';
+import { PAGE_HEADING, QUIET_BUTTON, SECTION_HEADING, SETTINGS_WORDS } from '../../lib/chromeWords';
 
 /**
  * The server's subtitle languages for Settings (GET
@@ -59,10 +60,12 @@ export function SettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-4xl font-bold text-white mb-6">Settings</h1>
+      {/* The page's chrome - its heading, the sections' titles, the buttons -
+          in the mono face, lowercase; labels and hints in the body face. */}
+      <h1 className={PAGE_HEADING}>{SETTINGS_WORDS.heading}</h1>
 
       <Section
-        title="Binge watching"
+        title={SETTINGS_WORDS.binge}
         subtitle="When you watch episodes back-to-back, the player can skip the parts that repeat. A countdown shows first, so you can cancel."
       >
         <Toggle
@@ -88,7 +91,7 @@ export function SettingsPage() {
         />
       </Section>
 
-      <Section title="Audio" subtitle={AUDIO_SETTING_TEXT}>
+      <Section title={SETTINGS_WORDS.audio} subtitle={AUDIO_SETTING_TEXT}>
         <LanguageSetting
           label="Preferred language"
           value={settings.audio.preferredLang}
@@ -100,7 +103,7 @@ export function SettingsPage() {
       {/* The server's subtitle languages, named as the player's menus name
           them; every language where the server names none; why, where they
           couldn't load. */}
-      <Section title="Subtitles" subtitle={SUBTITLE_SETTING_TEXT}>
+      <Section title={SETTINGS_WORDS.subtitles} subtitle={SUBTITLE_SETTING_TEXT}>
         {subtitleLanguages.error ? (
           <CouldntLoad
             title={couldntLoad('the subtitle languages')}
@@ -125,7 +128,7 @@ export function SettingsPage() {
       {/* Offered only when this server files reports; otherwise the form would fail. */}
       {feedbackAvailable() && (
       <Section
-        title="Feedback"
+        title={SETTINGS_WORDS.feedback}
         subtitle="Reports go to the people who run this server, with a screenshot of the page if you attach one."
       >
         <div className="flex items-start justify-between gap-4 p-4">
@@ -135,23 +138,17 @@ export function SettingsPage() {
               Opens a short form. Crashes and playback failures are also reported automatically, without a screenshot.
             </span>
           </span>
-          <button
-            onClick={() => setBugDialogOpen(true)}
-            className="inline-flex items-center gap-2 shrink-0 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
-          >
-            <Bug className="w-4 h-4" />
-            Report a bug
+          <button onClick={() => setBugDialogOpen(true)} className={`shrink-0 ${QUIET_BUTTON}`}>
+            <Bug className="w-4 h-4" aria-hidden />
+            {SETTINGS_WORDS.reportBug}
           </button>
         </div>
       </Section>
       )}
 
       <div className="mt-8 pt-6 border-t border-chino-border-2">
-        <button
-          onClick={() => setSettings(DEFAULT_SETTINGS)}
-          className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm text-chino-text"
-        >
-          Reset to defaults
+        <button onClick={() => setSettings(DEFAULT_SETTINGS)} className={QUIET_BUTTON}>
+          {SETTINGS_WORDS.reset}
         </button>
       </div>
 
@@ -171,9 +168,9 @@ function Section({
 }) {
   return (
     <section className="mb-10">
-      <h2 className="text-xl font-semibold text-white mb-1">{title}</h2>
+      <h2 className={SECTION_HEADING}>{title}</h2>
       {subtitle ? <p className="text-sm text-chino-muted mb-5">{subtitle}</p> : null}
-      <div className="rounded-xl bg-chino-surface border border-chino-border-2 divide-y divide-chino-border-2">
+      <div className="bg-chino-surface border border-chino-border-2 divide-y divide-chino-border-2">
         {children}
       </div>
     </section>

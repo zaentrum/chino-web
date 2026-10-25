@@ -115,13 +115,14 @@ export function BugReportDialog({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto rounded-xl bg-chino-surface border border-white/10 shadow-2xl"
+        // Square, as every frame in the design system.
+        className="w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto bg-chino-surface border border-white/10 shadow-2xl"
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           {/* The dialog's title and its buttons: chrome, in the mono face,
               lowercase. */}
           <h2 className="font-mono text-lg font-medium text-white">{BUG_REPORT.title}</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-white/10 text-chino-text" title={BUG_REPORT.close} aria-label={BUG_REPORT.close}>
+          <button onClick={onClose} className="p-1 hover:bg-white/10 text-chino-text" title={BUG_REPORT.close} aria-label={BUG_REPORT.close}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -145,7 +146,7 @@ export function BugReportDialog({
             <div className="flex justify-end">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
               >
                 {BUG_REPORT.close}
               </button>
@@ -164,7 +165,7 @@ export function BugReportDialog({
                 rows={5}
                 autoFocus
                 placeholder="What were you doing, what did you expect, what happened instead?"
-                className="w-full bg-chino-bg border border-chino-border rounded-md px-3 py-2 text-sm text-chino-text placeholder:text-chino-muted/70 focus:outline-none focus:border-chino-accent resize-y"
+                className="w-full bg-chino-bg border border-chino-border px-3 py-2 text-sm text-chino-text placeholder:text-chino-muted/70 focus:outline-none focus:border-chino-accent resize-y"
               />
             </div>
 
@@ -196,7 +197,7 @@ export function BugReportDialog({
                 {includeShot && shotUrl ? (
                   <button
                     onClick={() => setPhase('capturing')}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-xs text-chino-text"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/10 hover:bg-white/20 font-mono text-xs text-chino-text"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     {BUG_REPORT.retake}
@@ -207,7 +208,7 @@ export function BugReportDialog({
                 <img
                   src={shotUrl}
                   alt="Screenshot preview"
-                  className="mt-2 max-h-40 rounded-lg border border-chino-border"
+                  className="mt-2 max-h-40 border border-chino-border"
                 />
               ) : includeShot && captured && !shot ? (
                 <p className="mt-2 text-xs text-chino-muted">
@@ -217,7 +218,7 @@ export function BugReportDialog({
             </div>
 
             {error ? (
-              <p className="text-sm text-chino-red bg-chino-red/10 border border-chino-red/30 rounded-lg px-3 py-2">
+              <p className="text-sm text-chino-red bg-chino-red/10 border border-chino-red/30 px-3 py-2">
                 {error}
               </p>
             ) : null}
@@ -225,14 +226,14 @@ export function BugReportDialog({
             <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
+                className="px-4 py-2 bg-white/10 hover:bg-white/20 font-mono text-sm text-chino-text"
               >
                 {BUG_REPORT.cancel}
               </button>
               <button
                 onClick={submit}
                 disabled={phase === 'submitting'}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 font-mono text-sm text-chino-bg font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-chino-accent hover:bg-chino-accent/80 disabled:opacity-60 font-mono text-sm text-chino-bg font-medium"
               >
                 {phase === 'submitting' ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {BUG_REPORT.send}

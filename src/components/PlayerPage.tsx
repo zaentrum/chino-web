@@ -23,6 +23,7 @@ import {
   speedName,
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
+import { START_PLAYBACK, START_PLAYBACK_BUTTON } from '../lib/chromeWords';
 import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -3963,6 +3964,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </div>
       )}
 
+      {/* The browser wouldn't start the title by itself: "play", the one
+          emphasized action, solid, over the picture undimmed - its whole
+          area takes the press. Never "click", which a touch screen has
+          none of. */}
       {needsClickToPlay && (
         <button
           onClick={() => {
@@ -3970,10 +3975,12 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             userWantsPlayingRef.current = true;
             videoRef.current?.play().catch(() => undefined);
           }}
-          className="absolute inset-0 flex items-center justify-center bg-black/40"
+          aria-label={START_PLAYBACK}
+          className="absolute inset-0 flex items-center justify-center"
         >
-          <span className="px-6 py-3 bg-chino-accent text-chino-bg font-medium shadow-xl">
-            Click to start
+          <span aria-hidden className={START_PLAYBACK_BUTTON}>
+            <Play className="w-4 h-4" />
+            {START_PLAYBACK}
           </span>
         </button>
       )}

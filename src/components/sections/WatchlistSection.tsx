@@ -16,6 +16,7 @@ import { MediaRow } from '../MediaRow';
 import { LoadingState } from '../LoadingState';
 import { CouldntLoad } from '../CouldntLoad';
 import { couldntLoad } from '../../lib/loadFailure';
+import { PAGE_HEADING, WATCHLIST_WORDS } from '../../lib/chromeWords';
 import {
   useWatchlists,
   getWatchlist,
@@ -388,7 +389,7 @@ export function WatchlistSection() {
   if (listsLoading && lists.length === 0) {
     return (
       <div>
-        <h1 className="text-4xl font-bold text-white mb-6">Watchlist</h1>
+        <h1 className={PAGE_HEADING}>{WATCHLIST_WORDS.heading}</h1>
         <LoadingState variant="full" />
       </div>
     );
@@ -399,7 +400,7 @@ export function WatchlistSection() {
   if (listsError && lists.length === 0) {
     return (
       <div>
-        <h1 className="text-4xl font-bold text-white mb-6">Watchlist</h1>
+        <h1 className={PAGE_HEADING}>{WATCHLIST_WORDS.heading}</h1>
         <CouldntLoad title={couldntLoad('your watchlists')} error={listsError} onRetry={() => void reload()} />
       </div>
     );
@@ -418,7 +419,7 @@ export function WatchlistSection() {
 
   return (
     <div>
-      <h1 className="text-4xl font-bold text-white mb-6">Watchlist</h1>
+      <h1 className={PAGE_HEADING}>{WATCHLIST_WORDS.heading}</h1>
 
       {/* One shelf per list — default first, then by createdAt (the
           server's GET /me/watchlists order). */}
@@ -426,7 +427,7 @@ export function WatchlistSection() {
         <WatchlistShelf key={list.id} list={list} onOpen={() => setOpenListId(list.id)} />
       ))}
 
-      {/* Trailing "+ New list" affordance. */}
+      {/* Trailing "+ new list" affordance, in the mono face. */}
       <div className="flex items-center gap-2 mb-8">
         {creating ? (
           <>
@@ -450,7 +451,8 @@ export function WatchlistSection() {
               onClick={() => void submitCreate()}
               disabled={busy}
               className="p-1.5 bg-chino-accent hover:bg-chino-accent/80 text-chino-bg disabled:opacity-50"
-              title="Create list"
+              title={WATCHLIST_WORDS.createList}
+              aria-label={WATCHLIST_WORDS.createList}
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             </button>
@@ -461,7 +463,8 @@ export function WatchlistSection() {
                 setFormErr(null);
               }}
               className="p-1.5 bg-white/10 hover:bg-white/20 text-white"
-              title="Cancel"
+              title={WATCHLIST_WORDS.cancel}
+              aria-label={WATCHLIST_WORDS.cancel}
             >
               <X className="w-4 h-4" />
             </button>
@@ -472,10 +475,10 @@ export function WatchlistSection() {
               setCreating(true);
               setFormErr(null);
             }}
-            className="px-4 py-1.5 text-sm border border-dashed border-chino-border text-chino-accent hover:bg-chino-surface flex items-center gap-1.5"
+            className="px-4 py-1.5 font-mono text-sm border border-dashed border-chino-border text-chino-accent hover:bg-chino-surface flex items-center gap-1.5"
           >
-            <Plus className="w-4 h-4" />
-            New list
+            <Plus className="w-4 h-4" aria-hidden />
+            {WATCHLIST_WORDS.newList}
           </button>
         )}
       </div>
