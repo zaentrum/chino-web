@@ -71,6 +71,24 @@ async function mintStreamToken(bearer: string): Promise<string | null> {
   return inflight;
 }
 
+// Every mounted hook, for a token minted in place of one the server
+// refused (renewStreamToken).
+const renewed = new Set<(token: string) => void>();
+
+/**
+ * Mints a stream token in place of the cached one, which the server
+ * refused (a 401 on a stream: its signing key changed, or this device's
+ * clock runs behind the server's, so the cache's own expiry never came),
+ * and hands it to every mounted hook. The new token, or null when none
+ * could be minted.
+ */
+export async function renewStreamToken(bearer: string): Promise<string | null> {
+  forgetStreamToken();
+  const token = await mintStreamToken(bearer);
+  if (token) renewed.forEach((give) => give(token));
+  return token;
+}
+
 /**
  * Returns the current stream token, minting one on first call (and
  * after expiry). Returns null while loading or unauthenticated; the
@@ -80,6 +98,14 @@ async function mintStreamToken(bearer: string): Promise<string | null> {
 export function useStreamToken(): string | null {
   const auth = useAuth();
   const [token, setToken] = useState<string | null>(() => readCache()?.token ?? null);
+
+  useEffect(() => {
+    const give = (t: string) => setToken(t);
+    renewed.add(give);
+    return () => {
+      renewed.delete(give);
+    };
+  }, []);
 
   useEffect(() => {
     if (token) return;

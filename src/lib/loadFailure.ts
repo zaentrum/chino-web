@@ -156,10 +156,13 @@ export function returnPath(state: unknown): string | null {
 /**
  * What the player says when every rung of a stream failed, by the status of
  * the last request that did (hls.js gives 0 for no answer): the reason as a
- * page says it - "Can't reach the server." only when nothing answered.
+ * page says it - "Can't reach the server." only when nothing answered. A
+ * 401 the player already minted a new stream token for is the sign-in the
+ * server refused, which no app update helps.
  */
 export function streamFailureReason(status: number | null | undefined): string {
   const answered = typeof status === 'number' && status > 0 ? status : null;
   const kind = failureCase(answered, 'list');
+  if (kind === 'signed-out') return failureReason('sign-in-refused');
   return failureReason(kind) || failureReason('refused');
 }

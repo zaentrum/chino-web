@@ -104,5 +104,8 @@ test("the player's give-up after every rung failed says the cause the same way",
   assert.equal(streamFailureReason(429), 'The server is busy.');
   assert.equal(streamFailureReason(404), "The server didn't accept the request. Check for an app update.");
   assert.equal(streamFailureReason(403), "The server didn't accept the request. Check for an app update.");
-  for (const s of [0, 403, 404, 429, 500]) assert.doesNotMatch(streamFailureReason(s), /please|unreachable|your connection/i, String(s));
+  // A 401, after the player minted a new stream token: the sign-in the
+  // server refused - never an app update.
+  assert.equal(streamFailureReason(401), "The server didn't accept your sign-in.");
+  for (const s of [0, 401, 403, 404, 429, 500]) assert.doesNotMatch(streamFailureReason(s), /please|unreachable|your connection/i, String(s));
 });

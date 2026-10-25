@@ -20,7 +20,7 @@ import {
   speedName,
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
-import { useStreamToken } from '../hooks/useStreamToken';
+import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
@@ -781,6 +781,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // Displayed playhead lives below, with the segments effect block.
 
   const token = auth.user?.access_token;
+  // The bearer for a stream token minted again (the source's error handler
+  // lives for the source, not the render).
+  const bearerRef = useRef(token);
+  bearerRef.current = token;
+  // A stream token minted again since a fragment last loaded: once, then a
+  // 401 goes the usual way to the give-up.
+  const streamRenewedRef = useRef(false);
 
   // Shared stream token — minted once per session via
   // /me/stream-token, cached in sessionStorage (see useStreamToken).
@@ -1062,7 +1069,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     // fatal errors come more than 10 s apart and the count never got
     // past one: a stream that could not load retried forever.)
     let networkFatals = 0;
-    hls.on(Hls.Events.FRAG_LOADED, () => { networkFatals = 0; });
+    hls.on(Hls.Events.FRAG_LOADED, () => {
+      networkFatals = 0;
+      streamRenewedRef.current = false;
+    });
     hls.on(Hls.Events.ERROR, (_, data) => {
       // Log every error (fatal and non-fatal) so we can see what hls.js
       // is silently retrying. The verbose channel is rate-limited by
@@ -1075,9 +1085,30 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         status: (data.response as { code?: number } | undefined)?.code ?? null,
         url: (data.frag as { url?: string } | undefined)?.url || (data as { url?: string }).url || null,
       };
+      const status = lastStreamErrorRef.current.status;
+      // A stream token the server refused (401 - its signing key changed,
+      // or this device's clock runs behind): minted again once, and the
+      // source rebuilt with it where it was, before anything steps down or
+      // gives up. No new one: the player gives up, saying the server
+      // didn't accept the sign-in - never to check for an app update.
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && status === 401 && !streamRenewedRef.current && bearerRef.current) {
+        streamRenewedRef.current = true;
+        leaveSource(v, keepPosition, () => hls.destroy());
+        reportEvent('stream_token_renew', { details: data.details });
+        void renewStreamToken(bearerRef.current).then((fresh) => {
+          if (fresh) return;
+          giveUp(
+            'Playback failed',
+            streamFailureReason(401),
+            ['stream token refused (401), and none minted again', `details: ${data.details}`, `item: ${itemId}`].join('\n'),
+            String(data.type),
+            String(data.details),
+          );
+        });
+        return;
+      }
       // A master playlist that is not there: no such title. Nothing to
       // retry, nothing to report.
-      const status = lastStreamErrorRef.current.status;
       if (data.details === 'manifestLoadError' && (status === 400 || isNotFoundStatus(status))) {
         hls.destroy();
         markNotFound();
