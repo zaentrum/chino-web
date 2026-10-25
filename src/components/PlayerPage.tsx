@@ -8,6 +8,7 @@ import { PgsRenderer } from 'libpgs';
 // glue. Keeps libpgs's worker out of the main bundle.
 import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
+import { MENU_HEADER, MENU_HEADERS, PLAYBACK_RATES, speedName } from '../lib/playerMenus';
 import { useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -108,10 +109,6 @@ interface Subtitle {
 const VIDEO_CLASS = 'chino-player';
 const CUE_CSS = cueCss(VIDEO_CLASS);
 
-// A header in the player's menus - "subtitles", "audio", "quality",
-// "speed", and "timing" inside the subtitles menu: lowercase, like the
-// menus' items, in the mono face (docs/chino, playback: the player's menus).
-const MENU_HEADER = 'font-mono text-xs tracking-wide text-chino-muted';
 
 /**
  * Whether the subtitle's track stays "showing" while the player draws it:
@@ -701,7 +698,6 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // stream pipeline (no re-fetch, no quality drop, no transcode work).
   // 1 = normal. preservesPitch defaults true in Chromium 100+, which
   // is what we want — sped-up voice stays intelligible.
-  const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
   const [playbackRate, setPlaybackRate] = useState(1);
   // (legacy speedMenuOpen/setSpeedMenuOpen removed — driven by `openMenu` above.)
   // Push the current rate onto the live <video> whenever the user
@@ -4440,7 +4436,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                   role="menu"
                   aria-label="audio"
                 >
-                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>audio</div>
+                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.audio}</div>
                   {audioMenu.map((t) => (
                     <MenuChoice key={t.index} picked={streamAudioIdx === t.index} onPick={() => switchAudio(t.index)}>
                       {t.label}
@@ -4473,7 +4469,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 role="menu"
                 aria-label="subtitles"
               >
-                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>subtitles</div>
+                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.subtitles}</div>
                 {/* "off", the languages that matter here, then "more
                     languages" with the rest (subMenu). One subtitle at a
                     time: a pick replaces the one on. Scrolls where it is
@@ -4517,7 +4513,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     re-fetching the VTT. Disabled when no track is
                     active. */}
                 <div className="border-t border-white/10 mt-1 px-4 py-2">
-                  <div className={`mb-1 ${MENU_HEADER}`}>timing</div>
+                  <div className={`mb-1 ${MENU_HEADER}`}>{MENU_HEADERS.timing}</div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setSubOffsetSec((o) => Math.max(-10, +(o - 0.25).toFixed(2)))}
@@ -4541,7 +4537,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                     <button
                       onClick={() => setSubOffsetSec(0)}
                       disabled={!activeSub || activeSub.picture || subOffsetSec === 0}
-                      className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-xs"
+                      className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 disabled:opacity-40 text-xs font-mono"
                       title="Back to the subtitle's own timing"
                     >
                       reset
@@ -4574,7 +4570,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                   role="menu"
                   aria-label="quality"
                 >
-                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>quality</div>
+                  <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.quality}</div>
                   {packagedMenu
                     ? packagedMenu.map((entry) => (
                         <MenuChoice
@@ -4610,7 +4606,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
             <button
               onClick={() => toggleMenu('speed')}
               className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
-              title={`Playback speed (${playbackRate}x)`}
+              title={`Playback speed (${speedName(playbackRate)})`}
               aria-haspopup="menu"
               aria-expanded={speedMenuOpen}
             >
@@ -4622,7 +4618,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                 role="menu"
                 aria-label="speed"
               >
-                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>speed</div>
+                <div className={`px-4 pt-2 pb-1 ${MENU_HEADER}`}>{MENU_HEADERS.speed}</div>
                 {PLAYBACK_RATES.map((rate) => (
                   <MenuChoice
                     key={rate}
@@ -4633,7 +4629,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
                       reportEvent('playback_rate_change', { rate });
                     }}
                   >
-                    {rate === 1 ? 'Normal (1x)' : `${rate}x`}
+                    {speedName(rate)}
                   </MenuChoice>
                 ))}
               </div>
@@ -4746,14 +4742,15 @@ export function ExtraPlayerPage({ itemId, extraId }: { itemId: string; extraId: 
  *  picked one in the accent blue with a small filled square before it, the
  *  others with the square's place empty; no checkboxes (docs/chino,
  *  playback: the player's menus). The square is 8 px, with the design
- *  system's square corners, as the hero's markers are. */
+ *  system's square corners, as the hero's markers are. A row is a name,
+ *  in the body face; the menu's header is in the mono one (MENU_HEADER). */
 function MenuChoice({ picked, onPick, children }: { picked: boolean; onPick: () => void; children: ReactNode }) {
   return (
     <button
       role="menuitemradio"
       aria-checked={picked}
       onClick={onPick}
-      className={`flex w-full items-start gap-2 text-left px-4 py-2 hover:bg-white/10 ${picked ? 'text-chino-accent' : ''}`}
+      className={`flex w-full items-start gap-2 text-left px-4 py-2 font-sans hover:bg-white/10 ${picked ? 'text-chino-accent' : ''}`}
     >
       <span aria-hidden className="w-4 h-5 shrink-0 inline-flex items-center justify-center">
         {picked ? <span className="w-2 h-2 bg-current" /> : null}
