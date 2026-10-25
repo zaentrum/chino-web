@@ -369,6 +369,15 @@ test('a sidecar the server made says " · AI" after the language', () => {
     'English · AI',
     'Chinese (Simplified) · AI',
   ]);
+  // In a language whose name has the letters inside it, too: "AI" is no
+  // word of "Thai" or "Ukrainian".
+  assert.deepEqual(subtitleLabels([{ lang: 'tha', title: 'AI' }, { lang: 'ukr', title: 'AI' }, { lang: 'hat', title: 'AI' }]), [
+    'Thai · AI',
+    'Ukrainian · AI',
+    'Haitian Creole · AI',
+  ]);
+  // A word of the name still says it: "English" on a British track.
+  assert.equal(subtitleLabel({ lang: 'en-GB', title: 'English' }), 'English (United Kingdom)');
 });
 
 test('the same label twice reads the same, never numbered; the server\'s number goes', () => {

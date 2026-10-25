@@ -655,6 +655,18 @@ export function subtitleLanguage(track: { lang?: string; title?: string }): stri
   return languageTag(readTitle(titleWithoutKind((track.title ?? '').trim()), track.lang).code);
 }
 
+/** Whether `words` stand in `text` as words of their own, not letters
+ *  inside a word: "english" in "english (united kingdom)", not "ai" in
+ *  "thai". */
+function hasWords(text: string, words: string): boolean {
+  if (!words) return false;
+  const letter = /[\p{L}\p{N}]/u;
+  for (let i = text.indexOf(words); i >= 0; i = text.indexOf(words, i + 1)) {
+    if (!letter.test(text[i - 1] ?? '') && !letter.test(text[i + words.length] ?? '')) return true;
+  }
+  return false;
+}
+
 /**
  * One subtitle's label: the language's name, its script or region in it
  * ("German", "Chinese (Simplified)", "No dialogue" for zxx) - a script or a
@@ -681,8 +693,9 @@ export function subtitleLabel(track: SubtitleLabelInput): string {
   if (!title || lower === name.toLowerCase() || namesLanguage(title, lang)) label = name;
   else if (!hasLanguage(lang)) label = title;
   else if (lower.includes(name.toLowerCase())) label = title;
-  // "English" on a British English track: the name says it already.
-  else if (name.toLowerCase().includes(lower)) label = name;
+  // "English" on a British English track: the name says it already - as
+  // words of it, not letters inside one ("AI" on a Thai track is no "Thai").
+  else if (hasWords(name.toLowerCase(), lower)) label = name;
   else label = `${name} · ${title}`;
   const kinds = [forced ? FORCED_SUBTITLE_KIND : '', sdh ? SDH_SUBTITLE_KIND : ''].filter(Boolean);
   return [label, ...kinds].join(' · ');
