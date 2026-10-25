@@ -3944,16 +3944,6 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </div>
       )}
 
-      {/* The toasts at the top - this one, reconnecting, Tap to unmute -
-          5rem under the status bar's inset (--chino-safe-top), under the
-          top bar, which pads for it. Each on a solid surface, never a
-          see-through one over the picture (OVER_PICTURE). */}
-      {qualityNotice && (
-        <div role="status" className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm ${OVER_PICTURE}`}>
-          {qualityNotice}
-        </div>
-      )}
-
       {needsClickToPlay && (
         <button
           onClick={() => {
@@ -3969,21 +3959,36 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </button>
       )}
 
-      {reconnecting && (
-        <div className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm ${OVER_PICTURE}`}>
-          Stream paused — reconnecting…
+      {/* The toasts at the top - the quality notice, reconnecting, Tap to
+          unmute - 5rem under the status bar's inset (--chino-safe-top),
+          under the top bar, which pads for it. One column, so two at once
+          stack and each is read whole: a stall the watcher steps down from
+          says both what it did and that it is reconnecting. Each on a
+          solid surface, never a see-through one over the picture
+          (OVER_PICTURE). */}
+      {qualityNotice || reconnecting || (autoplayMuted && !needsClickToPlay) ? (
+        <div className="absolute inset-x-4 top-[calc(5rem+var(--chino-safe-top))] flex flex-col items-center gap-2 pointer-events-none">
+          {qualityNotice && (
+            <div role="status" className={`max-w-full px-4 py-2 text-sm text-center ${OVER_PICTURE}`}>
+              {qualityNotice}
+            </div>
+          )}
+          {reconnecting && (
+            <div className={`max-w-full px-4 py-2 text-sm text-center ${OVER_PICTURE}`}>
+              Stream paused — reconnecting…
+            </div>
+          )}
+          {autoplayMuted && !needsClickToPlay && (
+            <button
+              onClick={startUnmuted}
+              className={`pointer-events-auto max-w-full px-4 py-2 text-sm flex items-center gap-2 transition-colors ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
+            >
+              <VolumeX className="w-4 h-4" />
+              <span>Tap to unmute</span>
+            </button>
+          )}
         </div>
-      )}
-
-      {autoplayMuted && !needsClickToPlay && (
-        <button
-          onClick={startUnmuted}
-          className={`absolute top-[calc(5rem+var(--chino-safe-top))] left-1/2 -translate-x-1/2 px-4 py-2 text-sm flex items-center gap-2 transition-colors ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
-        >
-          <VolumeX className="w-4 h-4" />
-          <span>Tap to unmute</span>
-        </button>
-      )}
+      ) : null}
 
       {/* Top chrome */}
       <div
