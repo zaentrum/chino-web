@@ -129,12 +129,16 @@ export function CouldntLoad({
   error,
   onRetry,
   where = 'list',
+  quiet = false,
 }: {
   /** The screen's own words: couldntLoad('the movies'). */
   title: string;
   error: unknown;
   onRetry?: () => void;
   where?: FailureWhere;
+  /** "try again" quiet, for a part of a page whose emphasized action is
+   *  another (a title's play): one emphasized action per view. */
+  quiet?: boolean;
 }) {
   const status = failureStatus(error);
   const signIn = useSignInAgain(failureCase(status, where) === 'signed-out', onRetry);
@@ -149,7 +153,9 @@ export function CouldntLoad({
         <button
           type="button"
           onClick={onRetry}
-          className="mt-1 h-12 px-5 inline-flex items-center gap-2 bg-chino-accent hover:brightness-110 text-chino-bg font-mono font-medium text-sm"
+          className={`mt-1 h-12 px-5 inline-flex items-center gap-2 font-mono font-medium text-sm ${
+            quiet ? 'bg-chino-surface-2 hover:bg-chino-border-2 text-chino-text' : 'bg-chino-accent hover:brightness-110 text-chino-bg'
+          }`}
         >
           <RotateCw className="w-4 h-4" aria-hidden />
           {TRY_AGAIN}

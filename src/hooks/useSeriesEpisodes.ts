@@ -3,6 +3,7 @@ import { useAuth } from 'react-oidc-context';
 import type { KatalogItem } from './useItems';
 import { useCatalogGen } from './useCatalogEvents';
 import { useStreamToken } from './useStreamToken';
+import { HttpError } from '../lib/loadFailure';
 
 export interface EpisodeItem extends KatalogItem {
   season_number?: number;
@@ -38,6 +39,12 @@ export function useSeriesEpisodes(seriesId: string | undefined) {
   const streamToken = useStreamToken();
   const [raw, setRaw] = useState<Season[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the episodes couldn't load (an HttpError with its status, or the
+  // network's), for the page to say so where they go - never a series
+  // with no episodes (lib/loadFailure.ts). A refetch that fails keeps the
+  // episodes shown as they were.
+  const [error, setError] = useState<unknown>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!seriesId || auth.isLoading || !auth.isAuthenticated) return;
@@ -47,15 +54,31 @@ export function useSeriesEpisodes(seriesId: string | undefined) {
       signal: ctrl.signal,
       headers: { Authorization: `Bearer ${auth.user?.access_token ?? ''}` },
     })
-      .then((r) => (r.ok ? r.json() : { seasons: [] }))
-      .then((j) => setRaw(j.seasons ?? []))
-      .catch(() => setRaw([]))
-      .finally(() => setLoading(false));
+      .then((r) => {
+        if (!r.ok) throw new HttpError(r.status);
+        return r.json() as Promise<{ seasons?: Season[] }>;
+      })
+      .then((j) => {
+        setRaw(j.seasons ?? []);
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (ctrl.signal.aborted || (e as Error)?.name === 'AbortError') return;
+        setError(e);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
     // The bearer is read when the effect runs, not tracked: a silent
     // renewal must not refetch the episodes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesId, auth.isAuthenticated, auth.isLoading, gen]);
+  }, [seriesId, auth.isAuthenticated, auth.isLoading, gen, attempt]);
+
+  const retry = () => {
+    setLoading(true);
+    setAttempt((a) => a + 1);
+  };
 
   const seasons = useMemo<Season[]>(() => {
     const enc = streamToken ? encodeURIComponent(streamToken) : '';
@@ -69,5 +92,7 @@ export function useSeriesEpisodes(seriesId: string | undefined) {
     }));
   }, [raw, streamToken]);
 
-  return { seasons, loading };
+  // Failed with nothing older to show: what the page says instead.
+  const failed = error !== null && raw.length === 0 ? error : null;
+  return { seasons, loading, error: failed, retry };
 }

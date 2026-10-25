@@ -36,7 +36,8 @@ import {
 } from '../lib/titleActions';
 import { MediaRow } from './MediaRow';
 import { CouldntLoadPage, StatusPage } from './StatusPage';
-import { removedTitle } from '../lib/loadFailure';
+import { CouldntLoad } from './CouldntLoad';
+import { couldntLoad, removedTitle } from '../lib/loadFailure';
 
 interface DetailPageProps {
   itemId: string;
@@ -61,7 +62,7 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // Episodes are fetched only for type=series — the hook short-circuits
   // when the id is undefined.
   const isSeries = data?.type === 'series';
-  const { seasons, loading: seasonsLoading } = useSeriesEpisodes(isSeries ? itemId : undefined);
+  const { seasons, loading: seasonsLoading, error: seasonsError, retry: retryEpisodes } = useSeriesEpisodes(isSeries ? itemId : undefined);
   // "More like this" — up to 12 recommendations scored on shared
   // genre + cast (tracker #115). Hook returns [] when nothing
   // scored above zero; the row below short-circuits in that case.
@@ -101,8 +102,9 @@ export function DetailPage({ itemId }: DetailPageProps) {
   // What Play on a series plays - a series has no stream of its own - as
   // the TV app has it (lib/seriesPlay.ts): the episode the viewer is in,
   // resumed, or the next one, else S01E01. null while Continue watching or
-  // the episodes are still coming, and for a series with no episodes.
-  const seriesKnown = isSeries && cwItems !== null && !seasonsLoading;
+  // the episodes are still coming, and for a series with no episodes. The
+  // episodes that couldn't load are not known: Play looks it up itself.
+  const seriesKnown = isSeries && cwItems !== null && !seasonsLoading && !seasonsError;
   const seriesPlay = useMemo(
     () => (seriesKnown ? seriesPlayTarget(itemId, cwItems, seasons) : null),
     [seriesKnown, itemId, cwItems, seasons],
@@ -437,7 +439,13 @@ export function DetailPage({ itemId }: DetailPageProps) {
         </div>
 
         {isSeries ? (
-          <EpisodesList seasons={seasons} focusEpisodeId={focusEpisodeId} progressById={episodeProgress} />
+          seasonsError && !seasonsLoading ? (
+            // Where the episodes go: they couldn't load, and why - not a
+            // series with nothing in it.
+            <CouldntLoad title={couldntLoad('the episodes')} error={seasonsError} onRetry={retryEpisodes} quiet />
+          ) : (
+            <EpisodesList seasons={seasons} focusEpisodeId={focusEpisodeId} progressById={episodeProgress} />
+          )
         ) : null}
 
         {/* "More like this" — only renders when the backend scored at
