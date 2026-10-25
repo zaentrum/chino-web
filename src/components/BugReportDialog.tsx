@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Camera, ExternalLink, Loader2, X } from 'lucide-react';
 import { captureScreenshot } from '../lib/screenshot';
 import { submitBugReport, type FeedbackResult } from '../lib/feedback';
-import { BUG_REPORT, feedbackFailure, feedbackFiled } from '../lib/feedbackStatus';
+import { BUG_REPORT, feedbackFailure, feedbackFiled, reportDescription } from '../lib/feedbackStatus';
 import { baseContext } from '../lib/errorReporter';
 
 type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
@@ -10,6 +10,12 @@ type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
 /**
  * Manual bug-report dialog. Opened from the Settings page and the
  * player's error overlay.
+ *
+ * The box the viewer types in opens empty: it is for their words alone.
+ * What the app knows of a failure (the player's technical signature) is a
+ * part of its own under "details", shown as it is, not editable, and sent
+ * with the report after the viewer's words (reportDescription). "send
+ * report" needs the viewer's words.
  *
  * A screenshot is the viewer's to give: nothing is captured until they
  * tick "Attach a screenshot of the page", and only a ticked box sends
@@ -23,18 +29,20 @@ type Phase = 'capturing' | 'editing' | 'submitting' | 'done';
  * html2canvas clones a dialog-free DOM both times.
  */
 export function BugReportDialog({
-  initialDescription = '',
+  details,
   extraContext = {},
   onClose,
 }: {
-  /** Pre-filled description (e.g. the player's technical error string). */
-  initialDescription?: string;
+  /** What the app knows of the failure (the player's technical error
+   *  string): shown under "details", not editable, and sent with the
+   *  report - never put in the box the viewer types in. */
+  details?: string;
   /** Merged on top of the shared baseContext (route/version/UA/viewport). */
   extraContext?: Record<string, string>;
   onClose: () => void;
 }) {
   const [phase, setPhase] = useState<Phase>('editing');
-  const [description, setDescription] = useState(initialDescription);
+  const [description, setDescription] = useState('');
   const [shot, setShot] = useState<Blob | null>(null);
   const [shotUrl, setShotUrl] = useState<string | null>(null);
   const [includeShot, setIncludeShot] = useState(false);
@@ -82,7 +90,7 @@ export function BugReportDialog({
       const r = await submitBugReport({
         source: 'web',
         kind: 'manual',
-        description: description.trim(),
+        description: reportDescription(description, details),
         context: { ...baseContext(), ...extraContext },
         screenshot: includeShot && shot ? shot : undefined,
       });
@@ -159,6 +167,16 @@ export function BugReportDialog({
                 className="w-full bg-chino-bg border border-chino-border rounded-md px-3 py-2 text-sm text-chino-text placeholder:text-chino-muted/70 focus:outline-none focus:border-chino-accent resize-y"
               />
             </div>
+
+            {details ? (
+              <details className="text-xs text-chino-muted">
+                <summary className="font-mono cursor-pointer hover:text-chino-text">{BUG_REPORT.details}</summary>
+                <p className="mt-2">{BUG_REPORT.detailsSent}</p>
+                <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words bg-chino-bg border border-chino-border px-3 py-2 font-mono text-chino-text">
+                  {details}
+                </pre>
+              </details>
+            ) : null}
 
             <div>
               <div className="flex items-center justify-between gap-3">

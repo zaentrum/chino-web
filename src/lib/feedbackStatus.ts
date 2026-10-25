@@ -31,7 +31,28 @@ export const BUG_REPORT = {
   /** The form sent without a description. */
   describe: 'Describe what happened to send the report.',
   thanks: 'Thanks for the report.',
+  /** The disclosure with what the app knows of the failure, which the
+   *  viewer reads but doesn't edit. */
+  details: 'details',
+  /** Under it: where those details go. */
+  detailsSent: 'Sent with the report.',
 } as const;
+
+/**
+ * The description a report is filed with: the viewer's own words, then the
+ * details the app adds - what failed, the codes and ids - in a part of
+ * their own, fenced so they keep their lines. The viewer edits only their
+ * words; the details are never in the box they type in.
+ */
+export function reportDescription(words: string, details?: string | null): string {
+  const text = words.trim();
+  const extra = (details ?? '').trim();
+  if (!extra) return text;
+  // A fence longer than any run of backticks in the details.
+  const longest = Math.max(0, ...(extra.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return `${text}\n\n**Details**\n\n${fence}\n${extra}\n${fence}`;
+}
 
 /** What the dialog says once a report is filed, before the issue's number
  *  (its link): sent to the people who run this server (docs/chino, words),

@@ -3639,7 +3639,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   const bugDialog = bugDialogOpen ? (
     <BugReportDialog
-      initialDescription={`Playback failed while watching this item.\n\n--- technical details ---\n${fatalError?.tech ?? '(none captured)'}`}
+      details={fatalError?.tech || undefined}
       extraContext={{
         itemId,
         ...(extra ? { extraId: extra.ref.id } : {}),
@@ -3947,8 +3947,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {/* Terminal-error overlay — the player gave up (startup deadline,
           circuit breakers). Try again rebuilds the source where it was;
           Back leaves the player (the overlay covers its top bar); Report
-          a bug opens the manual dialog pre-filled with the technical
-          signature, for the viewer to add what they were doing. */}
+          a bug opens the manual dialog empty, for the viewer's words, the
+          technical signature under its "details", sent with them. */}
       {fatalError && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-chino-bg">
           <PlaybackFailure
