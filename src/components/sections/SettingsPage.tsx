@@ -63,7 +63,7 @@ export function SettingsPage() {
 
       <Section
         title="Binge watching"
-        subtitle="When you watch episodes back-to-back, Chino can auto-skip the recurring parts to keep momentum. A small countdown gives you the chance to cancel before it fires."
+        subtitle="When you watch episodes back-to-back, the player can skip the parts that repeat. A countdown shows first, so you can cancel."
       >
         <Toggle
           label="Auto-skip intros"
@@ -79,7 +79,7 @@ export function SettingsPage() {
         />
         <NumberField
           label="Countdown before auto-skip"
-          help="Seconds between the countdown appearing and the player actually skipping. Shorter feels snappier; longer gives you more time to cancel."
+          help="Seconds between the countdown appearing and the player skipping."
           value={binge.countdownSec}
           min={1}
           max={15}
@@ -126,7 +126,7 @@ export function SettingsPage() {
       {feedbackAvailable() && (
       <Section
         title="Feedback"
-        subtitle="Found something broken or confusing? File a bug report — and attach a screenshot of the page if you want us to see what you saw."
+        subtitle="Reports go to the people who run this server, with a screenshot of the page if you attach one."
       >
         <div className="flex items-start justify-between gap-4 p-4">
           <span className="flex-1">

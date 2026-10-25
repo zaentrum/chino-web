@@ -7,7 +7,6 @@ import {
   OVER_PICTURE,
   OVER_PICTURE_HOVER,
   PLAYBACK_RATES,
-  WAITING_DETAIL,
   WAITING_LINE,
   WAITING_PANEL,
   speedName,
@@ -34,7 +33,7 @@ test('what sits over the picture sits on a solid surface', () => {
 
 test('the spinner and its line while the player waits: on the solid surface, in token colours - no see-through wash or text', () => {
   assert.ok(WAITING_PANEL.includes(OVER_PICTURE));
-  for (const cls of `${WAITING_PANEL} ${WAITING_LINE} ${WAITING_DETAIL}`.split(/\s+/)) {
+  for (const cls of `${WAITING_PANEL} ${WAITING_LINE}`.split(/\s+/)) {
     if (/^(bg|text)-/.test(cls) && !/^text-(xs|sm|base|lg|center)$/.test(cls)) assert.match(cls, /^(bg|text)-chino-[a-z0-9-]+$/, cls);
   }
 });

@@ -37,9 +37,9 @@ export const OVER_PICTURE_HOVER = 'hover:bg-chino-surface-2';
  *  picture: a panel on the same solid surface, in the middle - never a
  *  see-through wash over the whole picture with the text on it. */
 export const WAITING_PANEL = `${OVER_PICTURE} max-w-sm mx-4 px-5 py-4 flex flex-col items-center gap-3 text-center`;
-/** Its status line, and the detail under it. */
+/** Its status line. The stream's detail (codecs, the pipeline) is the
+ *  playback info's, not the line's. */
 export const WAITING_LINE = 'text-sm text-chino-fg';
-export const WAITING_DETAIL = 'text-xs text-chino-muted';
 
 /** A button over the picture - back, home, every button of the control bar,
  *  a card's quiet one: on the raised surface, never a see-through one,

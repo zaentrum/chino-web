@@ -17,7 +17,6 @@ import {
   PICTURE_BUTTON_ON,
   PICTURE_CARD,
   PLAYBACK_RATES,
-  WAITING_DETAIL,
   WAITING_LINE,
   WAITING_PANEL,
   speedName,
@@ -100,6 +99,7 @@ import { useItem, type ExtraRef, type TrailerRef } from '../hooks/useItem';
 import { BugReportDialog } from './BugReportDialog';
 import { feedbackAvailable } from '../lib/runtimeConfig';
 import { CouldntLoadPage, StatusPage } from './StatusPage';
+import { LOADING_NAME, PLAYER_STATUS, switchingTo } from '../lib/playerStatus';
 
 interface Subtitle {
   id: string;
@@ -297,25 +297,6 @@ function newQoeState(): QoeState {
 // How long a title may take to show its first frame before the player
 // gives up and says so.
 const STARTUP_DEADLINE_MS = 20_000;
-
-// Funny + status-flavoured loading messages. Rotated while the video is
-// buffering / not-yet-ready so the user knows something is happening.
-const LOADING_MESSAGES: string[] = [
-  'Calling the projectionist…',
-  'Threading the film reels…',
-  'Dimming the house lights…',
-  'Buttering the popcorn…',
-  'Polishing the lens…',
-  'Cueing up the opening credits…',
-  'Warming up the decoder…',
-  'Adjusting the focus…',
-  'Sweeping the popcorn aisle…',
-  'Final preparations…',
-  'Almost ready, hold tight…',
-  'Negotiating with the codec gods…',
-  'Convincing HEVC to play nice…',
-  'Buffering more cinema magic…',
-];
 
 // Map of human label → MIME type with codec parameters, used to probe what
 // THIS browser can actually decode. Lets the info popup explain why we're
@@ -605,12 +586,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     setSwitchHistory((h) => [...h, { ts: Date.now(), label, reason, detail }].slice(-16));
   };
 
-  // Cycle through funny messages while we're waiting for bytes.
-  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
-  // One-off label that overrides the cycling LOADING_MESSAGES while the
-  // player is reacting to a user action (seek, quality switch) or the
-  // initial mount. Cleared by the next `playing` event.
-  const [actionLabel, setActionLabel] = useState<string | null>(extra ? 'Preparing the trailer…' : 'Preparing your movie…');
+  // The line under the spinner while the player does something the
+  // spinner alone doesn't say - reconnecting, a switch the viewer picked
+  // (lib/playerStatus.ts); none while a title starts. Cleared by the next
+  // `playing` event.
+  const [actionLabel, setActionLabel] = useState<string | null>(null);
 
   // Terminal playback failure — set when the player gives up: a title
   // that shows no frame within STARTUP_DEADLINE_MS, a stream the hls
@@ -1243,7 +1223,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               // packaged for these caps, the server reads anything but
               // high as a transcode.
               if (!isLadderQuality(streamQualityRef.current)) setStreamQuality('high');
-              setActionLabel('This browser can\'t decode HEVC — switching…');
+              setActionLabel(PLAYER_STATUS.otherFormat);
               reportEvent('circuit_breaker', { kind: 'media_drop_hevc', attempts: mediaRecoverCount, lastDetails: data.details });
             } else if (fallback.kind === 'transcode') {
               // Off the original onto the ladder, as a fragment that can't
@@ -2786,7 +2766,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     setFatalError(null);
     setReportedId(null);
     setBuffering(true);
-    setActionLabel('Trying again…');
+    setActionLabel(PLAYER_STATUS.retrying);
     userWantsPlayingRef.current = true;
     setAttempt((a) => a + 1);
     setReloadKey((k) => k + 1);
@@ -2794,8 +2774,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // Startup deadline: a title that shows no frame within
   // STARTUP_DEADLINE_MS of the page opening (or of Try again) gives up
-  // with a message and Try again, instead of spinning "Preparing your
-  // movie…" forever while its stream fails behind it. Counts only time
+  // with a message and Try again, instead of spinning forever while its
+  // stream fails behind it. Counts only time
   // the page is visible: a tab opened in the background is not stuck.
   useEffect(() => {
     startedRef.current = false;
@@ -2916,7 +2896,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     }
     lastFaultRef.current = { at: now, target };
     setBuffering(true);
-    setActionLabel(reason === 'decode_error' ? 'Skipping bad frame…' : 'Reconnecting…');
+    setActionLabel(reason === 'decode_error' ? PLAYER_STATUS.skipping : PLAYER_STATUS.reconnecting);
     reportEvent('fault_recover', { reason, wall, target, ...detail });
     // eslint-disable-next-line no-console
     console.log(`[player] fault_recover: ${reason} wall=${wall.toFixed(2)} → t=${target}`);
@@ -3215,28 +3195,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cycle the funny loading message every 2s while we don't have enough
-  // buffered data. Stops cycling once we're playing smoothly.
-  useEffect(() => {
-    if (!buffering && duration > 0) return;
-    const id = window.setInterval(() => {
-      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [buffering, duration]);
-
-  // Cold-prep escalation. The default actionLabel cycles through the
-  // funny LOADING_MESSAGES every 2 s, which is fine for sub-second
-  // startups. When the player has been buffering > 5 s on the
-  // transcode path (HEVC source, no GPU, or NVENC saturated by 4K),
-  // swap the message for an honest "this can take a while — preparing
-  // your movie" so the user knows it's not stuck. Reverts to the
-  // cycling messages once the player reaches canplay.
+  // A start that takes longer than 5 s on a stream the server converts
+  // for this browser as it plays (an HEVC source without a GPU, a busy
+  // encoder) says so, that it isn't stuck: "Converting the video for this
+  // browser…". Cleared once the player plays.
   useEffect(() => {
     if (!buffering || duration > 0) return;
     if (effectiveMode !== 'transcode') return;
     const t = window.setTimeout(() => {
-      setActionLabel('Preparing your movie — first play of an unpackaged title takes a moment…');
+      setActionLabel(PLAYER_STATUS.converting);
     }, 5_000);
     return () => window.clearTimeout(t);
   }, [buffering, duration, effectiveMode]);
@@ -3595,7 +3562,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       setOpenMenu(null);
       return;
     }
-    setActionLabel('Switching audio track…');
+    setActionLabel(PLAYER_STATUS.switchingAudio);
     reportEvent('audio_switch', { from: streamAudioIdx, to: idx });
     streamAudioIdxRef.current = idx;
     selectAudio(idx, hlsRef.current);
@@ -3618,7 +3585,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     setQualityNotice(null);
     const wallTime = videoRef.current?.currentTime ?? 0;
     setBuffering(true);
-    setActionLabel(`Switching to ${label}…`);
+    setActionLabel(switchingTo(label));
     reportEvent('quality_switch', { from: streamQuality, to: q, manual: true });
     // The source this builds: its first rendition is the viewer's pick.
     qoe.manualSource = qoe.source + 1;
@@ -3763,7 +3730,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           // user only ever saw the generic "Reconnecting…" message.
           if (userWantsPlayingRef.current && !e.currentTarget.ended && !e.currentTarget.error) {
             setBuffering(true);
-            setActionLabel('Reconnecting…');
+            setActionLabel(PLAYER_STATUS.reconnecting);
           }
           // Playback quality (lib/qoe.ts): a pause with nothing buffered
           // ahead while the viewer watches is the browser stalling; any
@@ -3966,15 +3933,12 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {buffering && !fatalError && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className={WAITING_PANEL}>
-            <Loader2 className="w-12 h-12 animate-spin text-chino-fg" />
-            <p className={WAITING_LINE}>
-              {actionLabel ?? LOADING_MESSAGES[loadingMsgIdx]}
+            <Loader2 className="w-12 h-12 animate-spin text-chino-fg" aria-hidden />
+            {/* What it is doing, where the spinner alone doesn't say it;
+                else nothing. */}
+            <p role="status" className={actionLabel ? WAITING_LINE : 'sr-only'}>
+              {actionLabel ?? LOADING_NAME}
             </p>
-            {effectiveMode === 'transcode' && info && (
-              <p className={WAITING_DETAIL}>
-                Transcoding {info.video_codec.toUpperCase()} → H.264 · {qualityName}
-              </p>
-            )}
           </div>
         </div>
       )}
