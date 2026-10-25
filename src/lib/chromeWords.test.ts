@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   DETAILS_BODY,
+  DETAILS_BODY_START,
   DETAILS_DISCLOSURE,
+  detailsBody,
   PAGE_HEADING,
   QUIET_BUTTON,
   SECTION_HEADING,
@@ -68,4 +70,21 @@ test('opening "details" never moves the centred block: what it opens takes no ro
   // The disclosure is what it is placed against, in the muted grey.
   assert.ok(DETAILS_DISCLOSURE.split(/\s+/).includes('relative'));
   assert.ok(DETAILS_DISCLOSURE.split(/\s+/).includes('text-chino-muted'));
+  assert.equal(detailsBody('center'), DETAILS_BODY);
+});
+
+test('in a column aligned at the start, "details" opens from its left edge, in the flow - never centred on the summary and cut off', () => {
+  assert.equal(detailsBody('start'), DETAILS_BODY_START);
+  const body = classes(DETAILS_BODY_START);
+  for (const c of ['absolute', 'left-1/2', '-translate-x-1/2', 'w-max', 'text-center']) assert.ok(!body.includes(c), c);
+  assert.ok(body.includes('font-mono') && body.includes('mt-1'));
+  // The search page's failure is such a column: it asks for the start.
+  const search = readFileSync(new URL('../components/SearchPage.tsx', import.meta.url), 'utf8');
+  assert.match(search, /flex flex-col items-start/);
+  assert.match(search, /<FailureDetails [^>]*align="start"/);
+  // The centred screens keep the default, the body centred on its summary.
+  for (const file of ['CouldntLoad.tsx', 'StatusPage.tsx']) {
+    const source = readFileSync(new URL(`../components/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /<FailureDetails [^>]*align="start"/, file);
+  }
 });

@@ -47,7 +47,21 @@ export const START_PLAYBACK_BUTTON =
  *  every surface, at 12 px). */
 export const DETAILS_DISCLOSURE = 'relative text-xs text-chino-muted';
 
-/** What it opens: under its summary, centred on it, taking no room of its
- *  own - so opening it never moves the centred block it is part of. */
+/** What it opens in a centred block: under its summary, centred on it,
+ *  taking no room of its own - so opening it never moves the block. */
 export const DETAILS_BODY =
   'absolute top-full left-1/2 -translate-x-1/2 mt-1 w-max max-w-[min(28rem,calc(100vw-2rem))] font-mono text-center';
+
+/** What it opens in a block aligned at the start (the search page's): under
+ *  its summary, in the flow, from the same left edge - centred on a summary
+ *  as narrow as "details", it would start left of the page and be cut off. */
+export const DETAILS_BODY_START = 'mt-1 font-mono text-left';
+
+/** Where a "details" disclosure sits: in a centred block, or at the start
+ *  of one aligned left. */
+export type DetailsAlign = 'center' | 'start';
+
+/** What a "details" disclosure opens, for the block it sits in. */
+export function detailsBody(align: DetailsAlign): string {
+  return align === 'start' ? DETAILS_BODY_START : DETAILS_BODY;
+}

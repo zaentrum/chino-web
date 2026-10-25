@@ -149,7 +149,9 @@ function SearchFailed({ error, onRetry }: { error: unknown; onRetry: () => void 
           {TRY_AGAIN}
         </button>
       ) : null}
-      <FailureDetails status={failureStatus(error)} />
+      {/* A column aligned at the start: what "details" opens starts at its
+          left edge, never centred on the narrow summary and cut off. */}
+      <FailureDetails status={failureStatus(error)} align="start" />
     </div>
   );
 }

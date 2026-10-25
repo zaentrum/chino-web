@@ -16,7 +16,7 @@ import {
 import { markRenewed, nextSignInStep, readSignInMarks, renewalFailure } from '../lib/signInAgain';
 import { oidcUserManager } from '../auth/oidc';
 import { LoadingState } from './LoadingState';
-import { DETAILS_BODY, DETAILS_DISCLOSURE } from '../lib/chromeWords';
+import { DETAILS_DISCLOSURE, detailsBody, type DetailsAlign } from '../lib/chromeWords';
 
 // What a screen shows in the place of what couldn't load (lib/loadFailure.ts;
 // the design system's empty states, "when it couldn't load: say why"): the
@@ -109,18 +109,28 @@ export function shownCase(kind: FailureCase, signIn: SignInAgain | null): Failur
 }
 
 /** The status under a disclosure named "details" - or, where there is no
- *  status (a sign-in that failed), the error's own words. */
-export function FailureDetails({ status, text }: { status: number | null; text?: string }) {
+ *  status (a sign-in that failed), the error's own words. `align` is the
+ *  block it sits in: centred (the default), or aligned at the start. */
+export function FailureDetails({
+  status,
+  text,
+  align = 'center',
+}: {
+  status: number | null;
+  text?: string;
+  align?: DetailsAlign;
+}) {
   const details = failureDetails(status) ?? (text || null);
   if (!details) return null;
   return (
     // In the muted grey of labels and details: at least 4.5:1 on the
-    // canvas and on every surface (9.0 on surface), at 12 px. What it
-    // opens takes no room of its own: the centred block around it stays
-    // where it was (DETAILS_BODY).
+    // canvas and on every surface (9.0 on surface), at 12 px. In a centred
+    // block what it opens takes no room of its own, so the block stays
+    // where it was; in one aligned at the start it opens in the flow, from
+    // the same left edge (detailsBody).
     <details className={DETAILS_DISCLOSURE}>
       <summary className="font-mono cursor-pointer hover:text-chino-text">details</summary>
-      <p className={DETAILS_BODY}>{details}</p>
+      <p className={detailsBody(align)}>{details}</p>
     </details>
   );
 }
