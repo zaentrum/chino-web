@@ -37,6 +37,11 @@ export const OVER_PICTURE = 'bg-chino-surface border border-chino-border-2 text-
 /** Its hover, where it is a button. */
 export const OVER_PICTURE_HOVER = 'hover:bg-chino-surface-2';
 
+/** "unmute", where the browser started a title without its sound - the
+ *  player's chip and a Zap card's alike: on the same solid surface, its
+ *  icon and then its word (chromeWords: UNMUTE, in UNMUTE_LOOK). */
+export const UNMUTE_CHIP = `px-4 py-2 flex items-center gap-2 transition-colors ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`;
+
 /** The player's spinner and its status line while it waits for the
  *  picture: a panel on the same solid surface, in the middle - never a
  *  see-through wash over the whole picture with the text on it. */

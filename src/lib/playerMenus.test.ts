@@ -13,6 +13,7 @@ import {
   SUBTITLES_LIST_AT_TOP,
   SUBTITLES_LIST_SCROLLED,
   SUBTITLES_MENU,
+  UNMUTE_CHIP,
   WAITING_LINE,
   WAITING_PANEL,
   WAITING_SQUARE,
@@ -37,6 +38,24 @@ test('what sits over the picture sits on a solid surface', () => {
     if (/^(hover:)?bg-/.test(cls)) assert.doesNotMatch(cls, /\/\d+$|black|white|transparent/, cls);
   }
   assert.match(OVER_PICTURE, /\bbg-chino-surface\b/);
+});
+
+test('"unmute" over the picture is one chip, the player\'s and a Zap card\'s: on the solid surface, its icon then its word', () => {
+  assert.ok(UNMUTE_CHIP.includes(OVER_PICTURE) && UNMUTE_CHIP.includes(OVER_PICTURE_HOVER));
+  for (const cls of UNMUTE_CHIP.split(/\s+/)) {
+    if (/^(hover:)?bg-/.test(cls)) assert.doesNotMatch(cls, /\/\d+$|black|white|transparent/, cls);
+  }
+  for (const file of ['../components/PlayerPage.tsx', '../components/zap/ZapCard.tsx']) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    const at = source.indexOf('${UNMUTE_CHIP} ${UNMUTE_LOOK}`}');
+    assert.ok(at > 0, file);
+    // The chip's own classes: no see-through fill, no colours of its own.
+    const line = source.slice(source.lastIndexOf('className=', at), at);
+    assert.doesNotMatch(line, /\bbg-|\btext-(black|white)\b|shadow-/, file);
+    // Then the icon, hidden from a screen reader, and the word.
+    const body = source.slice(at, source.indexOf('</button>', at));
+    assert.match(body, /<VolumeX aria-hidden className="w-4 h-4" \/>\s*<span>\{UNMUTE\}<\/span>/, file);
+  }
 });
 
 test('the spinner and its line while the player waits: on the solid surface, in token colours - no see-through wash or text', () => {

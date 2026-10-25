@@ -12,7 +12,6 @@ import {
   MENU_HEADER,
   MENU_HEADERS,
   OVER_PICTURE,
-  OVER_PICTURE_HOVER,
   PICTURE_BUTTON,
   PICTURE_BUTTON_ON,
   PICTURE_CARD,
@@ -22,6 +21,7 @@ import {
   SUBTITLES_LIST_SCROLLED,
   SUBTITLES_MENU,
   SUBTITLES_OFF_ROW,
+  UNMUTE_CHIP,
   WAITING_LINE,
   WAITING_SQUARE,
   speedName,
@@ -4126,7 +4126,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           {autoplayMuted && !needsClickToPlay && (
             <button
               onClick={startUnmuted}
-              className={`pointer-events-auto max-w-full px-4 py-2 flex items-center gap-2 transition-colors ${UNMUTE_LOOK} ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
+              className={`pointer-events-auto max-w-full ${UNMUTE_CHIP} ${UNMUTE_LOOK}`}
             >
               <VolumeX aria-hidden className="w-4 h-4" />
               <span>{UNMUTE}</span>

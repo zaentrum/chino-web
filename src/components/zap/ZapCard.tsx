@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Hls from 'hls.js';
-import { Bookmark, Maximize } from 'lucide-react';
+import { Bookmark, Maximize, VolumeX } from 'lucide-react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from '../../hooks/useStreamToken';
 import { useDeviceCaps } from '../../hooks/useDeviceCaps';
@@ -11,6 +11,7 @@ import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { episodeCode } from '../../lib/episodeFiles';
 import { UNMUTE, UNMUTE_LOOK } from '../../lib/chromeWords';
+import { UNMUTE_CHIP } from '../../lib/playerMenus';
 import { ACTION_FOCUS, ICON_BUTTON, OFF_LOOK, actionLook, addToListName, watchlistPress } from '../../lib/titleActions';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
 import { AMBIENT_COLUMNS, AMBIENT_ROWS, followClip } from '../../lib/zapAmbient';
@@ -630,18 +631,20 @@ export function ZapCard({
         </div>
       </div>
 
-      {/* The "unmute" banner — only when the browser blocked the
-          autoplay-with-sound and we had to mute: a browser's muting is
-          not the device's volume, so this is the one way back to sound. */}
+      {/* "unmute" — only when the browser blocked the autoplay-with-sound
+          and we had to mute: a browser's muting is not the device's
+          volume, so this is the one way back to sound. The player's chip:
+          on the solid surface, never a see-through one over the picture. */}
       {active && unmuteBlocked ? (
         <button
           onClick={(e) => {
             e.stopPropagation();
             setMuted(false);
           }}
-          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 bg-white/90 text-black font-medium shadow-lg ${UNMUTE_LOOK}`}
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 ${UNMUTE_CHIP} ${UNMUTE_LOOK}`}
         >
-          {UNMUTE}
+          <VolumeX aria-hidden className="w-4 h-4" />
+          <span>{UNMUTE}</span>
         </button>
       ) : null}
     </div>
