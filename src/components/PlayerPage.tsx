@@ -24,6 +24,7 @@ import {
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
 import { START_PLAYBACK, START_PLAYBACK_BUTTON } from '../lib/chromeWords';
+import { HELD_FRAME, frameToHold, releasesHeldFrame } from '../lib/heldFrame';
 import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -598,9 +599,15 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // that shows no frame within STARTUP_DEADLINE_MS, a stream the hls
   // circuit breakers give up on (network unreachable, decode error even
   // on transcode, or an unrecoverable error type). `title` and `label`
-  // are what the error overlay says; `tech` is the raw signature that
-  // pre-fills the manual bug-report dialog.
+  // are what the error overlay says; `tech` is the raw signature the
+  // manual bug-report dialog shows under its details and sends.
   const [fatalError, setFatalError] = useState<{ title: string; label: string; tech: string } | null>(null);
+  // The last picture a quality pick holds on screen while the new quality
+  // loads (lib/heldFrame.ts): the canvas it is drawn on, the source it was
+  // held on (null for none), and whether it shows.
+  const heldFrameRef = useRef<HTMLCanvasElement | null>(null);
+  const heldOnRef = useRef<number | null>(null);
+  const [frameHeld, setFrameHeld] = useState(false);
   const [bugDialogOpen, setBugDialogOpen] = useState(false);
   // The ticket the give-up's automatic report became, to say so on the
   // overlay (null: none filed, or not yet).
@@ -3572,16 +3579,65 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     setOpenMenu(null);
   };
 
+  // The picture on screen, held over the video while a quality pick
+  // rebuilds the source - the <video> shows black from the moment the old
+  // source goes - under "Switching to …" (lib/heldFrame.ts). Nothing where
+  // no picture shows yet.
+  const holdFrame = () => {
+    const v = videoRef.current;
+    const canvas = heldFrameRef.current;
+    const size = v ? frameToHold(v) : null;
+    if (!v || !canvas || !size) return;
+    try {
+      canvas.width = size.width;
+      canvas.height = size.height;
+      canvas.getContext('2d')?.drawImage(v, 0, 0, size.width, size.height);
+    } catch {
+      return;
+    }
+    heldOnRef.current = qoe.source;
+    setFrameHeld(true);
+  };
+  // The held picture goes once the new source has its first frame at the
+  // playhead - two animation frames later, so that frame is painted under
+  // it (releaseFrame) - or at once where the player gave up (dropFrame).
+  const dropFrame = () => {
+    heldOnRef.current = null;
+    setFrameHeld(false);
+    const canvas = heldFrameRef.current;
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  };
+  const releaseFrame = () => {
+    const v = videoRef.current;
+    if (!v || !releasesHeldFrame(heldOnRef.current, { source: qoe.source, readyState: v.readyState, seeking: v.seeking })) return;
+    const held = heldOnRef.current;
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        // A later pick holds a picture of its own.
+        if (heldOnRef.current === held) dropFrame();
+      }),
+    );
+  };
+  useEffect(() => {
+    if (fatalError && heldOnRef.current !== null) dropFrame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fatalError]);
+
   // Manual quality switch from the quality menu: a transcode rung, or on a
   // packaged title Auto (q=auto, its ladder) or one of its rungs (q=<name>,
   // that rung alone). Changing streamQuality flips playUrl, which tears
   // hls.js down and loads the new master; the playhead is kept for
-  // hls.js's startPosition and onLoadedMetadata to put back.
+  // hls.js's startPosition and onLoadedMetadata to put back. The picture
+  // on screen stays until the new quality's first frame (holdFrame).
   const switchQuality = (q: Quality, label = nameOfQuality(q)) => {
     if (q === streamQuality) {
       setOpenMenu(null);
       return;
     }
+    holdFrame();
     // A pick says nothing: a notice of the player's own change goes with it.
     setPendingNotice(null);
     setQualityNotice(null);
@@ -3843,9 +3899,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           }
         }}
         onWaiting={() => { setBuffering(true); onStall(); reportEvent('waiting', { t: videoRef.current?.currentTime, q: streamQuality }); qoeWaiting(); }}
-        onLoadedData={() => { startedRef.current = true; }}
+        onLoadedData={() => { startedRef.current = true; releaseFrame(); }}
+        onSeeked={() => releaseFrame()}
         onPlaying={() => {
           startedRef.current = true; setBuffering(false); setActionLabel(null); reportTrailerPlay();
+          releaseFrame();
           qoe.playingAt = performance.now();
           qoe.rebuffer.playing(qoe.playingAt);
         }}
@@ -3853,6 +3911,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           startedRef.current = true;
           setBuffering(false);
           setActionLabel(null);
+          releaseFrame();
           // Pair with the onPause stall recovery above: when the
           // browser silently paused on a buffer underrun and now has
           // data again, kick playback off ourselves. Skip if the user
@@ -3890,6 +3949,11 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           />
         )}
       </video>
+      {/* The last picture of the quality before a pick, over the video
+          until the new quality's first frame (holdFrame) - never a black
+          frame between. Always there, hidden while nothing is held, so a
+          pick can draw on it at once. */}
+      <canvas ref={heldFrameRef} aria-hidden className={`${HELD_FRAME} ${frameHeld ? '' : 'hidden'}`} />
       {/* The look of a cue the browser draws itself (lib/subtitleLook.ts). */}
       <style>{CUE_CSS}</style>
       {/* Sibling canvas for image subtitle rendering. libpgs-js
