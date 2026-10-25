@@ -31,8 +31,10 @@ export function Header() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [active, setActive] = useState<number>(-1);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  // Profile-icon dropdown (Profile + Sign out). Separate state from
-  // the search suggestions popover so the two don't fight each other.
+  // The account menu under the avatar - "account" (docs/chino, words: not
+  // "profile") and "sign out", in the mono face of a menu's items. Separate
+  // state from the search suggestions popover so the two don't fight each
+  // other.
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement | null>(null);
 
@@ -208,18 +210,18 @@ export function Header() {
               <button
                 role="menuitem"
                 onClick={() => { setAccountOpen(false); window.location.assign(toApp('/me')); }}
-                className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm font-mono text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
               >
-                <UserCircle className="w-4 h-4" />
-                Profile
+                <UserCircle className="w-4 h-4" aria-hidden />
+                account
               </button>
               <button
                 role="menuitem"
                 onClick={() => { setAccountOpen(false); void auth.signoutRedirect(); }}
-                className="w-full text-left px-3 py-2 text-sm text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-sm font-mono text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
               >
-                <LogOut className="w-4 h-4" />
-                Sign out
+                <LogOut className="w-4 h-4" aria-hidden />
+                sign out
               </button>
             </div>
           )}

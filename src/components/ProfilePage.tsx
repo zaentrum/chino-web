@@ -11,7 +11,7 @@ import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
 
 /**
- * Profile page at /me. Shows the signed-in user's name + email (from
+ * The account page at /me (docs/chino, words: "account", not "profile"). Shows the signed-in user's name + email (from
  * the OIDC userinfo claims), Sign out and Delete Account (the account
  * and what this server keeps of it, asked first: DeleteAccountDialog),
  * and a compact row list of items they've watched, newest first — the
@@ -120,7 +120,7 @@ export function ProfilePage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-3xl font-bold">Profile</h1>
+          <h1 className="text-3xl font-bold">Account</h1>
         </div>
 
         {/* Identity card. Keycloak gives us name / email / preferred_username;
