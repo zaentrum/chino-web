@@ -26,7 +26,8 @@ import {
   waitingPanel,
 } from '../lib/playerMenus';
 import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure';
-import { START_PLAYBACK, START_PLAYBACK_BUTTON } from '../lib/chromeWords';
+import { START_PLAYBACK, START_PLAYBACK_BUTTON, UNMUTE, UNMUTE_LOOK } from '../lib/chromeWords';
+import { playFromPress } from '../lib/startPlayback';
 import { HELD_FRAME, frameToHold, releasesHeldFrame } from '../lib/heldFrame';
 import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
@@ -570,13 +571,51 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // because those fire on browser-initiated transitions too (buffering,
   // stall, src reload), which would defeat the gate.
   const userWantsPlayingRef = useRef(true);
+
+  // The video muted by the player, not the viewer: the browser refused to
+  // start it with its sound (tryAutoplay) - "unmute" shows. And the start
+  // button: the browser refused to start it at all. Refs beside the state,
+  // for the keyboard's handler, which is bound once.
+  const playerMutedRef = useRef(false);
+  const startPendingRef = useRef(false);
+  const setPlayerMuted = (m: boolean) => {
+    playerMutedRef.current = m;
+    setAutoplayMuted(m);
+  };
+  const setStartPending = (pending: boolean) => {
+    startPendingRef.current = pending;
+    setNeedsClickToPlay(pending);
+  };
+  // The viewer's press of play - the start button, the bar's play, the
+  // space key, a click on the picture. Where the player muted the video,
+  // the press brings its sound, unmuted in the press itself before play()
+  // (lib/startPlayback.ts): a browser lets the sound start only inside the
+  // gesture, so a second press is never needed, and "unmute" goes with
+  // it. A browser that refuses even the press its sound plays it muted,
+  // with "unmute"; one that refuses it altogether shows the start button
+  // again.
+  const pressPlay = (v: HTMLVideoElement) => {
+    notePlayPressed(v);
+    userWantsPlayingRef.current = true;
+    const unmute = playerMutedRef.current || startPendingRef.current;
+    const fromStart = startPendingRef.current;
+    setStartPending(false);
+    if (unmute) setPlayerMuted(false);
+    void playFromPress(v, unmute).then((outcome) => {
+      if (!unmute || outcome === 'sound') return;
+      setPlayerMuted(true);
+      if (outcome === 'refused' && fromStart) setStartPending(true);
+    });
+  };
+  const startFromButton = () => {
+    const v = videoRef.current;
+    if (v) pressPlay(v);
+  };
   const userTogglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
     if (v.paused) {
-      notePlayPressed(v);
-      userWantsPlayingRef.current = true;
-      v.play().catch(() => undefined);
+      pressPlay(v);
     } else {
       userWantsPlayingRef.current = false;
       v.pause();
@@ -3422,20 +3461,21 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     if (!p || typeof p.then !== 'function') return;
     p.catch(() => {
       v.muted = true;
-      setAutoplayMuted(true);
+      setPlayerMuted(true);
       v.play().catch(() => {
-        setNeedsClickToPlay(true);
+        setStartPending(true);
         if (qoe.clock.frameAt === null) qoe.clock.refused = true;
       });
     });
   };
 
+  // "unmute": the sound back, in the press, playing on.
   const startUnmuted = () => {
     const v = videoRef.current;
     if (!v) return;
     notePlayPressed(v);
     v.muted = false;
-    setAutoplayMuted(false);
+    setPlayerMuted(false);
     userWantsPlayingRef.current = true;
     v.play().catch(() => undefined);
   };
@@ -3885,7 +3925,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         onVolumeChange={(e) => {
           setVolume(e.currentTarget.volume);
           setMuted(e.currentTarget.muted);
-          if (!e.currentTarget.muted) setAutoplayMuted(false);
+          if (!e.currentTarget.muted) setPlayerMuted(false);
         }}
         onEnded={(e) => {
           // An extra ends: back where the viewer came from.
@@ -4040,14 +4080,10 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {/* The browser wouldn't start the title by itself: "play", the one
           emphasized action, solid, over the picture undimmed - its whole
           area takes the press. Never "click", which a touch screen has
-          none of. */}
+          none of. The press starts it with its sound (pressPlay). */}
       {needsClickToPlay && (
         <button
-          onClick={() => {
-            setNeedsClickToPlay(false);
-            userWantsPlayingRef.current = true;
-            videoRef.current?.play().catch(() => undefined);
-          }}
+          onClick={startFromButton}
           aria-label={START_PLAYBACK}
           className="absolute inset-0 flex items-center justify-center"
         >
@@ -4058,8 +4094,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </button>
       )}
 
-      {/* The toasts at the top - the quality notice, reconnecting, Tap to
-          unmute - 5rem under the status bar's inset (--chino-safe-top),
+      {/* The toasts at the top - the quality notice, reconnecting,
+          "unmute" - 5rem under the status bar's inset (--chino-safe-top),
           under the top bar, which pads for it. One column, so two at once
           stack and each is read whole: a stall the watcher steps down from
           says both what it did and that it is reconnecting. Each on a
@@ -4077,13 +4113,16 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
               Stream paused — reconnecting…
             </div>
           )}
+          {/* Only while the player's muting stands: a press of play that
+              brought the sound took it away. Chrome - "unmute", in the
+              mono face, a word for a mouse, a touch and a key alike. */}
           {autoplayMuted && !needsClickToPlay && (
             <button
               onClick={startUnmuted}
-              className={`pointer-events-auto max-w-full px-4 py-2 text-sm flex items-center gap-2 transition-colors ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
+              className={`pointer-events-auto max-w-full px-4 py-2 flex items-center gap-2 transition-colors ${UNMUTE_LOOK} ${OVER_PICTURE} ${OVER_PICTURE_HOVER}`}
             >
-              <VolumeX className="w-4 h-4" />
-              <span>Tap to unmute</span>
+              <VolumeX aria-hidden className="w-4 h-4" />
+              <span>{UNMUTE}</span>
             </button>
           )}
         </div>

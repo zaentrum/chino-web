@@ -13,6 +13,8 @@ import {
   SETTINGS_WORDS,
   START_PLAYBACK,
   START_PLAYBACK_BUTTON,
+  UNMUTE,
+  UNMUTE_LOOK,
   WATCHLIST_WORDS,
 } from './chromeWords.ts';
 
@@ -46,6 +48,19 @@ test('the start button says "play" in the mono face, solid - never "click", on n
   assert.ok(look.includes('bg-chino-accent'));
   // A solid fill: no opacity on it.
   for (const c of look) assert.doesNotMatch(c, /^bg-.*\/\d+$|^bg-black/, c);
+});
+
+test('"unmute" says what fits every device, in the mono face - never "Tap to unmute"', () => {
+  assert.equal(UNMUTE, 'unmute');
+  assert.doesNotMatch(UNMUTE, /tap|click|press/i);
+  assert.ok(classes(UNMUTE_LOOK).includes('font-mono'));
+  // The player's and the Zap card's say it the same way, nothing else.
+  for (const file of ['../components/PlayerPage.tsx', '../components/zap/ZapCard.tsx']) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, />\s*Tap to unmute\s*</i, file);
+    assert.match(source, /\{UNMUTE\}/, file);
+    assert.match(source, /\$\{UNMUTE_LOOK\}/, file);
+  }
 });
 
 test('square, as every frame in the design system: no rounded corners on the chrome', () => {

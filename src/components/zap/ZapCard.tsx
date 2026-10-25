@@ -10,6 +10,7 @@ import { LISTS_CHANGED } from '../../hooks/useWatchlists';
 import { FadeImage } from '../FadeImage';
 import { pickZapMidpoint, type ZapSegment } from '../../hooks/useZapMidpoint';
 import { episodeCode } from '../../lib/episodeFiles';
+import { UNMUTE, UNMUTE_LOOK } from '../../lib/chromeWords';
 import { ACTION_FOCUS, ICON_BUTTON, OFF_LOOK, actionLook, addToListName, watchlistPress } from '../../lib/titleActions';
 import { HLS_BASE_CONFIG, startOnFirstVariant } from '../../lib/hlsConfig';
 import { AMBIENT_COLUMNS, AMBIENT_ROWS, followClip } from '../../lib/zapAmbient';
@@ -25,7 +26,7 @@ interface ZapCardProps {
    *  repeated on every swipe. */
   muted: boolean;
   /** Setter for the session mute state — wired to the autoplay-blocked
-   *  fallback and its "Tap to unmute" (the card has no mute button: Zap
+   *  fallback and its "unmute" (the card has no mute button: Zap
    *  plays with sound, and the device's volume is the mute). */
   setMuted: (m: boolean) => void;
   /** Fires once per item-becomes-active transition, deduped against
@@ -349,7 +350,7 @@ export function ZapCard({
       v.muted = muted;
       v.play().catch(() => {
         // Autoplay-with-sound rejected. Fall back to muted and surface
-        // the "tap to unmute" hint.
+        // the "unmute" hint.
         v.muted = true;
         setMuted(true);
         setUnmuteBlocked(true);
@@ -629,7 +630,7 @@ export function ZapCard({
         </div>
       </div>
 
-      {/* Tap-to-unmute banner — only when the browser blocked the
+      {/* The "unmute" banner — only when the browser blocked the
           autoplay-with-sound and we had to mute: a browser's muting is
           not the device's volume, so this is the one way back to sound. */}
       {active && unmuteBlocked ? (
@@ -638,9 +639,9 @@ export function ZapCard({
             e.stopPropagation();
             setMuted(false);
           }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 bg-white/90 text-black text-sm font-medium shadow-lg"
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 px-4 py-2 bg-white/90 text-black font-medium shadow-lg ${UNMUTE_LOOK}`}
         >
-          Tap to unmute
+          {UNMUTE}
         </button>
       ) : null}
     </div>

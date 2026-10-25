@@ -42,6 +42,14 @@ export const START_PLAYBACK = 'play';
 export const START_PLAYBACK_BUTTON =
   'inline-flex items-center gap-2 h-12 px-5 bg-chino-accent text-chino-bg font-mono font-medium shadow-xl';
 
+/** The button that brings the sound back where the browser started a
+ *  title muted (the player, a Zap card): "unmute" - a word for a mouse, a
+ *  touch and a key alike, never "tap" or "click". */
+export const UNMUTE = 'unmute';
+
+/** Its words: chrome, in the mono face. */
+export const UNMUTE_LOOK = 'font-mono text-sm';
+
 /** A "details" disclosure under a couldn't-load screen's reason: in the
  *  muted grey of labels and details (at least 4.5:1 on the canvas and on
  *  every surface, at 12 px). */
