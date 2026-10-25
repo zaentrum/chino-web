@@ -42,3 +42,29 @@ test("the header's account menu says account and sign out", () => {
   assert.ok(header.includes('account'), 'account');
   assert.ok(header.includes('sign out'), 'sign out');
 });
+
+test('"shows", as the grid says: the nav\'s tab, the search box and its suggestions never say Series', () => {
+  const read = (...path: string[]) => readFileSync(join(SRC, 'components', ...path), 'utf8');
+  // The grid: its heading and its end ("12 shows in all.").
+  const grid = read('sections', 'SeriesSection.tsx');
+  assert.match(grid, />Shows</);
+  assert.match(grid, /endOfList\(items\.length, 'shows'\)/);
+  // The side rail's and the phone's bottom bar's tab.
+  for (const nav of [read('chino', 'ChinoSidebar.tsx'), read('chino', 'ChinoMobileNav.tsx')]) {
+    assert.match(nav, /\{ id: 'series', label: 'Shows', icon: Tv \}/);
+    assert.doesNotMatch(nav, /label: 'Series'/);
+  }
+  // The search box and the kind under each suggestion.
+  const header = read('Header.tsx');
+  assert.match(header, /placeholder="Search movies, shows…"/);
+  assert.match(header, /s\.type === 'series' \? 'Show' : s\.type === 'movie' \? 'Movie'/);
+  // Nothing a viewer reads says Series.
+  const found: string[] = [];
+  for (const file of sources(SRC)) {
+    for (const text of shownTexts(readFileSync(file, 'utf8'))) {
+      if (/\bSeries\b/.test(text)) found.push(`${file.slice(SRC.length + 1)}: ${text}`);
+    }
+    for (const m of readFileSync(file, 'utf8').matchAll(/(?:label: |\? )'(Series)'/g)) found.push(`${file.slice(SRC.length + 1)}: ${m[1]}`);
+  }
+  assert.deepEqual(found, []);
+});

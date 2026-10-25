@@ -67,7 +67,7 @@ export function Header() {
     return () => window.removeEventListener('mousedown', onClick);
   }, [open]);
 
-  // Debounced search as the user types: the best eight films and series,
+  // Debounced search as the user types: the best eight movies and shows,
   // ranked together by the server (/api/v1/search, no people); a server
   // older than the search is asked its list of the query, as before. 200 ms
   // is the Nielsen-style "feels instant" cutoff. Aborts in-flight requests
@@ -181,7 +181,8 @@ export function Header() {
                   <div className="text-chino-text truncate">{s.title}</div>
                   <div className="text-xs text-chino-muted">
                     {s.year ? <>{s.year} · </> : null}
-                    {s.type === 'series' ? 'Series' : s.type === 'movie' ? 'Movie' : s.type}
+                    {/* The grid's and the nav's word: a show, a movie. */}
+                    {s.type === 'series' ? 'Show' : s.type === 'movie' ? 'Movie' : s.type}
                   </div>
                 </div>
               </button>
