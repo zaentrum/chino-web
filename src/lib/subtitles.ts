@@ -243,9 +243,13 @@ function standsForBoth<T extends SubtitleSource>(
  * The subtitles menu of a title's tracks, given in the order they come (the
  * file's own streams first, in the file's order, then its sidecars). On
  * top: the viewer's subtitle language (Settings; "off" names none), then
- * each other subtitle language the server is set up for. Within a
- * language, each region or script keeps a run of its own, the bare
- * language first and the others in alphabetical order of their names
+ * each other subtitle language the server is set up for. A language's
+ * tracks stay together, the AI ones included: where two of these name it
+ * with another script or region (the setting's "zh-Hant", the server's
+ * "zh-Hans"), its tracks are one block, where the language first comes -
+ * never split by the languages between. Within a language, each region or
+ * script keeps a run of its own, the bare language first and the others in
+ * alphabetical order of their names
  * ("Chinese", "Chinese (Simplified)", "Chinese (Simplified) · AI",
  * "Chinese (Traditional)"), and within a run the plain track first, then
  * for deaf and hard of hearing, then foreign-language parts only, then the
@@ -296,13 +300,20 @@ export function subtitleMenu<T extends SubtitleSource>(
   }
   const takes = (w: string, e: SubtitleEntry<T>) => (named ? sameLanguage(w, e.tag) : normalizeLang(e.tag) === normalizeLang(w));
   const placed = new Set<SubtitleEntry<T>>();
-  // On top, one block per language asked for.
-  const top: SubtitleEntry<T>[] = [];
+  // On top, one block per language asked for. A later one in a language
+  // already on top - the server's "zh-Hans" after the setting's "zh-Hant" -
+  // joins that language's block, so its tracks stay together, in their runs.
+  const blocks: { base: string; entries: SubtitleEntry<T>[] }[] = [];
   for (const w of wanted) {
     const group = unique.filter((e) => !placed.has(e) && takes(w, e));
+    if (!group.length) continue;
     group.forEach((e) => placed.add(e));
-    top.push(...byRun(group));
+    const base = normalizeLang(w);
+    const block = base ? blocks.find((b) => b.base === base) : undefined;
+    if (block) block.entries.push(...group);
+    else blocks.push({ base, entries: group });
   }
+  const top = blocks.flatMap((b) => byRun(b.entries));
   const rest = byLanguage(unique.filter((e) => !placed.has(e)));
   return { top, more: alphabetical(rest).flatMap((g) => g.entries) };
 }

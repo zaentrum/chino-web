@@ -92,6 +92,35 @@ test('a viewer with subtitles off in Settings has the server\'s languages on top
   ]);
 });
 
+test('a language named twice on top, by two scripts, is one block where it first comes: never split by the languages between', () => {
+  const tracks: SubtitleSource[] = [
+    { id: 'emb-2', lang: 'chi', embedded: true },
+    { id: 'emb-3', lang: 'chi', title: '繁體中文', embedded: true },
+    { id: 'emb-4', lang: 'eng', embedded: true },
+    { id: 'emb-5', lang: 'ger', embedded: true },
+    { id: 'side-zh', lang: 'zh-Hans', title: 'AI' },
+    { id: 'side-en', lang: 'en', title: 'AI' },
+  ];
+  const chineseFirst = ['Chinese', 'Chinese (Simplified) · AI', 'Chinese (Traditional)', 'English', 'English · AI', 'German'];
+  // The setting's Traditional Chinese, the server's Simplified after English
+  // and German: Chinese together, first, its runs in their order.
+  const m = menu(tracks, { preferred: 'zh-Hant' });
+  assert.deepEqual(labels(m.top), chineseFirst);
+  assert.deepEqual(m.more, []);
+  // The same where the setting is one of the server's languages.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'zh-Hant', serverLanguages: ['en', 'de', 'zh-Hans', 'zh-Hant'] }).top), chineseFirst);
+  // The server's list naming Chinese twice, German between: Chinese where it
+  // first comes.
+  assert.deepEqual(labels(menu(tracks, { preferred: 'en', serverLanguages: ['en', 'zh-Hans', 'de', 'zh-Hant'] }).top), [
+    'English',
+    'English · AI',
+    'Chinese',
+    'Chinese (Simplified) · AI',
+    'Chinese (Traditional)',
+    'German',
+  ]);
+});
+
 test('a server with no subtitle languages (404, or none set): the person\'s own languages on top, the rest under "more languages"', () => {
   // The subtitle setting's language, the audio setting's, the browser's -
   // in that order, each the whole language.
