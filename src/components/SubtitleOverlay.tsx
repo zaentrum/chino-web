@@ -1,12 +1,11 @@
-import { useEffect, useState, type RefObject } from 'react';
 import {
   SUBTITLE_COLOR,
   SUBTITLE_FONT,
   SUBTITLE_LINE_HEIGHT,
   SUBTITLE_OUTLINE,
-  pictureRect,
   subtitlePlace,
   type CueLine,
+  type Rect,
 } from '../lib/subtitleLook';
 
 /** The pace the player's controls fade in and out at, and the subtitle
@@ -14,8 +13,12 @@ import {
 export const CONTROLS_PACE = 'duration-150 ease-in-out';
 
 interface SubtitleOverlayProps {
-  /** The video the subtitle is drawn over. */
-  videoRef: RefObject<HTMLVideoElement | null>;
+  /** What shows of the picture, in CSS pixels of the player: the frame as
+   *  the player lays it out, fitted to the title's picture or filled
+   *  (lib/pictureFit.ts subtitleRegion). */
+  picture: Rect;
+  /** The player's height, in CSS pixels. */
+  boxHeight: number;
   /** What is shown now (lib/subtitleLook.ts shownLines); none draws nothing. */
   lines: readonly CueLine[];
   /** The subtitle's language, as a BCP 47 tag: the font for its letters
@@ -26,57 +29,20 @@ interface SubtitleOverlayProps {
   clear: number;
 }
 
-interface Sizes {
-  boxWidth: number;
-  boxHeight: number;
-  videoWidth: number;
-  videoHeight: number;
-}
-
 /**
  * A text subtitle, drawn by the player in the one look (lib/subtitleLook.ts):
  * white with a black outline, no box, 5.33 % of the picture's height,
  * centred within 80 % of the picture's width, 8 % of its height above its
  * bottom edge - above the controls while they show, moving up and back
  * down at the pace they fade at (CONTROLS_PACE). Italics and ruby stay
- * as the file sets them. It follows the picture as the window, the element
- * or the picture's size changes.
+ * as the file sets them. The picture is what shows of it: where the player
+ * fits a letterboxed film's own picture to the screen, its bars cropped,
+ * the line sits on the screen's bottom, never off it. It follows the
+ * picture as the window, the element or the picture's size changes.
  */
-export function SubtitleOverlay({ videoRef, lines, lang, clear }: SubtitleOverlayProps) {
-  const [sizes, setSizes] = useState<Sizes>({ boxWidth: 0, boxHeight: 0, videoWidth: 0, videoHeight: 0 });
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const measure = () =>
-      setSizes((prev) => {
-        const next = { boxWidth: v.clientWidth, boxHeight: v.clientHeight, videoWidth: v.videoWidth, videoHeight: v.videoHeight };
-        return prev.boxWidth === next.boxWidth &&
-          prev.boxHeight === next.boxHeight &&
-          prev.videoWidth === next.videoWidth &&
-          prev.videoHeight === next.videoHeight
-          ? prev
-          : next;
-      });
-    measure();
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
-    observer?.observe(v);
-    // The picture's own size: known with the metadata, and changes with a
-    // rendition of another shape.
-    v.addEventListener('loadedmetadata', measure);
-    v.addEventListener('resize', measure);
-    window.addEventListener('resize', measure);
-    return () => {
-      observer?.disconnect();
-      v.removeEventListener('loadedmetadata', measure);
-      v.removeEventListener('resize', measure);
-      window.removeEventListener('resize', measure);
-    };
-  }, [videoRef]);
-
+export function SubtitleOverlay({ picture, boxHeight, lines, lang, clear }: SubtitleOverlayProps) {
   if (lines.length === 0) return null;
-  const picture = pictureRect(sizes.boxWidth, sizes.boxHeight, sizes.videoWidth, sizes.videoHeight);
-  const place = subtitlePlace(picture, sizes.boxHeight, clear);
+  const place = subtitlePlace(picture, boxHeight, clear);
   if (!(place.fontSize > 0)) return null;
   return (
     <div

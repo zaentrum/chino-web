@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube } from 'lucide-react';
+import { Captions, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube, ZoomIn } from 'lucide-react';
 import Hls from 'hls.js';
-import { PgsRenderer } from 'libpgs';
-// Vite resolves this to an emitted asset URL; the worker file is
-// already an IIFE so it loads via `new Worker(url)` with no extra
-// glue. Keeps libpgs's worker out of the main bundle.
-import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
 import {
   MENU_HEADER,
@@ -31,6 +26,8 @@ import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure
 import { START_PLAYBACK, START_PLAYBACK_BUTTON, UNMUTE, UNMUTE_LOOK } from '../lib/chromeWords';
 import { playFromPress } from '../lib/startPlayback';
 import { HELD_FRAME, frameToHold, releasesHeldFrame } from '../lib/heldFrame';
+import { FILL_SCREEN, pictureAreaOf } from '../lib/pictureFit';
+import { usePictureLayers } from '../hooks/usePictureLayers';
 import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
 import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/trickplay';
 import { fileAutoReport } from '../lib/errorReporter';
@@ -223,6 +220,10 @@ interface PlayInfo {
   default_quality?: string;
   audio_tracks?: TrackInfo[];
   subtitle_tracks?: TrackInfo[];
+  // Where the title's picture is in its coded frame, as fractions of it -
+  // the same for every rendition; absent where unknown or the whole frame
+  // (lib/pictureFit.ts). The player fits that to the screen, not the frame.
+  pictureArea?: { left: number; top: number; width: number; height: number };
 }
 
 // Where the player once kept the last subtitle language picked in its
@@ -393,16 +394,13 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const calls = playerCalls(extra ? 'extra' : 'title');
   const extraPlayPath = extra?.ref.play_path ?? '';
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // Canvas overlay for image-based subtitles (currently PGS). libpgs-js
-  // owns the rendering loop and syncs to videoRef's currentTime via its
-  // own listener; we just give it the canvas + sub URL and tear down
-  // when the track changes. The canvas is keyed per active PGS sub id in
-  // JSX (see render), so each renderer binds to a fresh, untransferred
-  // node — libpgs's worker mode calls transferControlToOffscreen(),
-  // which is one-way, so a canvas can never be reused across renderers.
-  // This ref just points at whichever keyed canvas is currently mounted.
+  // The canvas a PGS subtitle's pictures are drawn on, over the player
+  // (hooks/usePictureLayers.ts): libpgs-js reads the track and syncs to
+  // videoRef's currentTime via its own listener, and draws onto a plane of
+  // its own off screen; each picture is drawn from there to where it
+  // belongs. The canvas is keyed per active PGS sub id in JSX (see render);
+  // this ref points at whichever is mounted.
   const pgsCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const pgsRendererRef = useRef<PgsRenderer | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const hideTimer = useRef<number | null>(null);
 
@@ -711,10 +709,14 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     };
   }, []);
 
-  // The picture is always letterboxed (object-fit: contain, the <video>
-  // default): all of it, with bars where the screen's shape differs from
-  // the film's. Portrait used to switch to cover, which crops to fill - on
-  // a phone held upright, a 2.35:1 film showed a fifth of its width.
+  // The picture is fitted, never cropped: the <video> shows its frame whole
+  // (object-fit: contain, its default) and the player fits the title's own
+  // picture - /play/info's pictureArea, a scope film letterboxed in a 16:9
+  // frame - to the screen, the bars cropped (hooks/usePictureLayers.ts).
+  // Filled (the fill button, on a screen wider than tall) it covers the
+  // screen, its edges cropped. Portrait used to switch to cover, which crops
+  // to fill - on a phone held upright, a 2.35:1 film showed a fifth of its
+  // width.
 
   // Cache-bust counter mixed into playUrl after a long tab suspension.
   // Bumping it changes the URL → useEffect tears hls down + rebuilds
@@ -2102,52 +2104,25 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     appliedSubOffsetRef.current = subOffsetSec;
   }, [subOffsetSec, activeSubId]);
 
-  // PGS sidecar rendering. libpgs-js owns one renderer per track URL;
-  // teardown + recreate when the active PGS subtitle changes (or when
-  // no PGS sub is active). The library binds to videoRef's timeupdate
-  // / seeked listeners internally, so currentTime sync is automatic.
-  // One subtitle at a time: a PGS one on is the only one.
+  // PGS sidecar rendering (hooks/usePictureLayers.ts): one renderer per
+  // track URL, made again when the active PGS subtitle changes. The library
+  // binds to videoRef's timeupdate listener, so currentTime sync is
+  // automatic. One subtitle at a time: a PGS one on is the only one.
   const activePgsSub = activeSub?.format === 'pgs' ? activeSub : null;
 
-  useEffect(() => {
-    const v = videoRef.current;
-    const canvas = pgsCanvasRef.current;
-    // No PGS sub → the keyed canvas is unmounted; nothing to draw. A
-    // freshly-keyed canvas mounts blank for the next track, so there's
-    // no stale frame to wipe (and calling getContext('2d') on an
-    // already-transferred canvas would throw InvalidStateError).
-    if (!v || !canvas || !activePgsSub) return;
-
-    // Defensively dispose any prior renderer (terminating its worker)
-    // before creating the next, so only one renderer is ever alive.
-    // The canvas key change already mounts a fresh, untransferred node;
-    // disposing here guards against an overlapping effect run (e.g.
-    // StrictMode double-invoke or a rapid token-driven re-fire).
-    pgsRendererRef.current?.dispose();
-    pgsRendererRef.current = null;
-
-    // The sidecar URL already carries `?stream=` (added where the
-    // subtitle list is built), which the /play/subs route accepts.
-    //
-    // aspectRatio must match the <video>'s object-fit — `contain`, the
-    // picture is always letterboxed. Otherwise PGS graphics land at the
-    // wrong scale/offset.
-    const r = new PgsRenderer({
-      video: v,
-      canvas,
-      subUrl: activePgsSub.url,
-      workerUrl: libpgsWorkerUrl,
-      aspectRatio: 'contain',
-    });
-    pgsRendererRef.current = r;
-    return () => {
-      r.dispose();
-      if (pgsRendererRef.current === r) pgsRendererRef.current = null;
-    };
-    // Recreate ONLY on a real track change (id/url). The URL now carries the
-    // STABLE ?stream= token, so an OIDC renewal no longer changes it — the
-    // renderer is not rebuilt on a transferred canvas.
-  }, [activePgsSub?.id, activePgsSub?.url]);
+  // The picture and what is drawn over it: the video and the held picture
+  // fitted to the title's own picture (or filled), the text subtitle laid
+  // out on what shows of it, a PGS subtitle's pictures each whole on screen.
+  const pictureArea = useMemo(() => pictureAreaOf(info?.pictureArea), [info?.pictureArea]);
+  const picture = usePictureLayers({
+    mounted: !!playUrl,
+    videoRef,
+    heldFrameRef,
+    pgsCanvasRef,
+    area: pictureArea,
+    pgs: activePgsSub ? { id: activePgsSub.id, url: activePgsSub.url } : null,
+    clear: chromeVisible ? bottomBarHeight : 0,
+  });
 
   // A pick in the menu: that subtitle on instead of the one that was - one
   // at a time - or none for "off". A pick here is for this playback only,
@@ -4011,28 +3986,19 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       <canvas ref={heldFrameRef} aria-hidden className={`${HELD_FRAME} ${frameHeld ? '' : 'hidden'}`} />
       {/* The look of a cue the browser draws itself (lib/subtitleLook.ts). */}
       <style>{CUE_CSS}</style>
-      {/* Sibling canvas for image subtitle rendering. libpgs-js
-          positions itself absolute over the video; we keep it inert
-          (pointer-events: none) so clicks pass through to the video
-          for play/pause. objectFit matches the video's — `contain`,
-          letterboxed — so subtitles land at the correct fraction of the
-          1920x1080 PGS graphics plane.
-
-          The `key` is tied to the active PGS sub id (or a sentinel
-          when none is active). libpgs's default worker mode calls
-          canvas.transferControlToOffscreen(), a ONE-WAY transfer —
-          once a canvas is handed to a worker it can never be reused.
-          Re-keying forces React to discard the transferred node and
-          mount a fresh, untransferred canvas for every renderer, so
-          switching PGS tracks / toggling Off / token rotation /
-          StrictMode double-invoke can't hit InvalidStateError. The
-          canvas is only mounted when a PGS sub is active. */}
+      {/* The PGS subtitle's pictures, over the whole player at the
+          screen's own resolution: each drawn where the video takes it,
+          whole on screen, the low ones above the controls while they show
+          (hooks/usePictureLayers.ts). Inert (pointer-events: none), so
+          clicks pass through to the video for play/pause. Keyed per active
+          PGS sub id, so another track starts on a fresh canvas; only
+          mounted while a PGS sub is active. */}
       {activePgsSub && (
         <canvas
           key={`pgs-${activePgsSub.id}`}
           ref={pgsCanvasRef}
+          aria-hidden
           className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ objectFit: 'contain' }}
         />
       )}
 
@@ -4041,7 +4007,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           instead while it shows the video itself (nativeCues). */}
       {!nativeCues && (
         <SubtitleOverlay
-          videoRef={videoRef}
+          picture={picture.region}
+          boxHeight={picture.boxHeight}
           lines={subLines}
           lang={activeSub?.tag || undefined}
           clear={chromeVisible ? bottomBarHeight : 0}
@@ -4815,6 +4782,20 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           >
             <Info className="w-5 h-5" />
           </button>
+
+          {/* Zoom to fill: the picture covers the screen, its edges cropped
+              - only where that changes it, on a screen wider than tall;
+              pressed again, the whole picture. Remembered on the device. */}
+          {picture.fills && (
+            <button
+              onClick={picture.toggleFill}
+              className={`p-2 ${picture.fill ? PICTURE_BUTTON_ON : PICTURE_BUTTON}`}
+              title={FILL_SCREEN}
+              aria-pressed={picture.fill}
+            >
+              <ZoomIn className="w-5 h-5" />
+            </button>
+          )}
 
           <button
             onClick={toggleFullscreen}

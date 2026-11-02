@@ -61,6 +61,29 @@ docker run --rm -p 8080:8080 chino-web
 `nginx.conf` provides SPA fallback (client-side routing), aggressive caching of
 hashed assets, and a `/healthz` endpoint.
 
+## The picture
+
+The player fits the title's own picture to the screen, not its coded frame
+(`src/lib/pictureFit.ts`). Many files keep a whole 16:9 frame with a scope
+film letterboxed inside it, the black bars part of the video. Where
+`/play/info` gives a `pictureArea` - where the picture is in the frame,
+`{left, top, width, height}` as fractions of it, the same for every rendition,
+the union of the picture over the whole title - the picture is as large as the
+screen allows and centred: on a 21:9 monitor or a phone held sideways the film
+fills the width, the bars are cropped, the picture never is. Without one the
+whole frame fits, as before.
+
+- **Zoom to fill** - on a screen wider than tall, where it changes the picture,
+  a button beside fullscreen zooms the picture until it covers the screen, its
+  edges cropped, and back. The browser keeps the choice (`localStorage`,
+  `chino:picture:fill`) for every title.
+- **Subtitles** - a text subtitle is laid out on what shows of the frame: 5.33 %
+  of its height, 8 % of it above its bottom edge. A PGS subtitle's pictures
+  move with the video; one the zoom would take off screen - a line in a cropped
+  bottom bar - moves just far enough to be whole, keeping the gap its file gave
+  it to the edge, and one wider than the screen is made smaller in its own
+  shape. Both rise above the controls while they show.
+
 ## Playback telemetry
 
 The player batches what happens while it plays and posts it to the platform
