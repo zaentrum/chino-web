@@ -314,6 +314,11 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
       aspectRatio: 'contain',
       mode: DRAWN_HERE,
     });
+    // libpgs 0.8.1 starts as if its first picture were drawn already (its
+    // previous index is 0, not -1): a track turned on, or a title started,
+    // within the first picture's time never showed it. Before any picture,
+    // so the first one is drawn when its time comes.
+    renderer.renderAtTimestamp(-1);
     queueComposite();
     return () => {
       renderer.dispose();
