@@ -3987,19 +3987,19 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       <canvas ref={heldFrameRef} aria-hidden className={`${HELD_FRAME} ${frameHeld ? '' : 'hidden'}`} />
       {/* The look of a cue the browser draws itself (lib/subtitleLook.ts). */}
       <style>{CUE_CSS}</style>
-      {/* The PGS subtitle's pictures, over the whole player at the
-          screen's own resolution: each drawn where the video takes it,
-          whole on screen, the low ones above the controls while they show
-          (hooks/usePictureLayers.ts). Inert (pointer-events: none), so
-          clicks pass through to the video for play/pause. Keyed per active
-          PGS sub id, so another track starts on a fresh canvas; only
-          mounted while a PGS sub is active. */}
+      {/* The PGS subtitle's pictures: each drawn where the video takes it,
+          whole on screen, the low ones above the controls while they show,
+          on a canvas placed and sized round them at the screen's own
+          resolution (hooks/usePictureLayers.ts). Inert (pointer-events:
+          none), so clicks pass through to the video for play/pause. Keyed
+          per active PGS sub id, so another track starts on a fresh canvas;
+          only mounted while a PGS sub is active. */}
       {activePgsSub && (
         <canvas
           key={`pgs-${activePgsSub.id}`}
           ref={pgsCanvasRef}
           aria-hidden
-          className="absolute inset-0 w-full h-full pointer-events-none"
+          className="absolute left-0 top-0 w-0 h-0 pointer-events-none"
         />
       )}
 

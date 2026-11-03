@@ -27,21 +27,15 @@ import {
   type PictureArea,
   type PictureTransform,
 } from '../lib/pictureFit';
-import { PlaneObjects, followPlane, type PlaneContext } from '../lib/pgsPlane';
+import { PlaneObjects, drawnCanvas, followPlane, pgsMode, type PlaneContext } from '../lib/pgsPlane';
 
 /** How long the picture takes to zoom to fill or back (the fill button). */
 const ZOOM_MS = 250;
 /** How long a picture subtitle takes to rise above the controls and come
  *  back down: the controls' own pace (SubtitleOverlay's CONTROLS_PACE). */
 const LIFT_MS = 150;
-/** The widest the canvas of a PGS subtitle's pictures gets, in pixels. */
-const MAX_CANVAS_WIDTH = 3840;
 
-/** libpgs builds the subtitle's pictures in its worker and draws them in
- *  this thread, onto the plane canvas the player follows (lib/pgsPlane.ts) -
- *  never into a canvas handed to the worker, where nobody sees what it draws
- *  where. */
-const DRAWN_HERE = 'workerWithoutOffscreenCanvas' as unknown as NonNullable<ConstructorParameters<typeof PgsRenderer>[0]['mode']>;
+type PgsOptions = ConstructorParameters<typeof PgsRenderer>[0];
 
 interface Sizes {
   boxWidth: number;
@@ -252,50 +246,58 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
   // A PGS subtitle's pictures, each where it belongs: the plane fitted into
   // the player as libpgs fits it (contain), moved with the video, each
   // picture kept whole on screen and clear of the bands (placePicture), the
-  // low ones above the controls while they show (pictureLift).
+  // low ones above the controls while they show (pictureLift) - on a canvas
+  // just round them, never the whole player at the screen's resolution.
   const composite = useCallback(() => {
     const canvas = pgsCanvasRef.current;
     if (!canvas) return;
     const g = geometry.current;
     const { boxWidth: w, boxHeight: h } = g;
-    // At the screen's own resolution, but never wider than 3840 pixels: the
-    // pictures are made on a plane of at most that, mostly 1920.
-    const dpr = Math.min(typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1, MAX_CANVAS_WIDTH / Math.max(1, w));
-    const width = Math.max(1, Math.round(w * dpr));
-    const height = Math.max(1, Math.round(h * dpr));
-    if (canvas.width !== width || canvas.height !== height) {
-      canvas.width = width;
-      canvas.height = height;
+    const plane = planeRef.current;
+    const drawn: { src: { x: number; y: number; width: number; height: number }; at: Rect }[] = [];
+    if (plane && plane.objects.pictures.length > 0 && w > 0 && h > 0 && plane.objects.width > 0 && plane.objects.height > 0) {
+      const { objects } = plane;
+      const t = transformNow();
+      const planeBox = pictureRect(w, h, objects.width, objects.height);
+      const s = planeBox.width / objects.width;
+      const planeOnScreen = transformRect(w, h, t, planeBox);
+      const shows = intersectRect(planeOnScreen, safeBox(w, h, g.side));
+      const placed = objects.pictures.map((p) =>
+        placePicture(
+          transformRect(w, h, t, { left: planeBox.left + p.x * s, top: planeBox.top + p.y * s, width: p.width * s, height: p.height * s }),
+          planeOnScreen,
+          shows,
+        ),
+      );
+      const lift = pictureLift(placed, planeOnScreen, shows, h, clearShown.current);
+      const middle = planeOnScreen.top + planeOnScreen.height / 2;
+      objects.pictures.forEach((p, i) => {
+        const r = placed[i];
+        drawn.push({ src: p, at: { ...r, top: r.top - (isLower(r, middle) ? lift : 0) } });
+      });
     }
+    const dpr = typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    const box = drawnCanvas(drawn.map((d) => d.at), w, h, dpr);
+    const style = canvas.style;
+    style.left = `${box.left}px`;
+    style.top = `${box.top}px`;
+    style.width = `${box.width}px`;
+    style.height = `${box.height}px`;
+    if (canvas.width !== box.pixelWidth || canvas.height !== box.pixelHeight) {
+      canvas.width = box.pixelWidth;
+      canvas.height = box.pixelHeight;
+    }
+    if (!plane || drawn.length === 0 || box.pixelWidth === 0) return;
     const c = canvas.getContext('2d');
     if (!c) return;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, width, height);
-    const plane = planeRef.current;
-    if (!plane || plane.objects.pictures.length === 0 || !(w > 0 && h > 0) || !(plane.objects.width > 0 && plane.objects.height > 0)) return;
-    const { objects } = plane;
-    const t = transformNow();
-    const planeBox = pictureRect(w, h, objects.width, objects.height);
-    const s = planeBox.width / objects.width;
-    const planeOnScreen = transformRect(w, h, t, planeBox);
-    const shows = intersectRect(planeOnScreen, safeBox(w, h, g.side));
-    const placed = objects.pictures.map((p) =>
-      placePicture(
-        transformRect(w, h, t, { left: planeBox.left + p.x * s, top: planeBox.top + p.y * s, width: p.width * s, height: p.height * s }),
-        planeOnScreen,
-        shows,
-      ),
-    );
-    const lift = pictureLift(placed, planeOnScreen, shows, h, clearShown.current);
-    const middle = planeOnScreen.top + planeOnScreen.height / 2;
-    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    c.setTransform(box.scale, 0, 0, box.scale, -box.left * box.scale, -box.top * box.scale);
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = 'high';
-    objects.pictures.forEach((p, i) => {
-      const r = placed[i];
-      const rise = isLower(r, middle) ? lift : 0;
-      c.drawImage(plane.canvas, p.x, p.y, p.width, p.height, r.left, r.top - rise, r.width, r.height);
-    });
+    for (const { src, at } of drawn) {
+      c.drawImage(plane.canvas, src.x, src.y, src.width, src.height, at.left, at.top, at.width, at.height);
+    }
     // transformNow reads refs only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pgsCanvasRef]);
@@ -367,7 +369,8 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
       workerUrl: libpgsWorkerUrl,
       // The plane fitted into the player whole, as the video is (contain).
       aspectRatio: 'contain',
-      mode: DRAWN_HERE,
+      // libpgs's own choice for this browser, but the canvas stays here.
+      mode: pgsMode(navigator.userAgent, typeof Worker !== 'undefined') as unknown as PgsOptions['mode'],
     });
     // libpgs 0.8.1 starts as if its first picture were drawn already (its
     // previous index is 0, not -1): a track turned on, or a title started,

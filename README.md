@@ -87,7 +87,9 @@ held sideways (the safe area's band at the sides) stays clear. Without a
   move with the video; one the zoom would take off screen - a line in a cropped
   bottom bar - moves just far enough to be whole, keeping the gap its file gave
   it to the edge, and one wider than the screen is made smaller in its own
-  shape. Both rise above the controls while they show.
+  shape. Both rise above the controls while they show. libpgs builds the
+  pictures (in a worker where the browser has them) and the player draws each
+  one, on a canvas just round them.
 
 ## Playback telemetry
 

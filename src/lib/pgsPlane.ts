@@ -90,3 +90,77 @@ export function followPlane(ctx: PlaneContext, objects: PlaneObjects, changed: (
     changed();
   };
 }
+
+/** How libpgs runs, here: it builds a track's pictures in a worker and
+ *  draws them in this thread, or does all of it in this thread. Never in a
+ *  canvas handed to a worker (an OffscreenCanvas), where nobody sees what
+ *  it draws where. */
+export type PgsMode = 'workerWithoutOffscreenCanvas' | 'mainThread';
+
+/**
+ * The mode for a browser (its user agent, whether it has workers), as
+ * libpgs's own choice (its BrowserSupport) but for the OffscreenCanvas:
+ * this thread for a Chrome before 36, a Firefox before 25, an older webOS
+ * TV (WebKit, or Chrome 68 and before, whose workers neither load nor
+ * answer) and a browser without workers; a worker for the rest.
+ */
+export function pgsMode(userAgent: string, hasWorker: boolean): PgsMode {
+  const chrome = /Chrome\/(\d+)/.exec(userAgent);
+  const chromeVersion = chrome ? parseInt(chrome[1], 10) : undefined;
+  const firefox = /Firefox\/(\d+)/.exec(userAgent);
+  const firefoxVersion = firefox ? parseInt(firefox[1], 10) : undefined;
+  const webOS = userAgent.includes('Web0S');
+  if (chromeVersion !== undefined && chromeVersion < 36) return 'mainThread';
+  if (firefoxVersion !== undefined && firefoxVersion < 25) return 'mainThread';
+  if (webOS && chromeVersion === undefined) return 'mainThread';
+  if (webOS && chromeVersion !== undefined && chromeVersion <= 68) return 'mainThread';
+  return hasWorker ? 'workerWithoutOffscreenCanvas' : 'mainThread';
+}
+
+/** A rectangle in CSS pixels of the player. */
+export interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The canvas the pictures are drawn on: where it sits in the player and
+ *  its size there (CSS pixels), and its own size in pixels. */
+export interface DrawnCanvas extends Box {
+  pixelWidth: number;
+  pixelHeight: number;
+  /** Pixels per CSS pixel. */
+  scale: number;
+}
+
+/**
+ * The canvas for pictures drawn at `rects` (where they show, risen above the
+ * controls included): just round them, whole pixels and one more at each
+ * edge for the smoothing, within the player `boxWidth` x `boxHeight` - not
+ * the whole player at the screen's resolution, 33 MB at 4K for one line.
+ * `dpr` pixels per CSS pixel, at most `maxPixels` wide or high. Nothing
+ * (0 x 0) where nothing shows.
+ */
+export function drawnCanvas(rects: readonly Box[], boxWidth: number, boxHeight: number, dpr: number, maxPixels = 3840): DrawnCanvas {
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+  for (const r of rects) {
+    if (!(r.width > 0 && r.height > 0)) continue;
+    left = Math.min(left, r.left);
+    top = Math.min(top, r.top);
+    right = Math.max(right, r.left + r.width);
+    bottom = Math.max(bottom, r.top + r.height);
+  }
+  left = Math.max(0, Math.floor(left) - 1);
+  top = Math.max(0, Math.floor(top) - 1);
+  right = Math.min(boxWidth, Math.ceil(right) + 1);
+  bottom = Math.min(boxHeight, Math.ceil(bottom) + 1);
+  if (!(right > left && bottom > top)) return { left: 0, top: 0, width: 0, height: 0, pixelWidth: 0, pixelHeight: 0, scale: 1 };
+  const width = right - left;
+  const height = bottom - top;
+  const scale = Math.max(0.01, Math.min(dpr > 0 ? dpr : 1, maxPixels / width, maxPixels / height));
+  return { left, top, width, height, pixelWidth: Math.ceil(width * scale), pixelHeight: Math.ceil(height * scale), scale };
+}

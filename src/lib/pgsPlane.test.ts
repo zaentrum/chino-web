@@ -1,7 +1,7 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { PlaneObjects, followPlane, type PlaneContext } from './pgsPlane.ts';
+import { PlaneObjects, drawnCanvas, followPlane, pgsMode, type PlaneContext } from './pgsPlane.ts';
 
 /** A 2D context as libpgs uses it, recording what reaches the canvas. */
 function fakeContext(width: number, height: number) {
@@ -162,4 +162,37 @@ test('libpgs itself: a cropped picture is gone with the next display set, never 
     g.ImageData = had.ImageData;
     g.requestAnimationFrame = had.requestAnimationFrame;
   }
+});
+
+test('libpgs runs as it chooses for the browser, but never into a canvas handed to a worker: a worker builds, this thread draws; old browsers and TVs all here', () => {
+  const chrome = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+  const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15';
+  const firefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0';
+  assert.equal(pgsMode(chrome, true), 'workerWithoutOffscreenCanvas');
+  assert.equal(pgsMode(safari, true), 'workerWithoutOffscreenCanvas');
+  assert.equal(pgsMode(firefox, true), 'workerWithoutOffscreenCanvas');
+  // No workers at all: this thread.
+  assert.equal(pgsMode(chrome, false), 'mainThread');
+  // Where libpgs itself chooses this thread.
+  assert.equal(pgsMode('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/35.0.1916.153 Safari/537.36', true), 'mainThread');
+  assert.equal(pgsMode('Mozilla/5.0 (X11; Linux x86_64; rv:24.0) Gecko/20100101 Firefox/24.0', true), 'mainThread');
+  assert.equal(pgsMode('Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/538.2 (KHTML, like Gecko) Large Screen Safari/538.2 LG Browser/7.00.00(LGE; WEBOS1; 04.06.25; 1; DTV_W15U); webOS.TV-2015; LG NetCast.TV-2013 Compatible (LGE, WEBOS1, wireless)', true), 'mainThread');
+  assert.equal(pgsMode('Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 Safari/537.36 WebAppManager', true), 'mainThread');
+  assert.equal(pgsMode('Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36 WebAppManager', true), 'workerWithoutOffscreenCanvas');
+});
+
+test('the pictures\' canvas is only as large as what it shows: one line on a 4K screen, a line\'s pixels, never the whole player at its resolution', () => {
+  // A 3840 x 2160 player at 2 pixels a CSS pixel, one line at its bottom.
+  const one = drawnCanvas([{ left: 1320.5, top: 1900.25, width: 1200, height: 100 }], 3840, 2160, 2);
+  assert.deepEqual(one, { left: 1319, top: 1899, width: 1203, height: 103, pixelWidth: 2406, pixelHeight: 206, scale: 2 });
+  assert.ok(one.pixelWidth * one.pixelHeight * 4 < 3840 * 2160 * 4 * 4 / 50);
+  // A sign at the top and a line at the bottom: one canvas round both.
+  const two = drawnCanvas([{ left: 900, top: 100, width: 400, height: 60 }, { left: 700, top: 980, width: 800, height: 60 }], 1920, 1080, 1);
+  assert.deepEqual([two.left, two.top, two.width, two.height], [699, 99, 802, 942]);
+  // Kept within the player, and never wider than 3840 pixels.
+  const edge = drawnCanvas([{ left: -20, top: 1060, width: 4000, height: 40 }], 1920, 1080, 4);
+  assert.deepEqual([edge.left, edge.top, edge.width, edge.height], [0, 1059, 1920, 21]);
+  assert.equal(edge.pixelWidth, 3840);
+  // Nothing shown: nothing drawn.
+  assert.deepEqual(drawnCanvas([], 1920, 1080, 2), { left: 0, top: 0, width: 0, height: 0, pixelWidth: 0, pixelHeight: 0, scale: 1 });
 });
