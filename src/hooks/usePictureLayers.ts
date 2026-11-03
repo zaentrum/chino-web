@@ -16,6 +16,8 @@ import {
   pictureTransform,
   placePicture,
   rememberedFillApplies,
+  safeBox,
+  safeSide,
   saveFill,
   subtitleRegion,
   toggledFill,
@@ -53,6 +55,8 @@ interface Geometry {
   boxHeight: number;
   frame: Rect;
   area: PictureArea | null;
+  /** The band kept clear at the sides (the safe area), where it applies. */
+  side: number;
   /** The picture's size is known: the transform applies. */
   known: boolean;
 }
@@ -81,6 +85,38 @@ function animate(value: { current: number }, to: number, ms: number, onFrame: ()
   };
   frame = requestAnimationFrame(step);
   return () => cancelAnimationFrame(frame);
+}
+
+/**
+ * The safe area's band at the sides, in CSS pixels: a notch held sideways
+ * (index.html asks for viewport-fit=cover). Read off an element whose
+ * padding is env(safe-area-inset-left) and -right, again as the window
+ * turns or resizes.
+ */
+function useSafeSide(): number {
+  const [side, setSide] = useState(0);
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof getComputedStyle === 'undefined') return;
+    const probe = document.createElement('div');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText =
+      'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;' +
+      'padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)';
+    document.body.appendChild(probe);
+    const read = () => {
+      const style = getComputedStyle(probe);
+      setSide(safeSide(style.paddingLeft, style.paddingRight));
+    };
+    read();
+    window.addEventListener('resize', read);
+    window.addEventListener('orientationchange', read);
+    return () => {
+      window.removeEventListener('resize', read);
+      window.removeEventListener('orientationchange', read);
+      probe.remove();
+    };
+  }, []);
+  return side;
 }
 
 export interface PictureLayersInput {
@@ -121,7 +157,8 @@ export interface PictureLayers {
 /**
  * The picture and what is drawn over it, as pictureFit.ts places them: the
  * video and the held picture moved and scaled together - fitted, or filled
- * where the viewer chose it - the region a text subtitle is laid out on, and a PGS subtitle's pictures each
+ * where the viewer chose it - clear of a notch's band at the sides, the
+ * region a text subtitle is laid out on, and a PGS subtitle's pictures each
  * drawn where it belongs, whole on screen and above the controls while they
  * show. Follows the player's size, the picture's own (a rendition of
  * another shape) and the viewer's fill; zooms to fill and back in a quarter
@@ -166,14 +203,16 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
       window.removeEventListener('resize', measure);
     };
   }, [mounted, videoRef]);
+  const safe = useSafeSide();
 
   const { boxWidth, boxHeight, videoWidth, videoHeight } = sizes;
   const known = boxWidth > 0 && boxHeight > 0 && videoWidth > 0 && videoHeight > 0;
   const frame = useMemo(() => pictureRect(boxWidth, boxHeight, videoWidth, videoHeight), [boxWidth, boxHeight, videoWidth, videoHeight]);
-  // Without an area, nothing of this: no transform, no fill.
+  // Without an area, nothing of this: no transform, no fill, no band.
   const usedArea = known ? area : null;
-  const scales = pictureScales(boxWidth, boxHeight, frame, usedArea);
-  const applies = rememberedFillApplies(boxWidth, boxHeight, frame, usedArea);
+  const side = usedArea ? safe : 0;
+  const scales = pictureScales(boxWidth, boxHeight, frame, usedArea, side);
+  const applies = rememberedFillApplies(boxWidth, boxHeight, frame, usedArea, side);
 
   // The device's fill, and the one chosen for this title alone.
   const [choice, setChoice] = useState<FillChoice>(() => ({ remembered: loadFill(), title: null }));
@@ -194,30 +233,31 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
   }, []);
   const fill = fillShown(choice, itemId, applies);
   const zoom = fill && scales.fills ? 1 : 0;
-  const target = usedArea ? pictureTransform(boxWidth, boxHeight, frame, usedArea, zoom) : NO_TRANSFORM;
-  const region = usedArea ? subtitleRegion(boxWidth, boxHeight, frame, target) : frame;
+  const target = usedArea ? pictureTransform(boxWidth, boxHeight, frame, usedArea, zoom, side) : NO_TRANSFORM;
+  const region = usedArea ? subtitleRegion(boxWidth, boxHeight, frame, target, side) : frame;
 
   // What the layers are drawn with: the latest geometry, the zoom on screen
   // (0 fitted, 1 filled, between while it zooms) and what the controls
   // cover as the subtitle rises.
-  const geometry = useRef<Geometry>({ boxWidth: 0, boxHeight: 0, frame, area: null, known: false });
+  const geometry = useRef<Geometry>({ boxWidth: 0, boxHeight: 0, frame, area: null, side: 0, known: false });
   const zoomShown = useRef(zoom);
   const clearShown = useRef(clear);
   const planeRef = useRef<{ objects: PlaneObjects; canvas: HTMLCanvasElement } | null>(null);
 
   const transformNow = (): PictureTransform => {
     const g = geometry.current;
-    return g.known && g.area ? pictureTransform(g.boxWidth, g.boxHeight, g.frame, g.area, zoomShown.current) : NO_TRANSFORM;
+    return g.known && g.area ? pictureTransform(g.boxWidth, g.boxHeight, g.frame, g.area, zoomShown.current, g.side) : NO_TRANSFORM;
   };
 
   // A PGS subtitle's pictures, each where it belongs: the plane fitted into
   // the player as libpgs fits it (contain), moved with the video, each
-  // picture kept whole on screen (placePicture), the low ones above the
-  // controls while they show (pictureLift).
+  // picture kept whole on screen and clear of the bands (placePicture), the
+  // low ones above the controls while they show (pictureLift).
   const composite = useCallback(() => {
     const canvas = pgsCanvasRef.current;
     if (!canvas) return;
-    const { boxWidth: w, boxHeight: h } = geometry.current;
+    const g = geometry.current;
+    const { boxWidth: w, boxHeight: h } = g;
     // At the screen's own resolution, but never wider than 3840 pixels: the
     // pictures are made on a plane of at most that, mostly 1920.
     const dpr = Math.min(typeof window !== 'undefined' && window.devicePixelRatio > 0 ? window.devicePixelRatio : 1, MAX_CANVAS_WIDTH / Math.max(1, w));
@@ -238,7 +278,7 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
     const planeBox = pictureRect(w, h, objects.width, objects.height);
     const s = planeBox.width / objects.width;
     const planeOnScreen = transformRect(w, h, t, planeBox);
-    const shows = intersectRect(planeOnScreen, { left: 0, top: 0, width: w, height: h });
+    const shows = intersectRect(planeOnScreen, safeBox(w, h, g.side));
     const placed = objects.pictures.map((p) =>
       placePicture(
         transformRect(w, h, t, { left: planeBox.left + p.x * s, top: planeBox.top + p.y * s, width: p.width * s, height: p.height * s }),
@@ -289,7 +329,7 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
   }, [videoRef, heldFrameRef, composite]);
 
   useEffect(() => {
-    geometry.current = { boxWidth, boxHeight, frame, area: usedArea, known };
+    geometry.current = { boxWidth, boxHeight, frame, area: usedArea, side, known };
     const zooms = zoomNext.current;
     zoomNext.current = false;
     if (!zooms) {
@@ -299,7 +339,7 @@ export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsC
     }
     return animate(zoomShown, zoom, ZOOM_MS, draw);
     // usedArea is area while the size is known.
-  }, [mounted, boxWidth, boxHeight, frame, area, known, zoom, draw]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [mounted, boxWidth, boxHeight, frame, area, side, known, zoom, draw]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The low pictures rise while the controls show, and come back down as
   // they hide, at their pace.

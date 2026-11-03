@@ -8,8 +8,9 @@
 // black. Pure: pictureFit.test.ts runs it under node --test.
 //
 // - Fit (always, unless the viewer zooms): the picture as large as the
-//   screen allows and centred. The bars are cropped where they would show;
-//   the picture never is. Without a pictureArea nothing changes: the whole frame, no
+//   screen allows and centred, clear of a notch's band at the sides (the
+//   safe area). The bars are cropped where they would show; the picture
+//   never is. Without a pictureArea nothing changes: the whole frame, no
 //   transform, no fill - exactly as before.
 // - Fill (zoom to fill): the picture covers the screen, its edges cropped.
 //   Only for a title with a pictureArea, on a screen wider than tall, and
@@ -92,8 +93,8 @@ const AS_LAID_OUT: PictureScales = { fit: 1, fill: 1, fills: false };
 /**
  * The scales of a player `boxWidth` x `boxHeight` showing `frame` - the coded
  * frame as it lays it out, whole and centred (pictureRect) - whose picture
- * is `area`. `side` is kept clear on the left and the right (a display
- * cutout's band): the fitted picture stays inside it, the filled one covers
+ * is `area`. `side` is kept clear on the left and the right (a notch's band,
+ * the safe area): the fitted picture stays inside it, the filled one covers
  * the whole box. A title without an area has neither: the frame as laid out.
  */
 export function pictureScales(boxWidth: number, boxHeight: number, frame: Rect, area: PictureArea | null, side = 0): PictureScales {
@@ -169,6 +170,26 @@ export function toggledFill(choice: FillChoice, itemId: string, applies: boolean
   return applies ? { remembered: next, title: null } : { remembered: choice.remembered, title: { itemId, fill: next } };
 }
 
+/**
+ * The band kept clear at each side: the larger of the safe area's left and
+ * right insets (CSS lengths in px, as a style computed from
+ * env(safe-area-inset-left) and -right reads), on both sides so the picture
+ * stays centred. 0 where neither is a length.
+ */
+export function safeSide(left: string, right: string): number {
+  const px = (v: string) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  return Math.max(px(left), px(right));
+}
+
+/** The box less `side` at the left and the right: what may show a
+ *  subtitle. */
+export function safeBox(boxWidth: number, boxHeight: number, side = 0): Rect {
+  const s = Math.max(0, Math.min(side, boxWidth / 2));
+  return { left: s, top: 0, width: boxWidth - 2 * s, height: boxHeight };
+}
 
 /** A transform of everything drawn over the frame, about the middle of the
  *  player: scaled by `scale`, then moved by `x`, `y` (CSS pixels) - CSS's
@@ -248,12 +269,7 @@ export function intersectRect(a: Rect, b: Rect): Rect {
  * above its bottom, within 80 % of its width.
  */
 export function subtitleRegion(boxWidth: number, boxHeight: number, frame: Rect, t: PictureTransform, side = 0): Rect {
-  return intersectRect(transformRect(boxWidth, boxHeight, t, frame), {
-    left: side,
-    top: 0,
-    width: Math.max(0, boxWidth - 2 * side),
-    height: boxHeight,
-  });
+  return intersectRect(transformRect(boxWidth, boxHeight, t, frame), safeBox(boxWidth, boxHeight, side));
 }
 
 /** The most of a gap to an edge a moved picture subtitle keeps: shares of

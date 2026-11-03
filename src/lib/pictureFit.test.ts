@@ -15,6 +15,8 @@ import {
   pictureTransform,
   placePicture,
   rememberedFillApplies,
+  safeBox,
+  safeSide,
   saveFill,
   subtitleRegion,
   toggledFill,
@@ -258,6 +260,32 @@ test('the fill button on a title the device\'s fill applies to sets the device\'
   // title's own is cleared.
   assert.deepEqual(toggledFill({ remembered: true, title: { itemId: 'a', fill: false } }, 'a', true), { remembered: true, title: null });
   assert.deepEqual(toggledFill(filled, 'a', true), { remembered: false, title: null });
+});
+
+test('a notch\'s safe area at the sides: the larger inset kept clear on both, the text and the pictures inside it, the fill over the whole screen', () => {
+  assert.equal(safeSide('47px', '0px'), 47);
+  assert.equal(safeSide('0px', '44.5px'), 44.5);
+  assert.equal(safeSide('', 'auto'), 0);
+  assert.equal(safeSide('-3px', '0px'), 0);
+  assert.deepEqual(safeBox(932, 430, 47), { left: 47, top: 0, width: 838, height: 430 });
+  const frame = pictureRect(932, 430, 1920, 1080);
+  // Fitted, the scope film keeps out of the bands...
+  const fit = pictureTransform(932, 430, frame, LETTERBOX, 0, 47);
+  const picture = transformRect(932, 430, fit, { left: frame.left, top: frame.top + LETTERBOX.top * frame.height, width: frame.width, height: LETTERBOX.height * frame.height });
+  close(picture.left, 47, 'left');
+  close(picture.left + picture.width, 932 - 47, 'right');
+  // ...filled, it covers them too.
+  const fill = pictureTransform(932, 430, frame, LETTERBOX, 1, 47);
+  const filled = transformRect(932, 430, fill, frame);
+  assert.ok(filled.left <= 0 && filled.left + filled.width >= 932);
+  // The text, and a picture subtitle, never in a band.
+  const text = subtitleRegion(932, 430, frame, fill, 47);
+  close(text.left, 47, 'text left');
+  close(text.width, 838, 'text width');
+  const plane = transformRect(932, 430, fill, frame);
+  const shows = intersectRect(plane, safeBox(932, 430, 47));
+  const line = placePicture(transformRect(932, 430, fill, { left: frame.left + 10, top: 380, width: 300, height: 30 }), plane, shows);
+  assert.ok(line.left >= 47, `line at ${line.left}`);
 });
 
 test('a picture subtitle in a cropped bottom bar moves up until it is whole on screen, keeping the gap the file gave it', () => {
