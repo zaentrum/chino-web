@@ -75,8 +75,12 @@ fills the width, the bars are cropped, the picture never is. Without a
 
 - **Zoom to fill** - for a title with a `pictureArea`, on a screen wider than
   tall where it changes the picture, a button beside fullscreen zooms the
-  picture until it covers the screen, its edges cropped, and back. The browser
-  keeps the choice (`localStorage`, `chino:picture:fill`) for every title.
+  picture until it covers the screen, its edges cropped, and back. Pressed on
+  a title fill crops at most a tenth of the picture's width and of its height,
+  it is the browser's choice (`localStorage`, `chino:picture:fill`): every such
+  title starts filled, and starts fitted where fill would crop more - a scope
+  film on a 16:10 screen loses a third of its width. Pressed on such a title,
+  it holds for that title alone.
 - **Subtitles** - a text subtitle is laid out on what shows of the frame: 5.33 %
   of its height, 8 % of it above its bottom edge. A PGS subtitle's pictures
   move with the video; one the zoom would take off screen - a line in a cropped

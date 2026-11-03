@@ -5,6 +5,8 @@ import {
   FILL_KEY,
   LIFT_GAP,
   NO_TRANSFORM,
+  fillCrop,
+  fillShown,
   intersectRect,
   loadFill,
   pictureAreaOf,
@@ -12,10 +14,13 @@ import {
   pictureScales,
   pictureTransform,
   placePicture,
+  rememberedFillApplies,
   saveFill,
   subtitleRegion,
+  toggledFill,
   transformCss,
   transformRect,
+  type FillChoice,
 } from './pictureFit.ts';
 import { pictureRect } from './subtitleLook.ts';
 
@@ -181,6 +186,7 @@ test('without a pictureArea nothing changes, in any window: no fill to offer, no
   assert.equal(elsewhere, 0, 'subtitle region moved');
   // A 16:9 title in a desktop window of 1920 x 969 kept its whole height.
   assert.deepEqual(pictureTransform(1920, 969, pictureRect(1920, 969, 1920, 1080), null, 1), NO_TRANSFORM);
+  assert.equal(fillCrop(2560, 1080, pictureRect(2560, 1080, 1440, 1080), null).height, 0);
 });
 
 test('a scale within floating point of 1 is none: no CSS transform where a title with a pictureArea needs no zoom', () => {
@@ -198,6 +204,60 @@ test('a scale within floating point of 1 is none: no CSS transform where a title
   assert.equal(stray, 0);
   assert.equal(transformCss({ scale: 0.9999999999999999, x: 1e-12, y: -1e-12 }), '');
   assert.equal(transformCss({ scale: 1.25, x: 0, y: -10 }), 'translate(0px, -10px) scale(1.25)');
+});
+
+test('the device\'s fill starts a scope film filled where it crops at most a tenth of its width and height: a 21:9 window or a phone sideways, never 16:10', () => {
+  const at = (bw: number, bh: number, area: typeof LETTERBOX | null) => rememberedFillApplies(bw, bh, pictureRect(bw, bh, 1920, 1080), area);
+  // About 21:9 (1680 x 720): fill crops 2.3 % of the width.
+  close(fillCrop(1680, 720, pictureRect(1680, 720, 1920, 1080), LETTERBOX).width, 1 - 1680 / (1.34336 * 1280), 'crop', 1e-4);
+  assert.equal(at(1680, 720, LETTERBOX), true);
+  // A phone held sideways (932 x 430): 9.2 %.
+  close(fillCrop(932, 430, pictureRect(932, 430, 1920, 1080), LETTERBOX).width, 0.0923, 'phone', 1e-3);
+  assert.equal(at(932, 430, LETTERBOX), true);
+  // 16:10 (1680 x 1050): a third of the width - not by itself.
+  assert.ok(fillCrop(1680, 1050, pictureRect(1680, 1050, 1920, 1080), LETTERBOX).width > 0.3);
+  assert.equal(at(1680, 1050, LETTERBOX), false);
+  // A tablet (1180 x 820): 40 %.
+  assert.equal(at(1180, 820, LETTERBOX), false);
+  // A 21:9 monitor (2560 x 1080) the film all but fills already: fill gains
+  // under 1 %, nothing to do.
+  assert.equal(at(2560, 1080, LETTERBOX), false);
+  // Upright, or without an area: never.
+  assert.equal(at(430, 932, LETTERBOX), false);
+  assert.equal(at(1680, 720, null), false);
+  // A 4:3 picture pillarboxed in 16:9 on a phone sideways: filled, it would
+  // lose 39 % of its height.
+  assert.equal(at(932, 430, PILLARBOX), false);
+});
+
+test('the fill button on a title the device\'s fill applies to sets the device\'s choice; on another it holds for that title alone, until another title plays', () => {
+  const none: FillChoice = { remembered: false, title: null };
+  // A scope film in a 21:9 window (applies): pressed, the device fills -
+  // the next such title starts filled, a film it doesn't apply to fitted.
+  const filled = toggledFill(none, 'a', true);
+  assert.deepEqual(filled, { remembered: true, title: null });
+  assert.equal(fillShown(filled, 'b', true), true);
+  assert.equal(fillShown(filled, 'c', false), false);
+  // The same film in a 16:10 window (doesn't apply): pressed, this title
+  // alone fills; the device's choice is as it was.
+  const once = toggledFill(none, 'a', false);
+  assert.deepEqual(once, { remembered: false, title: { itemId: 'a', fill: true } });
+  assert.equal(fillShown(once, 'a', false), true);
+  // It stays through a resize, to a window the device's fill applies to.
+  assert.equal(fillShown(once, 'a', true), true);
+  // Another title: the title's own choice is gone.
+  assert.equal(fillShown(once, 'b', false), false);
+  assert.equal(fillShown(once, 'b', true), false);
+  // Pressed again where it doesn't apply: fitted again, for this title.
+  assert.deepEqual(toggledFill(once, 'a', false), { remembered: false, title: { itemId: 'a', fill: false } });
+  // A device that fills: a title it doesn't apply to starts fitted, and a
+  // press fills it alone, the device's choice kept.
+  assert.equal(fillShown(filled, 'c', false), false);
+  assert.deepEqual(toggledFill(filled, 'c', false), { remembered: true, title: { itemId: 'c', fill: true } });
+  // Pressed on a title it applies to: the device's choice flips, and the
+  // title's own is cleared.
+  assert.deepEqual(toggledFill({ remembered: true, title: { itemId: 'a', fill: false } }, 'a', true), { remembered: true, title: null });
+  assert.deepEqual(toggledFill(filled, 'a', true), { remembered: false, title: null });
 });
 
 test('a picture subtitle in a cropped bottom bar moves up until it is whole on screen, keeping the gap the file gave it', () => {

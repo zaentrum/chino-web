@@ -13,7 +13,10 @@
 //   transform, no fill - exactly as before.
 // - Fill (zoom to fill): the picture covers the screen, its edges cropped.
 //   Only for a title with a pictureArea, on a screen wider than tall, and
-//   only where it changes something; remembered on the device.
+//   only where it changes something. The device remembers it, and starts a
+//   title filled only where that crops at most a tenth of its picture's
+//   width and of its height (rememberedFillApplies); a fill or fit chosen
+//   on a title it would crop more of holds for that title alone.
 //
 // The video and every layer drawn over its frame (the held picture of a
 // quality switch, a PGS subtitle's pictures) move together, by one
@@ -104,6 +107,66 @@ export function pictureScales(boxWidth: number, boxHeight: number, frame: Rect, 
   const fill = Math.max(boxWidth / pictureWidth, boxHeight / pictureHeight);
   const fills = boxWidth > boxHeight && fill > fit * FILL_STEP;
   return { fit, fill: fills ? fill : fit, fills };
+}
+
+/** The most of the picture's width, and of its height, a fill may crop and
+ *  still start a title filled by itself (the device's remembered fill). */
+export const REMEMBERED_FILL_CROPS_AT_MOST = 0.1;
+
+/**
+ * What a fill crops of the picture: the share of its width and of its
+ * height outside the whole box, filled - max(0, 1 - box / (fill x picture))
+ * on each axis. Nothing where fill does not apply.
+ */
+export function fillCrop(boxWidth: number, boxHeight: number, frame: Rect, area: PictureArea | null, side = 0): { width: number; height: number } {
+  const s = pictureScales(boxWidth, boxHeight, frame, area, side);
+  if (!area || !s.fills) return { width: 0, height: 0 };
+  return {
+    width: Math.max(0, 1 - boxWidth / (s.fill * area.width * frame.width)),
+    height: Math.max(0, 1 - boxHeight / (s.fill * area.height * frame.height)),
+  };
+}
+
+/**
+ * Whether the device's remembered fill starts this title filled: it has a
+ * pictureArea, fill applies (a screen wider than tall, fill more than 1 %
+ * larger than fit) and crops at most a tenth of the picture's width and of
+ * its height - a scope film on a 21:9 screen or a phone held sideways, not
+ * on a 16:10 one, where it would lose a quarter of its width.
+ */
+export function rememberedFillApplies(boxWidth: number, boxHeight: number, frame: Rect, area: PictureArea | null, side = 0): boolean {
+  if (!area || !pictureScales(boxWidth, boxHeight, frame, area, side).fills) return false;
+  const crop = fillCrop(boxWidth, boxHeight, frame, area, side);
+  return crop.width <= REMEMBERED_FILL_CROPS_AT_MOST + SAME_SCALE && crop.height <= REMEMBERED_FILL_CROPS_AT_MOST + SAME_SCALE;
+}
+
+/** The viewer's fill: the device's, and this title's own. */
+export interface FillChoice {
+  /** The device's, kept across titles (FILL_KEY). */
+  remembered: boolean;
+  /** Chosen on a title the remembered fill does not apply to: for that
+   *  title alone. Null where the viewer chose nothing on this title. */
+  title: { itemId: string; fill: boolean } | null;
+}
+
+/**
+ * Whether `itemId` shows filled: as the viewer chose on this title, else
+ * as the device remembers where that applies (`applies`:
+ * rememberedFillApplies), else fitted. Resizes keep to this rule.
+ */
+export function fillShown(choice: FillChoice, itemId: string, applies: boolean): boolean {
+  if (choice.title && choice.title.itemId === itemId) return choice.title.fill;
+  return choice.remembered && applies;
+}
+
+/**
+ * The choice after the fill button: on a title the remembered fill applies
+ * to, the device's choice, this title's own cleared; on any other, this
+ * title's alone, the device's left as it was.
+ */
+export function toggledFill(choice: FillChoice, itemId: string, applies: boolean): FillChoice {
+  const next = !fillShown(choice, itemId, applies);
+  return applies ? { remembered: next, title: null } : { remembered: choice.remembered, title: { itemId, fill: next } };
 }
 
 
@@ -274,7 +337,8 @@ export function isLower(r: Rect, middle: number): boolean {
 export const FILL_SCREEN = 'Zoom to fill';
 
 /** Where the device keeps the viewer's fill (zoom to fill), across titles
- *  and reloads: '1' filled; anything else fitted. */
+ *  and reloads: '1' filled where it applies (rememberedFillApplies);
+ *  anything else fitted. */
 export const FILL_KEY = 'chino:picture:fill';
 
 /** Whether the viewer filled the screen the last time they chose. */

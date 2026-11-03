@@ -2116,6 +2116,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   const pictureArea = useMemo(() => pictureAreaOf(info?.pictureArea), [info?.pictureArea]);
   const picture = usePictureLayers({
     mounted: !!playUrl,
+    itemId,
     videoRef,
     heldFrameRef,
     pgsCanvasRef,
@@ -4786,7 +4787,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           {/* Zoom to fill: the picture covers the screen, its edges cropped
               - only for a title with a pictureArea, where that changes it,
               on a screen wider than tall; pressed again, the whole picture.
-              Remembered on the device. */}
+              The device remembers it for titles it crops little of
+              (lib/pictureFit.ts rememberedFillApplies); on another it holds
+              for that title alone. */}
           {picture.fills && (
             <button
               onClick={picture.toggleFill}

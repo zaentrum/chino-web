@@ -7,6 +7,7 @@ import libpgsWorkerUrl from 'libpgs/dist/libpgs.worker.js?url';
 import { pictureRect, type Rect } from '../lib/subtitleLook';
 import {
   NO_TRANSFORM,
+  fillShown,
   intersectRect,
   isLower,
   loadFill,
@@ -14,10 +15,13 @@ import {
   pictureScales,
   pictureTransform,
   placePicture,
+  rememberedFillApplies,
   saveFill,
   subtitleRegion,
+  toggledFill,
   transformCss,
   transformRect,
+  type FillChoice,
   type PictureArea,
   type PictureTransform,
 } from '../lib/pictureFit';
@@ -82,6 +86,8 @@ function animate(value: { current: number }, to: number, ms: number, onFrame: ()
 export interface PictureLayersInput {
   /** The <video> is in the page. */
   mounted: boolean;
+  /** The title playing: a fill chosen for it alone goes with it. */
+  itemId: string;
   videoRef: RefObject<HTMLVideoElement | null>;
   /** The held picture of a quality switch: moved with the video. */
   heldFrameRef: RefObject<HTMLCanvasElement | null>;
@@ -105,9 +111,10 @@ export interface PictureLayers {
   /** Fill changes the picture here: the fill button shows. Only for a title
    *  with a pictureArea. */
   fills: boolean;
-  /** The viewer's choice: fill the screen, where fill changes the picture. */
+  /** The picture is filled (the button pressed). */
   fill: boolean;
-  /** Fill, or fit again: remembered on the device. */
+  /** Fill, or fit again: on a title the device's fill applies to, for every
+   *  such title; on another, for this title alone. */
   toggleFill: () => void;
 }
 
@@ -120,7 +127,7 @@ export interface PictureLayers {
  * another shape) and the viewer's fill; zooms to fill and back in a quarter
  * of a second. A title without a pictureArea is left exactly as before.
  */
-export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef, area, pgs, clear }: PictureLayersInput): PictureLayers {
+export function usePictureLayers({ mounted, itemId, videoRef, heldFrameRef, pgsCanvasRef, area, pgs, clear }: PictureLayersInput): PictureLayers {
   const [sizes, setSizes] = useState<Sizes>({ boxWidth: 0, boxHeight: 0, videoWidth: 0, videoHeight: 0 });
   useEffect(() => {
     const v = videoRef.current;
@@ -166,22 +173,26 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
   // Without an area, nothing of this: no transform, no fill.
   const usedArea = known ? area : null;
   const scales = pictureScales(boxWidth, boxHeight, frame, usedArea);
+  const applies = rememberedFillApplies(boxWidth, boxHeight, frame, usedArea);
 
-  const [fill, setFill] = useState(loadFill);
-  const fillRef = useRef(fill);
-  // Whether fill changes the picture now, for the button's press.
-  const fillsRef = useRef(false);
-  fillsRef.current = known && scales.fills;
+  // The device's fill, and the one chosen for this title alone.
+  const [choice, setChoice] = useState<FillChoice>(() => ({ remembered: loadFill(), title: null }));
+  const choiceRef = useRef(choice);
+  choiceRef.current = choice;
+  const now = useRef({ itemId, applies, fills: false });
+  now.current = { itemId, applies, fills: known && scales.fills };
   // The next change of the picture comes from the fill button: it zooms.
-  // Any other - a resize, a rendition - is made at once.
+  // Any other - a resize, a rendition, another title - is made at once.
   const zoomNext = useRef(false);
   const toggleFill = useCallback(() => {
-    const next = !fillRef.current;
-    fillRef.current = next;
-    saveFill(next);
-    zoomNext.current = fillsRef.current;
-    setFill(next);
+    const { itemId: id, applies: a, fills } = now.current;
+    const next = toggledFill(choiceRef.current, id, a);
+    if (next.remembered !== choiceRef.current.remembered) saveFill(next.remembered);
+    zoomNext.current = fills;
+    choiceRef.current = next;
+    setChoice(next);
   }, []);
+  const fill = fillShown(choice, itemId, applies);
   const zoom = fill && scales.fills ? 1 : 0;
   const target = usedArea ? pictureTransform(boxWidth, boxHeight, frame, usedArea, zoom) : NO_TRANSFORM;
   const region = usedArea ? subtitleRegion(boxWidth, boxHeight, frame, target) : frame;
