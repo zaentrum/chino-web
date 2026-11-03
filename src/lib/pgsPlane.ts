@@ -41,13 +41,6 @@ export class PlaneObjects {
     this.drawn.push({ x, y, width: right - x, height: bottom - y });
   }
 
-  /** `r` cleared: the pictures wholly inside it are gone. */
-  clear(r: PlaneRect): void {
-    this.drawn = this.drawn.filter(
-      (p) => !(p.x >= r.x && p.y >= r.y && p.x + p.width <= r.x + r.width && p.y + p.height <= r.y + r.height),
-    );
-  }
-
   /** Nothing on the plane. */
   reset(): void {
     this.drawn = [];
@@ -65,8 +58,11 @@ export interface PlaneContext {
 /**
  * Has `objects` follow what is drawn with `ctx` - the plane canvas's own 2D
  * context, which libpgs asks for again and draws with: each picture it puts
- * on the plane, each area it clears - and calls `changed` after each. What
- * is drawn is drawn as before.
+ * on the plane - and calls `changed` after each. What is drawn is drawn as
+ * before. libpgs clears what it drew before as it draws the next display
+ * set, or none: a clear is all of it gone, every picture forgotten and its
+ * own place on the plane cleared too - libpgs clears a cropped picture at
+ * its object's place, not where it drew the cropped part, which stayed.
  */
 export function followPlane(ctx: PlaneContext, objects: PlaneObjects, changed: () => void): void {
   const put = ctx.putImageData.bind(ctx) as (...args: unknown[]) => void;
@@ -89,7 +85,8 @@ export function followPlane(ctx: PlaneContext, objects: PlaneObjects, changed: (
   }) as PlaneContext['putImageData'];
   ctx.clearRect = (x: number, y: number, w: number, h: number) => {
     clear(x, y, w, h);
-    objects.clear({ x, y, width: w, height: h });
+    for (const p of objects.pictures) clear(p.x, p.y, p.width, p.height);
+    objects.reset();
     changed();
   };
 }
