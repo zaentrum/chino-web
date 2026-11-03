@@ -9,10 +9,11 @@
 //
 // - Fit (always, unless the viewer zooms): the picture as large as the
 //   screen allows and centred. The bars are cropped where they would show;
-//   the picture never is. Without a pictureArea, the whole frame - as before.
+//   the picture never is. Without a pictureArea nothing changes: the whole frame, no
+//   transform, no fill - exactly as before.
 // - Fill (zoom to fill): the picture covers the screen, its edges cropped.
-//   Only on a screen wider than tall, and only where it changes something;
-//   remembered on the device.
+//   Only for a title with a pictureArea, on a screen wider than tall, and
+//   only where it changes something; remembered on the device.
 //
 // The video and every layer drawn over its frame (the held picture of a
 // quality switch, a PGS subtitle's pictures) move together, by one
@@ -32,9 +33,6 @@ export interface PictureArea {
   width: number;
   height: number;
 }
-
-/** The whole frame: a title without a pictureArea. */
-export const WHOLE_FRAME: PictureArea = { left: 0, top: 0, width: 1, height: 1 };
 
 /** How far past an edge a measured area may reach (rounding) and be clamped
  *  to it. */
@@ -82,24 +80,32 @@ export interface PictureScales {
   fills: boolean;
 }
 
+/** Scales this close to each other are the same scale (floating point). */
+const SAME_SCALE = 1e-9;
+
+/** No scale, no fill: the frame as the player lays it out. */
+const AS_LAID_OUT: PictureScales = { fit: 1, fill: 1, fills: false };
+
 /**
  * The scales of a player `boxWidth` x `boxHeight` showing `frame` - the coded
  * frame as it lays it out, whole and centred (pictureRect) - whose picture
- * is `area` (null: the whole frame). `side` is kept clear on the left and
- * the right (a display cutout's band): the fitted picture stays inside it,
- * the filled one covers the whole box.
+ * is `area`. `side` is kept clear on the left and the right (a display
+ * cutout's band): the fitted picture stays inside it, the filled one covers
+ * the whole box. A title without an area has neither: the frame as laid out.
  */
 export function pictureScales(boxWidth: number, boxHeight: number, frame: Rect, area: PictureArea | null, side = 0): PictureScales {
-  const a = area ?? WHOLE_FRAME;
-  const pictureWidth = a.width * frame.width;
-  const pictureHeight = a.height * frame.height;
-  if (!(pictureWidth > 0 && pictureHeight > 0 && boxWidth > 0 && boxHeight > 0)) return { fit: 1, fill: 1, fills: false };
-  const fit = Math.min(Math.max(0, boxWidth - 2 * side) / pictureWidth, boxHeight / pictureHeight);
-  if (!(fit > 0)) return { fit: 1, fill: 1, fills: false };
+  if (!area) return AS_LAID_OUT;
+  const pictureWidth = area.width * frame.width;
+  const pictureHeight = area.height * frame.height;
+  if (!(pictureWidth > 0 && pictureHeight > 0 && boxWidth > 0 && boxHeight > 0)) return AS_LAID_OUT;
+  let fit = Math.min(Math.max(0, boxWidth - 2 * Math.max(0, side)) / pictureWidth, boxHeight / pictureHeight);
+  if (!(fit > 0)) return AS_LAID_OUT;
+  if (Math.abs(fit - 1) < SAME_SCALE) fit = 1;
   const fill = Math.max(boxWidth / pictureWidth, boxHeight / pictureHeight);
   const fills = boxWidth > boxHeight && fill > fit * FILL_STEP;
   return { fit, fill: fills ? fill : fit, fills };
 }
+
 
 /** A transform of everything drawn over the frame, about the middle of the
  *  player: scaled by `scale`, then moved by `x`, `y` (CSS pixels) - CSS's
@@ -113,10 +119,14 @@ export interface PictureTransform {
 /** No transform: the frame as the player lays it out. */
 export const NO_TRANSFORM: PictureTransform = { scale: 1, x: 0, y: 0 };
 
+/** A move this small, in CSS pixels, is none (floating point). */
+const NO_MOVE = 1e-6;
+
 /**
  * The transform that shows `area` of `frame` at `zoom`: 0 fitted, 1 filled,
  * in between the scale between them (evenly on a log scale, as a zoom
- * goes), the picture's middle on the player's middle.
+ * goes), the picture's middle on the player's middle. None for a title
+ * without an area, and none where it would change nothing.
  */
 export function pictureTransform(
   boxWidth: number,
@@ -126,19 +136,25 @@ export function pictureTransform(
   zoom: number,
   side = 0,
 ): PictureTransform {
+  if (!area) return NO_TRANSFORM;
   const { fit, fill } = pictureScales(boxWidth, boxHeight, frame, area, side);
-  const a = area ?? WHOLE_FRAME;
-  const scale = fit * Math.pow(fill / fit, zoom);
+  let scale = fit * Math.pow(fill / fit, zoom);
+  if (Math.abs(scale - 1) < SAME_SCALE) scale = 1;
   // The picture's middle, from the frame's - which is the player's: the
   // frame is laid out centred.
-  const cx = (a.left + a.width / 2 - 0.5) * frame.width;
-  const cy = (a.top + a.height / 2 - 0.5) * frame.height;
-  return { scale, x: -scale * cx || 0, y: -scale * cy || 0 };
+  const cx = (area.left + area.width / 2 - 0.5) * frame.width;
+  const cy = (area.top + area.height / 2 - 0.5) * frame.height;
+  const x = -scale * cx;
+  const y = -scale * cy;
+  return { scale, x: Math.abs(x) < NO_MOVE ? 0 : x, y: Math.abs(y) < NO_MOVE ? 0 : y };
 }
 
-/** `t` as CSS: what the video's style.transform is set to. */
+/** `t` as CSS: what the video's style.transform is set to - nothing at all
+ *  where it changes nothing. */
 export function transformCss(t: PictureTransform): string {
-  return t.scale === 1 && t.x === 0 && t.y === 0 ? '' : `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
+  return Math.abs(t.scale - 1) < SAME_SCALE && Math.abs(t.x) < NO_MOVE && Math.abs(t.y) < NO_MOVE
+    ? ''
+    : `translate(${t.x}px, ${t.y}px) scale(${t.scale})`;
 }
 
 /** Where `t` takes `rect` (CSS pixels of a player `boxWidth` x `boxHeight`). */

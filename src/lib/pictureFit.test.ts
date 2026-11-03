@@ -5,7 +5,6 @@ import {
   FILL_KEY,
   LIFT_GAP,
   NO_TRANSFORM,
-  WHOLE_FRAME,
   intersectRect,
   loadFill,
   pictureAreaOf,
@@ -149,21 +148,56 @@ test('a picture that is not in the middle of its frame: moved so its own middle 
   close(picture.top + picture.height / 2, 540, 'middle');
 });
 
-test('without a pictureArea, a 16:9 picture in a 16:9 player is as before; fill only zooms where the shapes differ', () => {
-  const frame = pictureRect(1920, 1080, 1920, 1080);
-  const s = pictureScales(1920, 1080, frame, null);
-  close(s.fit, 1, 'fit');
-  assert.equal(s.fills, false);
-  assert.deepEqual(pictureTransform(1920, 1080, frame, null, 1), NO_TRANSFORM);
-  assert.equal(transformCss(pictureTransform(1920, 1080, frame, null, 0)), '');
-  // A 21:9 screen: the 16:9 frame fitted as before, filled it covers it.
-  const wide = pictureRect(2560, 1080, 1920, 1080);
-  const w = pictureScales(2560, 1080, wide, null);
-  close(w.fit, 1, 'fit');
-  close(w.fill, 2560 / 1920, 'fill');
-  assert.equal(w.fills, true);
+// The probe's sizes: videos of every common frame, players from a phone to
+// 4K - every 7 px across and 11 px down - and the common windows.
+const PROBE_VIDEOS = [[1920, 1080], [1280, 720], [854, 480], [3840, 2160], [1920, 800], [1920, 804], [1440, 1080], [1024, 576],
+  [1998, 1080], [2048, 858], [720, 404], [640, 360], [960, 540], [1916, 1036], [1904, 1072]];
+function probeBoxes(): number[][] {
+  const boxes: number[][] = [];
+  for (let w = 300; w <= 3840; w += 7) for (let h = 200; h <= 2160; h += 11) boxes.push([w, h]);
+  boxes.push([1920, 969], [1536, 730], [1366, 657], [2560, 1271], [932, 430], [844, 390], [390, 844], [1280, 551], [3440, 1328],
+    [2560, 1080], [1920, 1080], [2560, 1440]);
+  return boxes;
+}
+
+test('without a pictureArea nothing changes, in any window: no fill to offer, no transform at all, the subtitle on the frame as laid out', () => {
+  const boxes = probeBoxes();
+  let offered = 0;
+  let moved = 0;
+  let elsewhere = 0;
+  for (const [vw, vh] of PROBE_VIDEOS) {
+    for (const [bw, bh] of boxes) {
+      const frame = pictureRect(bw, bh, vw, vh);
+      if (pictureScales(bw, bh, frame, null).fills || pictureScales(bw, bh, frame, null, 40).fills) offered++;
+      const t = pictureTransform(bw, bh, frame, null, 1, 40);
+      if (transformCss(t) !== '' || transformCss(pictureTransform(bw, bh, frame, null, 0)) !== '') moved++;
+      const r = subtitleRegion(bw, bh, frame, t);
+      const off = Math.max(Math.abs(r.left - frame.left), Math.abs(r.top - frame.top), Math.abs(r.width - frame.width), Math.abs(r.height - frame.height));
+      if (off > 1e-6) elsewhere++;
+    }
+  }
+  assert.equal(offered, 0, 'fill offered');
+  assert.equal(moved, 0, 'transformed');
+  assert.equal(elsewhere, 0, 'subtitle region moved');
+  // A 16:9 title in a desktop window of 1920 x 969 kept its whole height.
+  assert.deepEqual(pictureTransform(1920, 969, pictureRect(1920, 969, 1920, 1080), null, 1), NO_TRANSFORM);
+});
+
+test('a scale within floating point of 1 is none: no CSS transform where a title with a pictureArea needs no zoom', () => {
+  const boxes = probeBoxes();
+  let stray = 0;
+  for (const [vw, vh] of PROBE_VIDEOS) {
+    for (const [bw, bh] of boxes) {
+      const frame = pictureRect(bw, bh, vw, vh);
+      // A scope film letterboxed in a frame laid out across the whole
+      // width: nothing to gain - its width is the window's already.
+      if (frame.width < bw - 1e-9) continue;
+      if (transformCss(pictureTransform(bw, bh, frame, LETTERBOX, 0)) !== '') stray++;
+    }
+  }
+  assert.equal(stray, 0);
+  assert.equal(transformCss({ scale: 0.9999999999999999, x: 1e-12, y: -1e-12 }), '');
   assert.equal(transformCss({ scale: 1.25, x: 0, y: -10 }), 'translate(0px, -10px) scale(1.25)');
-  assert.deepEqual(WHOLE_FRAME, { left: 0, top: 0, width: 1, height: 1 });
 });
 
 test('a picture subtitle in a cropped bottom bar moves up until it is whole on screen, keeping the gap the file gave it', () => {

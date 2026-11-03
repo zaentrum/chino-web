@@ -70,13 +70,13 @@ film letterboxed inside it, the black bars part of the video. Where
 `{left, top, width, height}` as fractions of it, the same for every rendition,
 the union of the picture over the whole title - the picture is as large as the
 screen allows and centred: on a 21:9 monitor or a phone held sideways the film
-fills the width, the bars are cropped, the picture never is. Without one the
-whole frame fits, as before.
+fills the width, the bars are cropped, the picture never is. Without a
+`pictureArea` nothing changes: the whole frame, no zoom, no button, as before.
 
-- **Zoom to fill** - on a screen wider than tall, where it changes the picture,
-  a button beside fullscreen zooms the picture until it covers the screen, its
-  edges cropped, and back. The browser keeps the choice (`localStorage`,
-  `chino:picture:fill`) for every title.
+- **Zoom to fill** - for a title with a `pictureArea`, on a screen wider than
+  tall where it changes the picture, a button beside fullscreen zooms the
+  picture until it covers the screen, its edges cropped, and back. The browser
+  keeps the choice (`localStorage`, `chino:picture:fill`) for every title.
 - **Subtitles** - a text subtitle is laid out on what shows of the frame: 5.33 %
   of its height, 8 % of it above its bottom edge. A PGS subtitle's pictures
   move with the video; one the zoom would take off screen - a line in a cropped

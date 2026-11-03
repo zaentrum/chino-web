@@ -4784,8 +4784,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
           </button>
 
           {/* Zoom to fill: the picture covers the screen, its edges cropped
-              - only where that changes it, on a screen wider than tall;
-              pressed again, the whole picture. Remembered on the device. */}
+              - only for a title with a pictureArea, where that changes it,
+              on a screen wider than tall; pressed again, the whole picture.
+              Remembered on the device. */}
           {picture.fills && (
             <button
               onClick={picture.toggleFill}

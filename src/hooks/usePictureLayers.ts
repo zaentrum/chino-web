@@ -87,8 +87,8 @@ export interface PictureLayersInput {
   heldFrameRef: RefObject<HTMLCanvasElement | null>;
   /** The canvas a PGS subtitle's pictures are drawn on, over the player. */
   pgsCanvasRef: RefObject<HTMLCanvasElement | null>;
-  /** Where the picture is in the frame (/play/info, pictureFit.ts); null for
-   *  the whole frame. */
+  /** Where the picture is in the frame (/play/info, pictureFit.ts); null where
+   *  the title has none: then nothing changes, as before. */
   area: PictureArea | null;
   /** The PGS subtitle on, by its id and URL; null where none is. */
   pgs: { id: string; url: string } | null;
@@ -102,7 +102,8 @@ export interface PictureLayers {
   region: Rect;
   /** The player's height. */
   boxHeight: number;
-  /** Fill changes the picture here: the fill button shows. */
+  /** Fill changes the picture here: the fill button shows. Only for a title
+   *  with a pictureArea. */
   fills: boolean;
   /** The viewer's choice: fill the screen, where fill changes the picture. */
   fill: boolean;
@@ -113,11 +114,11 @@ export interface PictureLayers {
 /**
  * The picture and what is drawn over it, as pictureFit.ts places them: the
  * video and the held picture moved and scaled together - fitted, or filled
- * where the viewer chose it - the region a text subtitle is laid out on,
- * and a PGS subtitle's pictures each drawn where it belongs, whole on
- * screen and above the controls while they show. Follows the player's
- * size, the picture's own (a rendition of another shape) and the viewer's
- * fill; zooms to fill and back in a quarter of a second.
+ * where the viewer chose it - the region a text subtitle is laid out on, and a PGS subtitle's pictures each
+ * drawn where it belongs, whole on screen and above the controls while they
+ * show. Follows the player's size, the picture's own (a rendition of
+ * another shape) and the viewer's fill; zooms to fill and back in a quarter
+ * of a second. A title without a pictureArea is left exactly as before.
  */
 export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef, area, pgs, clear }: PictureLayersInput): PictureLayers {
   const [sizes, setSizes] = useState<Sizes>({ boxWidth: 0, boxHeight: 0, videoWidth: 0, videoHeight: 0 });
@@ -159,10 +160,18 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
     };
   }, [mounted, videoRef]);
 
+  const { boxWidth, boxHeight, videoWidth, videoHeight } = sizes;
+  const known = boxWidth > 0 && boxHeight > 0 && videoWidth > 0 && videoHeight > 0;
+  const frame = useMemo(() => pictureRect(boxWidth, boxHeight, videoWidth, videoHeight), [boxWidth, boxHeight, videoWidth, videoHeight]);
+  // Without an area, nothing of this: no transform, no fill.
+  const usedArea = known ? area : null;
+  const scales = pictureScales(boxWidth, boxHeight, frame, usedArea);
+
   const [fill, setFill] = useState(loadFill);
   const fillRef = useRef(fill);
   // Whether fill changes the picture now, for the button's press.
   const fillsRef = useRef(false);
+  fillsRef.current = known && scales.fills;
   // The next change of the picture comes from the fill button: it zooms.
   // Any other - a resize, a rendition - is made at once.
   const zoomNext = useRef(false);
@@ -173,16 +182,9 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
     zoomNext.current = fillsRef.current;
     setFill(next);
   }, []);
-
-  const { boxWidth, boxHeight, videoWidth, videoHeight } = sizes;
-  const known = boxWidth > 0 && boxHeight > 0 && videoWidth > 0 && videoHeight > 0;
-  const frame = useMemo(() => pictureRect(boxWidth, boxHeight, videoWidth, videoHeight), [boxWidth, boxHeight, videoWidth, videoHeight]);
-  const usedArea = known ? area : null;
-  const scales = pictureScales(boxWidth, boxHeight, frame, usedArea);
-  fillsRef.current = known && scales.fills;
   const zoom = fill && scales.fills ? 1 : 0;
-  const target = known ? pictureTransform(boxWidth, boxHeight, frame, usedArea, zoom) : NO_TRANSFORM;
-  const region = subtitleRegion(boxWidth, boxHeight, frame, target);
+  const target = usedArea ? pictureTransform(boxWidth, boxHeight, frame, usedArea, zoom) : NO_TRANSFORM;
+  const region = usedArea ? subtitleRegion(boxWidth, boxHeight, frame, target) : frame;
 
   // What the layers are drawn with: the latest geometry, the zoom on screen
   // (0 fitted, 1 filled, between while it zooms) and what the controls
@@ -194,7 +196,7 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
 
   const transformNow = (): PictureTransform => {
     const g = geometry.current;
-    return g.known ? pictureTransform(g.boxWidth, g.boxHeight, g.frame, g.area, zoomShown.current) : NO_TRANSFORM;
+    return g.known && g.area ? pictureTransform(g.boxWidth, g.boxHeight, g.frame, g.area, zoomShown.current) : NO_TRANSFORM;
   };
 
   // A PGS subtitle's pictures, each where it belongs: the plane fitted into
@@ -288,6 +290,8 @@ export function usePictureLayers({ mounted, videoRef, heldFrameRef, pgsCanvasRef
     // usedArea is area while the size is known.
   }, [mounted, boxWidth, boxHeight, frame, area, known, zoom, draw]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The low pictures rise while the controls show, and come back down as
+  // they hide, at their pace.
   useEffect(() => animate(clearShown, clear, LIFT_MS, composite), [clear, composite]);
 
   // The PGS subtitle on: libpgs reads it, and draws its pictures onto a plane
