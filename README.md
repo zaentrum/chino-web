@@ -1,9 +1,12 @@
 # chino-web
 
-The **chino** web client — the reference React web frontend for the
+The **chino** web client — the React web app of the
 [zaentrum](https://github.com/zaentrum/zaentrum) self-hosted media platform.
-It browses your library (movies, shows, music) and plays back over HLS, and is
-served same-origin by your server alongside the platform API.
+It browses your library (movies and shows) and plays back over HLS, and is
+served same-origin by your server alongside the platform API. What it shows
+and does, beside the other chino apps, is specified in
+[chino's specification](https://github.com/zaentrum/zaentrum/blob/main/spec/chino/README.md);
+no app is the reference for another.
 
 ## Stack
 
