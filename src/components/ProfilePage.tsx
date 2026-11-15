@@ -6,6 +6,7 @@ import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { FadeImage } from './FadeImage';
 import { WatchedToggle } from './TitleActions';
 import { LoadingState } from './LoadingState';
+import { forgetStreamToken } from '../hooks/useStreamToken';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
 import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
@@ -102,6 +103,7 @@ export function ProfilePage() {
   const email = profile?.email as string | undefined;
 
   const signOut = () => {
+    forgetStreamToken();
     void auth.signoutRedirect();
   };
   const [deleteOpen, setDeleteOpen] = useState(false);

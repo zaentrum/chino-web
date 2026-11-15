@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { forgetCachedStreamToken, readStreamToken, subjectOf, writeStreamToken, type CachedStreamToken } from '../lib/streamTokenCache';
 
 // Minted server-side via POST /api/v1/me/stream-token. Lives 6 h. Used
 // in the URL of any media asset that must survive an OIDC silent
@@ -14,43 +15,40 @@ import { useAuth } from 'react-oidc-context';
 // URLs straight from cache). The hook never fetches a new token while
 // one is still valid; it only re-mints if the cached token is gone
 // or expired.
+//
+// A token carries its account's rights, an age cap among them, so the
+// cache holds it for that account alone (lib/streamTokenCache): the
+// next person who signs in in the same tab gets a token of their own,
+// and signing out drops it (forgetStreamToken).
 
-const STORAGE_KEY = 'chino:streamToken';
-
-interface CachedToken {
-  token: string;
-  expiresAt: number; // epoch ms
-}
-
-let inflight: Promise<string | null> | null = null;
-
-function readCache(): CachedToken | null {
+/** The tab's storage, or one that holds nothing where the browser gives none. */
+function tabStore(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedToken;
-    if (!parsed.token || typeof parsed.expiresAt !== 'number') return null;
-    // 60 s safety margin so we refresh before the server-side
-    // validator starts rejecting.
-    if (Date.now() > parsed.expiresAt - 60_000) return null;
-    return parsed;
+    return sessionStorage;
   } catch {
-    return null;
+    return { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
   }
 }
 
-function writeCache(c: CachedToken) {
-  try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(c)); } catch { /* quota */ }
+function readCache(sub: string | null): CachedStreamToken | null {
+  return readStreamToken(tabStore(), sub);
 }
 
-/** Drops the cached token: the account it was minted for is signed out. */
+/** Drops the cached token: the account it was minted for signs out, or is gone. */
 export function forgetStreamToken(): void {
-  try { sessionStorage.removeItem(STORAGE_KEY); } catch { /* storage off */ }
+  forgetCachedStreamToken(tabStore());
 }
+
+// One request at a time, for one account: a request under way for another
+// account is not this one's answer.
+let inflight: { sub: string; promise: Promise<string | null> | null } | null = null;
 
 async function mintStreamToken(bearer: string): Promise<string | null> {
-  if (inflight) return inflight;
-  inflight = (async () => {
+  const sub = subjectOf(bearer);
+  if (!sub) return null;
+  if (inflight && inflight.sub === sub && inflight.promise) return inflight.promise;
+  const mine: { sub: string; promise: Promise<string | null> | null } = { sub, promise: null };
+  mine.promise = (async () => {
     try {
       const r = await fetch('/api/v1/me/stream-token', {
         method: 'POST',
@@ -60,15 +58,16 @@ async function mintStreamToken(bearer: string): Promise<string | null> {
       const j = await r.json() as { stream_token?: string; expires_at?: string };
       if (!j.stream_token) return null;
       const expiresAt = j.expires_at ? new Date(j.expires_at).getTime() : Date.now() + 5 * 60 * 60 * 1000;
-      writeCache({ token: j.stream_token, expiresAt });
+      writeStreamToken(tabStore(), { token: j.stream_token, expiresAt, sub });
       return j.stream_token;
     } catch {
       return null;
     } finally {
-      inflight = null;
+      if (inflight === mine) inflight = null;
     }
   })();
-  return inflight;
+  inflight = mine;
+  return mine.promise;
 }
 
 // Every mounted hook, for a token minted in place of one the server
@@ -97,7 +96,15 @@ export async function renewStreamToken(bearer: string): Promise<string | null> {
  */
 export function useStreamToken(): string | null {
   const auth = useAuth();
-  const [token, setToken] = useState<string | null>(() => readCache()?.token ?? null);
+  // The account signed in, as its bearer names it: the token is its alone.
+  const sub = subjectOf(auth.user?.access_token);
+  const [token, setToken] = useState<string | null>(() => readCache(sub)?.token ?? null);
+
+  // Another account than the one the state's token was read for: take that
+  // account's cached token, or none, and the mint effect below asks for one.
+  useEffect(() => {
+    setToken(readCache(sub)?.token ?? null);
+  }, [sub]);
 
   useEffect(() => {
     const give = (t: string) => setToken(t);
@@ -126,7 +133,7 @@ export function useStreamToken(): string | null {
   // browser timer throttling could overshoot the expiry while hidden.
   useEffect(() => {
     if (!token) return;
-    const cached = readCache();
+    const cached = readCache(sub);
     if (!cached) {
       // Cache says expired-or-missing but state still holds a string —
       // drop it so the mint effect re-fires.
@@ -137,14 +144,14 @@ export function useStreamToken(): string | null {
     const timer = window.setTimeout(() => setToken(null), Math.max(0, refreshMs));
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
-      if (!readCache()) setToken(null);
+      if (!readCache(sub)) setToken(null);
     };
     document.addEventListener('visibilitychange', onVis);
     return () => {
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [token]);
+  }, [token, sub]);
 
   return token;
 }
