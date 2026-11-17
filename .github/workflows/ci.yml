@@ -27,6 +27,10 @@ jobs:
           # Exclude generated/vendored content and this workflow itself
           # (it legitimately discusses the gate).
           EXCLUDES=(
+            # Hidden files too (.env.example, .gitignore, .github/), which rg
+            # passes over without --hidden; never the repository's .git.
+            --hidden
+            --glob '!.git/**'
             --glob '!node_modules/**'
             --glob '!dist/**'
             --glob '!package-lock.json'
