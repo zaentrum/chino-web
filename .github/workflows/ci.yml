@@ -7,6 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The organisation's shared neutrality check.
+  neutrality-shared:
+    permissions:
+      contents: read
+    uses: zaentrum/.github/.github/workflows/neutrality.yml@v1
+
   neutrality:
     # Public-repo hygiene gate. Fails if internal infra hosts, competitor
     # product names, or content-acquisition vocabulary leak into the tree.
