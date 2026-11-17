@@ -249,9 +249,18 @@ export interface SubtitleLabelInput {
  *  audio's, not the dialogue. */
 export const FORCED_SUBTITLE_KIND = 'foreign-language parts only';
 
-/** What a subtitle for the deaf and hard of hearing is, after its language
- *  ("English · for deaf and hard of hearing"). */
-export const SDH_SUBTITLE_KIND = 'for deaf and hard of hearing';
+/** The tag of a subtitle that also describes the sounds and names who
+ *  speaks, in brackets after its language: "English (CC)" (chino, section
+ *  12.7). */
+export const SDH_SUBTITLE_TAG = 'CC';
+
+/** The tag of a subtitle the platform made, beside "CC" in one bracket:
+ *  "German (AI)", "English (CC, AI)". */
+export const AI_SUBTITLE_TAG = 'AI';
+
+// "AI" as a word of a track's own title: the tag, which leaves the title's
+// words (case kept: "Ai" is no tag).
+const AI_WORD = /(^|[^A-Za-z])AI(?![A-Za-z])/g;
 
 // What a track's own title may say of a forced subtitle. No lookbehind (an
 // older Safari cannot parse one): the character before is captured and put
@@ -749,38 +758,41 @@ function besideName(title: string, name: string): string | null {
 }
 
 /**
- * One subtitle's label: the language's name, its script or region in it
- * ("German", "Chinese (Simplified)", "No dialogue" for zxx) - a script or a
- * region the track's own title gives, where its tag names none, too
- * ("Chinese (Traditional)" for "繁體中文", "Spanish (Latin America)" for
- * "Español (Latinoamérica)"); the track's own title where it says more than
- * that ("English · Commentary", "German · AI", "Chinese · Cantonese"), the
- * name said once where the title begins or ends with it ("English AI" is
- * "English · AI") - not
- * the words of it that only name the language again, in any language or
- * cut short ("Deutsch", "中文", "BR" on Brazilian Portuguese, "Trad" on
- * Traditional Chinese), or the tag's own region as a code ("GB" on en-GB,
- * "AT" on de-AT) - or alone for a track tagged with no language, else
- * "Unknown"; then its kind in words - "foreign-language parts only" for a
- * forced one, "for deaf and hard of hearing" for one with sound described,
- * both in that order. A title that says the kind itself ("English SDH",
- * "[CC]", "German (forced)") says it once, in these words. The phone app's
- * subtitleLabel: the same track has the same name there.
+ * One subtitle's label (chino, section 12.7): the language's name, its script
+ * or region in it ("German", "Chinese (Simplified)", "No dialogue" for zxx) - a
+ * script or a region the track's own title gives, where its tag names none,
+ * too ("Chinese (Traditional)" for "繁體中文", "Spanish (Latin America)" for
+ * "Español (Latinoamérica)"); then what the track's own title says besides
+ * that, in brackets ("English (Commentary)", "Chinese (Cantonese)"), the name
+ * said once where the title begins or ends with it - not the words of it that
+ * only name the language again, in any language or cut short ("Deutsch",
+ * "中文", "BR" on Brazilian Portuguese, "Trad" on Traditional Chinese), or the
+ * tag's own region as a code ("GB" on en-GB, "AT" on de-AT) - or the title
+ * alone for a track tagged with no language, else "Unknown"; then the short
+ * tags in one bracket: "CC" for one that also describes the sounds, "AI" for
+ * one the platform made, in that order ("English (CC)", "German (AI)",
+ * "English (CC, AI)", "Chinese (Simplified) (AI)"). A title that says a kind
+ * itself ("English SDH", "[CC]", "German AI") says it once, as its tag. A
+ * forced track keeps "foreign-language parts only" after it, until such
+ * tracks leave the list (12.C4). The phone app's subtitleLabel: the same
+ * track has the same name there.
  */
 export function subtitleLabel(track: SubtitleLabelInput): string {
   const raw = (track.title ?? '').trim();
   const forced = !!track.forced || saysForced(raw);
   const sdh = !!track.sdh || isSdhSubtitle(raw);
-  const { code: lang, title } = readTitle(titleWithoutKind(raw), track.lang);
+  const ai = isAiSubtitle(raw);
+  // "AI" is a tag, as "CC" is: it leaves the words the title adds.
+  const { code: lang, title } = readTitle(titleWithoutKind(ai ? raw.replace(AI_WORD, '$1 ') : raw), track.lang);
   const name = languageName(lang);
   const lower = title.toLowerCase();
   let label: string;
   const rest = title ? besideName(title, name) : null;
   if (!title || lower === name.toLowerCase() || namesLanguage(title, lang)) label = name;
   else if (!hasLanguage(lang)) label = title;
-  // The name, then what the title adds: "English AI" is "English · AI",
-  // "English Commentary" "English · Commentary".
-  else if (rest !== null) label = rest ? `${name} · ${rest}` : name;
+  // The name, then what the title adds, in brackets: "English Commentary" is
+  // "English (Commentary)".
+  else if (rest !== null) label = rest ? `${name} (${rest})` : name;
   // The name among the title's words, not at its edge: the title says it.
   else if (lower.includes(name.toLowerCase())) label = title;
   // "English" on a British English track, "BR" on a Brazilian one, "Trad"
@@ -789,9 +801,10 @@ export function subtitleLabel(track: SubtitleLabelInput): string {
   // "Thai"). A title that says the platform made the track always stays
   // ("AI" on an Ainu one).
   else if (!isAiSubtitle(title) && startsWord(name.toLowerCase(), lower)) label = name;
-  else label = `${name} · ${title}`;
-  const kinds = [forced ? FORCED_SUBTITLE_KIND : '', sdh ? SDH_SUBTITLE_KIND : ''].filter(Boolean);
-  return [label, ...kinds].join(' · ');
+  else label = `${name} (${title})`;
+  const tags = [sdh ? SDH_SUBTITLE_TAG : '', ai ? AI_SUBTITLE_TAG : ''].filter(Boolean);
+  const named = tags.length ? `${label} (${tags.join(', ')})` : label;
+  return forced ? `${named} · ${FORCED_SUBTITLE_KIND}` : named;
 }
 
 /** The subtitle labels, one per track, in order (subtitleLabel). Two that

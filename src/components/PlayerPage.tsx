@@ -1735,8 +1735,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // other subtitle languages - where the server names none, the viewer's
   // own: the subtitle setting's, the audio setting's unless Original, the
   // browser's; then "more languages" with the rest of the title's tracks,
-  // packaged or not. Each named by its language, then its kind ("English
-  // · for deaf and hard of hearing"); two that read the same show once.
+  // packaged or not. Each named by its language, then its short tags
+  // ("English (CC)", "German (AI)"); two that read the same show once.
   const subEntries = useMemo(() => subtitleEntries(mergedSubs), [mergedSubs]);
   const browserLang = typeof navigator === 'undefined' ? null : navigator.languages?.[0] ?? navigator.language ?? null;
   const subMenu = useMemo(

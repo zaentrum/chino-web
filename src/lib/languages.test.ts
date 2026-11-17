@@ -167,7 +167,7 @@ test('the menu of the demo\'s Sintel: every track named, none blank', () => {
   ]);
 });
 
-test('the kind in words after the language, forced first', () => {
+test('the kind as a tag after the language, the foreign-language parts in words after it', () => {
   assert.deepEqual(
     subtitleLabels([
       { lang: 'eng', sdh: true },
@@ -176,9 +176,9 @@ test('the kind in words after the language, forced first', () => {
       { lang: 'zh-Hans', forced: true },
     ]),
     [
-      'English · for deaf and hard of hearing',
+      'English (CC)',
       'English · foreign-language parts only',
-      'English · foreign-language parts only · for deaf and hard of hearing',
+      'English (CC) · foreign-language parts only',
       'Chinese (Simplified) · foreign-language parts only',
     ],
   );
@@ -192,14 +192,14 @@ test('both tracks of a language, each with its kind', () => {
       { lang: 'ger' },
       { lang: 'ger', title: 'German (forced)', forced: true },
     ]),
-    ['English', 'English · for deaf and hard of hearing', 'German', 'German · foreign-language parts only'],
+    ['English', 'English (CC)', 'German', 'German · foreign-language parts only'],
   );
 });
 
-test('a label that says the kind itself says it once, in these words', () => {
-  const sdh = 'English · for deaf and hard of hearing';
+test('a label that says the kind itself says it once, as its tag', () => {
+  const sdh = 'English (CC)';
   const forced = 'English · foreign-language parts only';
-  const both = 'English · foreign-language parts only · for deaf and hard of hearing';
+  const both = 'English (CC) · foreign-language parts only';
   const cases: [string, string][] = [
     ['English SDH', sdh],
     ['SDH', sdh],
@@ -208,9 +208,10 @@ test('a label that says the kind itself says it once, in these words', () => {
     ['English (Closed Captions)', sdh],
     ['English - Hearing Impaired', sdh],
     ['English (for the deaf and hard of hearing)', sdh],
-    // A packager's NAME, and this rule's own words again.
+    // A packager's NAME, this rule's own words again, and the words it wrote before.
     ['English · SDH', sdh],
     [sdh, sdh],
+    ['English · for deaf and hard of hearing', sdh],
     ['English (Forced)', forced],
     ['Forced', forced],
     ['English Forced Narrative', forced],
@@ -241,17 +242,17 @@ test('words that only name the language again go, in any language; words that ad
   // Named in a third language: still only the language.
   assert.equal(subtitleLabel({ lang: 'ger', title: 'Allemand' }), 'German');
   assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch (Forced)' }), 'German · foreign-language parts only');
-  assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch · Kommentar' }), 'German · Kommentar');
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch · Kommentar' }), 'German (Kommentar)');
   // Another language's own name is something else.
-  assert.equal(subtitleLabel({ lang: 'de', title: 'Español' }), 'German · Español');
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Español' }), 'German (Español)');
   // Inside a part with other words, only the language's name goes - not
   // the label's own name, which says it once - and a word that is a code
   // elsewhere is a word ("und" is German for "and").
-  assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch Kommentar' }), 'German · Kommentar');
-  assert.equal(subtitleLabel({ lang: 'de', title: 'Kommentar und Analyse' }), 'German · Kommentar und Analyse');
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Deutsch Kommentar' }), 'German (Kommentar)');
+  assert.equal(subtitleLabel({ lang: 'de', title: 'Kommentar und Analyse' }), 'German (Kommentar und Analyse)');
   // The label's own name at the title's edge: said once, before what the
   // title adds.
-  assert.equal(subtitleLabel({ lang: 'eng', title: 'English Commentary' }), 'English · Commentary');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English Commentary' }), 'English (Commentary)');
 });
 
 test('a Chinese track\'s title that gives its script names it by its script', () => {
@@ -266,11 +267,11 @@ test('a Chinese track\'s title that gives its script names it by its script', ()
   // Its region in brackets, the full-width ones too.
   assert.equal(subtitleLabel({ lang: 'chi', title: '繁體中文（台灣）' }), 'Chinese (Traditional, Taiwan)');
   // A tag that names the other script: the title's word stays, it says something.
-  assert.equal(subtitleLabel({ lang: 'zh-Hans', title: '繁體中文' }), 'Chinese (Simplified) · 繁體中文');
+  assert.equal(subtitleLabel({ lang: 'zh-Hans', title: '繁體中文' }), 'Chinese (Simplified) (繁體中文)');
   // Mandarin and Cantonese in the word list's words.
-  assert.equal(subtitleLabel({ lang: 'chi', title: '國語' }), 'Chinese · Mandarin');
-  assert.equal(subtitleLabel({ lang: 'chi', title: '普通话' }), 'Chinese · Mandarin');
-  assert.equal(subtitleLabel({ lang: 'chi', title: '粵語' }), 'Chinese · Cantonese');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '國語' }), 'Chinese (Mandarin)');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '普通话' }), 'Chinese (Mandarin)');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '粵語' }), 'Chinese (Cantonese)');
   assert.equal(subtitleLabel({ lang: 'chi', title: '中文' }), 'Chinese');
   assert.equal(subtitleLanguage({ lang: 'chi', title: '中文' }), 'zh');
 });
@@ -315,12 +316,12 @@ test('a language\'s own name before a region: the region in brackets after the l
     assert.equal(subtitleLanguage({ lang, title }), tag, title);
   }
   // Another region than the tag's stays a word.
-  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latinoamérica' }), 'Spanish (Spain) · Latinoamérica');
-  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latin American Spanish' }), 'Spanish (Spain) · Latin American Spanish');
-  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'Portuguese (Brazilian)' }), 'Portuguese (Portugal) · Brazilian');
+  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latinoamérica' }), 'Spanish (Spain) (Latinoamérica)');
+  assert.equal(subtitleLabel({ lang: 'es-ES', title: 'Latin American Spanish' }), 'Spanish (Spain) (Latin American Spanish)');
+  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'Portuguese (Brazilian)' }), 'Portuguese (Portugal) (Brazilian)');
   // A region among other words is a word, its adjective too.
-  assert.equal(subtitleLabel({ lang: 'fre', title: 'Canada Commentaire' }), 'French · Canada Commentaire');
-  assert.equal(subtitleLabel({ lang: 'por', title: 'Brazilian Commentary' }), 'Portuguese · Brazilian Commentary');
+  assert.equal(subtitleLabel({ lang: 'fre', title: 'Canada Commentaire' }), 'French (Canada Commentaire)');
+  assert.equal(subtitleLabel({ lang: 'por', title: 'Brazilian Commentary' }), 'Portuguese (Brazilian Commentary)');
   // With the kind: once, after.
   assert.equal(subtitleLabel({ lang: 'spa', title: 'Español (Latinoamérica) (Forced)' }), 'Spanish (Latin America) · foreign-language parts only');
 });
@@ -351,10 +352,10 @@ test('a title that is a code of the track\'s language: its region or script stay
     assert.equal(subtitleLanguage({ lang, title }), tag, title);
   }
   // Another region or script than the tag's stays, as the title says it.
-  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'PT-BR' }), 'Portuguese (Portugal) · PT-BR');
-  assert.equal(subtitleLabel({ lang: 'zh-Hant', title: 'zh-Hans' }), 'Chinese (Traditional) · zh-Hans');
+  assert.equal(subtitleLabel({ lang: 'pt-PT', title: 'PT-BR' }), 'Portuguese (Portugal) (PT-BR)');
+  assert.equal(subtitleLabel({ lang: 'zh-Hant', title: 'zh-Hans' }), 'Chinese (Traditional) (zh-Hans)');
   // Another language's code is something else.
-  assert.equal(subtitleLabel({ lang: 'eng', title: 'de' }), 'English · de');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'de' }), 'English (de)');
 });
 
 test('a region\'s code in brackets after the language: the region, where it is one of the language\'s', () => {
@@ -380,7 +381,7 @@ test('a region\'s code in brackets after the language: the region, where it is o
   assert.equal(subtitleLabel({ lang: 'cat', title: 'Català (CA)' }), 'Catalan');
   // A code in lower case is a language's; other capitals are a word.
   assert.equal(subtitleLabel({ lang: 'por', title: 'Português (pt)' }), 'Portuguese');
-  assert.equal(subtitleLabel({ lang: 'eng', title: 'English (BD)' }), 'English · BD');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English (BD)' }), 'English (BD)');
 });
 
 test('what else a title says stays before the kind', () => {
@@ -396,26 +397,26 @@ test('what else a title says stays before the kind', () => {
       { lang: 'zh-Hans', title: 'Chinese (Simplified) · Converted' },
     ]),
     [
-      'English · Commentary',
-      'English · Commentary',
-      'English · Commentary · for deaf and hard of hearing',
-      'German · Signs & Songs · foreign-language parts only',
+      'English (Commentary)',
+      'English (Commentary)',
+      'English (Commentary) (CC)',
+      'German (Signs & Songs) · foreign-language parts only',
       'English (United Kingdom)',
-      'Chinese (Simplified) · Converted',
+      'Chinese (Simplified) (Converted)',
     ],
   );
   // The language again before what the title adds: said once.
-  assert.equal(subtitleLabel({ lang: 'eng', title: 'English · Commentary' }), 'English · Commentary');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English · Commentary' }), 'English (Commentary)');
 });
 
-test('a title that begins or ends with the name says it once, before what it adds: "English AI" is "English · AI"', () => {
+test('a title that begins or ends with the name says it once, before what it adds: "English AI" is "English (AI)"', () => {
   const cases: [string, string, string][] = [
-    ['eng', 'English AI', 'English · AI'],
-    ['en', 'English Commentary', 'English · Commentary'],
-    ['eng', 'Commentary - English', 'English · Commentary'],
-    ['tha', 'Thai AI', 'Thai · AI'],
-    ['en-GB', 'English (United Kingdom) AI', 'English (United Kingdom) · AI'],
-    ['eng', 'English AI (SDH)', 'English · AI · for deaf and hard of hearing'],
+    ['eng', 'English AI', 'English (AI)'],
+    ['en', 'English Commentary', 'English (Commentary)'],
+    ['eng', 'Commentary - English', 'English (Commentary)'],
+    ['tha', 'Thai AI', 'Thai (AI)'],
+    ['en-GB', 'English (United Kingdom) AI', 'English (United Kingdom) (AI)'],
+    ['eng', 'English AI (SDH)', 'English (CC, AI)'],
   ];
   for (const [lang, title, label] of cases) assert.equal(subtitleLabel({ lang, title }), label, title);
   // An AI track titled so reads as the server's own "AI" sidecar, so the
@@ -446,30 +447,30 @@ test('a code that only repeats the tag\'s region goes: "GB" on en-GB, "AT" on de
   const twins = subtitleLabels([{ lang: 'en-GB' }, { lang: 'en-GB', title: 'English GB' }]);
   assert.equal(twins[0], twins[1]);
   // Among other words it stays a word.
-  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'AT Commentary' }), 'German (Austria) · AT Commentary');
+  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'AT Commentary' }), 'German (Austria) (AT Commentary)');
   // Another region than the tag's, or one on a tag with none, stays.
-  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'CH' }), 'German (Austria) · CH');
-  assert.equal(subtitleLabel({ lang: 'eng', title: 'GB' }), 'English · GB');
-  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'German CH' }), 'German (Austria) · CH');
+  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'CH' }), 'German (Austria) (CH)');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'GB' }), 'English (GB)');
+  assert.equal(subtitleLabel({ lang: 'de-AT', title: 'German CH' }), 'German (Austria) (CH)');
   // "AI" stays, even where it is the tag's region too.
-  assert.equal(subtitleLabel({ lang: 'en-AI', title: 'AI' }), 'English (Anguilla) · AI');
+  assert.equal(subtitleLabel({ lang: 'en-AI', title: 'AI' }), 'English (Anguilla) (AI)');
 });
 
-test('a sidecar the server made says " · AI" after the language', () => {
+test('a sidecar the server made says "(AI)" after the language', () => {
   assert.deepEqual(subtitleLabels([{ lang: 'de', title: 'AI' }, { lang: 'en', title: 'AI' }, { lang: 'zh-Hans', title: 'AI' }]), [
-    'German · AI',
-    'English · AI',
-    'Chinese (Simplified) · AI',
+    'German (AI)',
+    'English (AI)',
+    'Chinese (Simplified) (AI)',
   ]);
   // In a language whose name has the letters inside it, too: "AI" is no
   // word of "Thai" or "Ukrainian".
   assert.deepEqual(subtitleLabels([{ lang: 'tha', title: 'AI' }, { lang: 'ukr', title: 'AI' }, { lang: 'hat', title: 'AI' }]), [
-    'Thai · AI',
-    'Ukrainian · AI',
-    'Haitian Creole · AI',
+    'Thai (AI)',
+    'Ukrainian (AI)',
+    'Haitian Creole (AI)',
   ]);
   // Nor the start of a word: "AI" begins "Ainu", but a made track says so.
-  assert.equal(subtitleLabel({ lang: 'ain', title: 'AI' }), 'Ainu · AI');
+  assert.equal(subtitleLabel({ lang: 'ain', title: 'AI' }), 'Ainu (AI)');
   // A word of the name still says it: "English" on a British track.
   assert.equal(subtitleLabel({ lang: 'en-GB', title: 'English' }), 'English (United Kingdom)');
   // And so does the start of one, the region or the script cut short: the
@@ -502,8 +503,8 @@ test('the same label twice reads the same, never numbered; the server\'s number 
     'English',
     'English',
     'English',
-    'English · for deaf and hard of hearing',
-    'English · for deaf and hard of hearing',
+    'English (CC)',
+    'English (CC)',
     'German · foreign-language parts only',
     'German · foreign-language parts only',
     'Unknown',
@@ -522,7 +523,7 @@ test('subtitles without dialogue, or in no known language: "No dialogue", else t
       { lang: '', title: 'Forced', forced: true },
       { lang: 'und' },
     ]),
-    ['No dialogue', 'No dialogue', 'No dialogue · Signs', 'Signs & Songs', 'Unknown', 'Unknown · foreign-language parts only', 'Unknown'],
+    ['No dialogue', 'No dialogue', 'No dialogue (Signs)', 'Signs & Songs', 'Unknown', 'Unknown · foreign-language parts only', 'Unknown'],
   );
 });
 
@@ -720,7 +721,7 @@ test('mul is "Multiple languages", mis "Other language" - and neither a language
     audioLabels([{ lang: 'mul', name: 'mul' }, { lang: 'mis' }, { lang: 'mul', name: 'Original' }]),
     ['Multiple languages', 'Other language', 'Multiple languages · Original'],
   );
-  assert.deepEqual(subtitleLabels([{ lang: 'mul' }, { lang: 'mis', title: 'Signs' }]), ['Multiple languages', 'Other language · Signs']);
+  assert.deepEqual(subtitleLabels([{ lang: 'mul' }, { lang: 'mis', title: 'Signs' }]), ['Multiple languages', 'Other language (Signs)']);
 });
 
 test('subtitles default off when the audio is in the chosen subtitle language', () => {
@@ -905,4 +906,24 @@ test('the audio rendition of a track without a language: by title, else by place
   assert.equal(audioRenditionFor({ language: 'eng' }, 5, renditions), -1);
   assert.equal(audioRenditionFor(undefined, 0, renditions), -1);
   assert.equal(audioRenditionFor({ language: 'eng' }, 0, []), -1);
+});
+
+test('12.C3: the short tags in brackets after the language - (CC), (AI), both in one bracket, a file\'s words in their own; never numbered', () => {
+  // chino, section 12.7, and the word list's row "The subtitles rows".
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English SDH' }), 'English (CC)');
+  assert.equal(subtitleLabel({ lang: 'ger', title: 'German AI' }), 'German (AI)');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English AI (SDH)' }), 'English (CC, AI)');
+  assert.equal(subtitleLabel({ lang: 'zh-Hans', title: 'Chinese (Simplified) AI' }), 'Chinese (Simplified) (AI)');
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English Commentary' }), 'English (Commentary)');
+  assert.equal(subtitleLabel({ lang: 'chi', title: '粵語' }), 'Chinese (Cantonese)');
+  // A title in the words the apps used before reads as its tag.
+  assert.equal(subtitleLabel({ lang: 'eng', title: 'English · for deaf and hard of hearing' }), 'English (CC)');
+  assert.equal(subtitleLabel({ lang: 'ger', title: 'German · AI' }), 'German (AI)');
+  // Never "for deaf and hard of hearing" or "· AI" in a label.
+  for (const title of ['English SDH', 'German AI', 'English AI (SDH)', 'Chinese (Simplified) AI']) {
+    const label = subtitleLabel({ lang: 'eng', title });
+    assert.ok(!label.includes('deaf') && !label.includes('· AI'), label);
+  }
+  // Two that read the same read the same: never "English (2)".
+  assert.deepEqual(subtitleLabels([{ lang: 'eng', title: 'English SDH' }, { lang: 'eng', title: 'SDH' }]), ['English (CC)', 'English (CC)']);
 });
