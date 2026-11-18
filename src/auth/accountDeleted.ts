@@ -7,9 +7,10 @@
 
 import { watchingForDeletedAccount } from '../lib/deletedAccountWatch';
 import { deletedAccountSignOut } from '../lib/deletedAccountSignOut';
-import { forgetAccountData } from '../lib/accountData';
+import { forgetBrowserData } from '../lib/accountData';
 import { toApp } from '../lib/basepath';
 import { oidcUserManager } from './oidc';
+import { forgetTabAccountData } from './tabAccount';
 
 const KEY = 'chino:accountDeleted';
 
@@ -46,11 +47,20 @@ function storage(which: 'localStorage' | 'sessionStorage'): Storage | null {
   }
 }
 
-/** Sends `message` to the service worker this page runs under, if any. */
-async function askServiceWorker(message: { type: string }): Promise<void> {
+/** Sends `message` to the service worker this page runs under, if any: at
+ *  once to the one that controls the page, so it leaves before a reload;
+ *  else to the registration's active one once the browser names it. */
+function askServiceWorker(message: { type: string }): void {
   if (!('serviceWorker' in navigator)) return;
-  const registration = await navigator.serviceWorker.getRegistration();
-  registration?.active?.postMessage(message);
+  const workers = navigator.serviceWorker;
+  if (workers.controller) {
+    workers.controller.postMessage(message);
+    return;
+  }
+  void workers
+    .getRegistration()
+    .then((registration) => registration?.active?.postMessage(message))
+    .catch(() => undefined);
 }
 
 // The sign-out's parts in this browser; what it decides is
@@ -58,7 +68,8 @@ async function askServiceWorker(message: { type: string }): Promise<void> {
 const signOut = deletedAccountSignOut({
   mark: markAccountDeleted,
   stopRenewal: () => oidcUserManager()?.stopSilentRenew(),
-  forget: () => forgetAccountData({ local: storage('localStorage'), session: storage('sessionStorage') }, askServiceWorker),
+  forgetTab: forgetTabAccountData,
+  forgetBrowser: () => forgetBrowserData(storage('localStorage'), askServiceWorker),
   stored: async () => {
     const user = await oidcUserManager()?.getUser();
     return user ? { sub: user.profile?.sub ?? null, accessToken: user.access_token ?? null } : null;
@@ -91,10 +102,11 @@ function watchSignIns(): void {
  * (lib/deletedAccountWatch.ts) - and it is signed out on this tab. The mark
  * goes first, so the start screen says the account is deleted (AuthGate)
  * and no screen renews the sign-in (useSignInAgain); then this tab's
- * renewals stop, what the browser keeps of the account goes
- * (lib/accountData.ts), and the stored sign-in goes where it is that
- * account's; where it is another's, or nobody's, the app loads anew
- * (lib/deletedAccountSignOut.ts).
+ * renewals stop and what the tab keeps of the account goes. The stored
+ * sign-in goes where it is that account's, and then what the browser keeps
+ * for all its tabs (lib/accountData.ts); where it is nobody's, that goes
+ * too, and the app loads anew; where it is another's, it stays, and the app
+ * loads anew (lib/deletedAccountSignOut.ts).
  */
 export function signOutDeletedAccount(authorization: string | null): Promise<void> {
   watchSignIns();

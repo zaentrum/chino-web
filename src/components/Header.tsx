@@ -1,7 +1,8 @@
 import { Search, LogOut, UserCircle } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { forgetStreamToken, useStreamToken } from '../hooks/useStreamToken';
+import { useStreamToken } from '../hooks/useStreamToken';
+import { forgetTabAccountData } from '../auth/tabAccount';
 import { FadeImage } from './FadeImage';
 import { Avatar } from './Avatar';
 import { NoticesBell } from './NoticesBell';
@@ -218,7 +219,7 @@ export function Header() {
               </button>
               <button
                 role="menuitem"
-                onClick={() => { setAccountOpen(false); forgetStreamToken(); void auth.signoutRedirect(); }}
+                onClick={() => { setAccountOpen(false); forgetTabAccountData(); void auth.signoutRedirect(); }}
                 className="w-full text-left px-3 py-2 text-sm font-mono text-chino-text hover:bg-chino-surface-2 flex items-center gap-2"
               >
                 <LogOut className="w-4 h-4" aria-hidden />

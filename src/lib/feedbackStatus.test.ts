@@ -2,7 +2,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { featuresFrom } from './runtimeConfig.ts';
-import { BUG_REPORT, FeedbackOffError, feedbackError, feedbackFailure, feedbackFiled, reportDescription } from './feedbackStatus.ts';
+import {
+  BUG_REPORT,
+  FeedbackAccountError,
+  FeedbackOffError,
+  feedbackError,
+  feedbackFailure,
+  feedbackFiled,
+  reportBearer,
+  reportDescription,
+} from './feedbackStatus.ts';
+import { tabAccount } from './tabAccount.ts';
 
 test('feedback is offered only when the server says true', () => {
   assert.deepEqual(featuresFrom({ features: { feedback: true } }), { feedback: true });
@@ -81,3 +91,24 @@ test('the dialog\'s details part: named "details" in the mono face, said to go w
   // What the viewer edits says nothing of the app's own words.
   for (const w of Object.values(BUG_REPORT)) assert.doesNotMatch(w, /this item|manifestLoadError|technical details/i);
 });
+
+function tokenFor(sub: string, n = 1): string {
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${b64({ alg: 'RS256' })}.${b64({ sub, n })}.signature`;
+}
+
+test("a report goes with the browser's stored sign-in only where it is this tab's account", () => {
+  // Tab 1 was loaded as first; another tab signed in as second since, and the store holds second's sign-in.
+  const tab = tabAccount({ forgetTab: () => undefined, reload: () => undefined });
+  tab.loaded(tokenFor('first'));
+  assert.throws(() => reportBearer(tokenFor('second'), tab.mayWrite), FeedbackAccountError);
+  // The manual form says so; nothing was filed under second's name.
+  assert.equal(feedbackFailure(new FeedbackAccountError()), "Couldn't file the report. Another account is signed in now.");
+  // first's own, renewed, goes; none stored goes without one, as before.
+  assert.equal(reportBearer(tokenFor('first', 2), tab.mayWrite), tokenFor('first', 2));
+  assert.equal(reportBearer(null, tab.mayWrite), null);
+  // Once the tab loads anew, nothing more goes, not even first's.
+  tab.loaded(tokenFor('second'));
+  assert.throws(() => reportBearer(tokenFor('first', 2), tab.mayWrite), FeedbackAccountError);
+});
+

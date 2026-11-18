@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { tabMayWrite } from '../auth/tabAccount';
 
 // Zap-specific event kinds we POST to the existing /api/v1/play/events
 // sink. The server accepts arbitrary `kind` strings and bumps a
@@ -67,6 +68,9 @@ export function useZapTelemetry(): UseZapTelemetry {
     // can carry the events. Previously we spliced first and silently
     // dropped everything on a brief auth gap.
     if (!queueRef.current.length || !token) return;
+    // Nothing under another account than this tab's, nor once it loads
+    // anew (lib/tabAccount.ts).
+    if (!tabMayWrite(token)) return;
     const events = queueRef.current.splice(0, queueRef.current.length);
     const body = JSON.stringify({ sessionId: sessionIdRef.current, events });
     // fetch with keepalive:true is the modern replacement for

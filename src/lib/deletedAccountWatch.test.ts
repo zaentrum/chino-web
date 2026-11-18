@@ -167,7 +167,14 @@ test('a success, and an answer other than 401, are not looked into', async () =>
 });
 
 // What only the components wire up; what they decide is tested in lib:
-// lib/deletedAccountSignOut.test.ts, lib/signInAgain.test.ts.
+// lib/deletedAccountSignOut.test.ts, lib/signInAgain.test.ts,
+// lib/accountData.test.ts, lib/account.test.ts, lib/authGate.test.ts.
+// Read from the source, this sees that the calls are there, not what they
+// do once bound: not the parts bound in auth/accountDeleted.ts (the mark,
+// the UserManager's getUser, removeUser and stopSilentRenew, the storage the
+// data goes from), not the message to the service worker as the browser
+// carries it, and not the gate's markup; which screen the gate shows is
+// lib/authGate.ts's, tested there. Those are tried in a browser, by hand.
 test('the app watches every request from its start; the watch, a screen and Delete Account go through the decisions in lib', () => {
   const main = readFileSync(join(SRC, 'main.tsx'), 'utf8');
   assert.ok(main.indexOf('installDeletedAccountWatch();') >= 0, 'main.tsx installs the watch');
@@ -184,4 +191,9 @@ test('the app watches every request from its start; the watch, a screen and Dele
   const dialog = readFileSync(join(SRC, 'components', 'DeleteAccountDialog.tsx'), 'utf8');
   assert.match(dialog, /await signOutDeletedAccount\(token \? `Bearer \$\{token\}` : null\);/);
   assert.doesNotMatch(dialog, /removeUser\(/);
+  // Delete account deletes through lib's check of whose the renewed token is, and sends nothing of its own.
+  assert.match(dialog, /const attempt = await deleteNamedAccount\(\{\s*named: user \? \{ accessToken: user\.access_token, expiresInSec: user\.expires_in \} : null,/);
+  assert.match(dialog, /mayWrite: tabMayWrite,\s*\}\);/);
+  assert.match(dialog, /if \(attempt\.kind === 'another-account'\) \{[^}]*setFailure\(\{ kind: 'failed', message: ACCOUNT_DELETION_ANOTHER_ACCOUNT \}\);\s*setDeleting\(false\);\s*return;\s*\}/);
+  assert.doesNotMatch(dialog, /deleteAccount\(|fetch\(/);
 });

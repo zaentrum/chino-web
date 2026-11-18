@@ -3,8 +3,9 @@
 // the lists read that makes the default list, a bug report, a new stream
 // token) with 401 {"error":"account_deleted","detail":…}. The app's own
 // requests go through window.fetch, which installDeletedAccountWatch wraps
-// (auth/accountDeleted.ts); what hls.js, the media elements, the catalog
-// events and sendBeacon load does not, and is not looked at. Of each answer
+// (auth/accountDeleted.ts), the catalog events' stream among them
+// (hooks/useCatalogEvents.ts); what hls.js, the media elements and
+// sendBeacon load does not, and is not looked at. Of each answer
 // the wrapper looks at the status alone; only of a 401 from chino-api with
 // a JSON body does it read a copy of the body, and it stops where that is
 // longer than MAX_BODY_BYTES or says it is. Where the body says

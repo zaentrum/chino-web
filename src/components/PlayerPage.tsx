@@ -33,6 +33,8 @@ import { parseTrickplayVTT, findTrickplayCue, type TrickplayCue } from '../lib/t
 import { fileAutoReport } from '../lib/errorReporter';
 import { isNotFoundStatus } from '../lib/reportPolicy';
 import { toApp } from '../lib/basepath';
+import { markWatched, saveProgress, type PlayerWriter } from '../lib/playerWrites';
+import { tabMayWrite } from '../auth/tabAccount';
 import { episodeCode, fileNeighbours, type FileEpisode } from '../lib/episodeFiles';
 import { audioChipLabel, audioDetail, audioLabels, audioRenditionFor, normalizeLang } from '../lib/languages';
 import {
@@ -307,6 +309,13 @@ function newQoeState(): QoeState {
 // How long a title may take to show its first frame before the player
 // gives up and says so.
 const STARTUP_DEADLINE_MS = 20_000;
+
+// The player's writes for the account go only under the account this tab
+// was loaded for (lib/tabAccount.ts, lib/playerWrites.ts).
+const PLAYER_WRITES: PlayerWriter = {
+  mayWrite: tabMayWrite,
+  send: (url, init) => fetch(url, init),
+};
 
 // Map of human label → MIME type with codec parameters, used to probe what
 // THIS browser can actually decode. Lets the info popup explain why we're
@@ -2139,8 +2148,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   // Chrome reveal handling. Desktop: mousemove + keydown each
   // re-arm a 3 s hide. Mobile: pointerdown on the wrap toggles
-  // chrome (Netflix pattern — tap once to reveal, tap once more to
-  // hide). The bottom + top bars catch their own clicks so taps on
+  // chrome (a tap on the picture reveals it, the next tap there
+  // hides it). The bottom + top bars catch their own clicks so taps on
   // a button don't trigger the toggle; the underlying overlay sits
   // at z-0 below them. Without the touch path mobile users had to
   // tap blind, hope the chrome appeared, then tap again on the
@@ -2170,7 +2179,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       // vanishes mid-pick is the most-reported UX wart on streaming
       // UIs. The menu-open effect below re-arms once the menu closes.
       if (openMenuRef.current !== null) return;
-      // 3 s while playing (Netflix-style snap-away), 8 s while paused
+      // 3 s while playing (the picture is what's watched), 8 s while paused
       // (user might be reading the title / picking a chapter — but
       // shouldn't have to look at the bars forever).
       const hideAfter = playing ? 3000 : 8000;
@@ -2463,11 +2472,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     const dur = effectiveDuration;
     const near95 = dur > 0 && displayedCurrent / dur >= 0.95;
     if (!inCredits && !near95) return;
+    // Not under another account than this tab's (lib/playerWrites.ts).
+    if (!markWatched(PLAYER_WRITES, token, itemId)) return;
     markedWatchedRef.current = true;
-    fetch(`/api/v1/me/items/${encodeURIComponent(itemId)}/watched`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => undefined);
     reportEvent('mark_watched', { at: displayedCurrent, via: inCredits ? 'credits' : 'p95' });
   }, [inCredits, displayedCurrent, effectiveDuration, token, itemId]);
 
@@ -2719,7 +2726,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // sink with the bearer in the header (lib/trailers.ts trailerPlayBatch).
   const trailerPlayReportedRef = useRef(false);
   const reportTrailerPlay = () => {
-    if (!extra || calls.events !== 'trailer_play' || trailerPlayReportedRef.current || !token) return;
+    if (!extra || calls.events !== 'trailer_play' || trailerPlayReportedRef.current || !token || !tabMayWrite(token)) return;
     trailerPlayReportedRef.current = true;
     const batch = trailerPlayBatch({ sessionId: sessionIdRef.current, itemId, extraId: extra.ref.id, ts: Date.now() });
     void fetch('/api/v1/play/events', {
@@ -2940,7 +2947,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
 
   const flushTelemetry = (final = false) => {
     const q = telemetryQueueRef.current;
-    if (!q.length || !token) return;
+    // Nothing under another account than this tab's (lib/tabAccount.ts).
+    if (!q.length || !token || !tabMayWrite(token)) return;
     const events = q.splice(0, q.length);
     const body = JSON.stringify({ sessionId: sessionIdRef.current, events });
     // Use `sendBeacon` on pagehide so the request actually leaves the
@@ -3133,15 +3141,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       const pos = Math.floor(v.currentTime || 0);
       const total = Math.floor(effectiveDuration);
       if (pos <= 0) return;
-      fetch(`/api/v1/items/${itemId}/progress`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ position_sec: pos, duration_sec: total }),
-        keepalive: true,
-      }).catch(() => undefined);
+      // Not under another account than this tab's (lib/playerWrites.ts).
+      saveProgress(PLAYER_WRITES, token, itemId, pos, total);
     }, 10_000);
     return () => window.clearInterval(id);
   }, [token, itemId, effectiveDuration]);

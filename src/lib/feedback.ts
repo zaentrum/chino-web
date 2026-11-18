@@ -1,7 +1,8 @@
 import { getRuntimeConfig } from './runtimeConfig';
-import { feedbackError } from './feedbackStatus';
+import { feedbackError, reportBearer } from './feedbackStatus';
+import { tabMayWrite } from '../auth/tabAccount';
 
-export { FeedbackOffError } from './feedbackStatus';
+export { FeedbackAccountError, FeedbackOffError } from './feedbackStatus';
 
 /**
  * Client for the chino-api bug-report endpoint (POST /api/v1/feedback).
@@ -45,7 +46,9 @@ export interface BugReport {
  * but feedback submission also happens OUTSIDE React (window error
  * listeners, ErrorBoundary), so we read the same persisted user that
  * hook is backed by: oidc-client-ts stores it in localStorage (see
- * `userStore` in auth/oidc.ts) under a well-known key.
+ * `userStore` in auth/oidc.ts) under a well-known key. That store is the
+ * browser's, for all its tabs: a report goes only where this tab may write
+ * with it (reportBearer).
  */
 function accessToken(): string | null {
   try {
@@ -66,12 +69,25 @@ function accessToken(): string | null {
   }
 }
 
+/** Whether a report from this tab would go under its own account (or none
+ *  stored): the automatic reports skip one that wouldn't. */
+export function mayReport(): boolean {
+  try {
+    reportBearer(accessToken(), tabMayWrite);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Submit a bug report. Builds the multipart body per the /api/v1/feedback
  * contract: a "report" JSON part plus an optional "screenshot" image
  * part. Resolves with the ticket id/url; throws on any non-2xx (callers
  * on the auto-report path swallow that — manual UI surfaces it). A 503
- * throws FeedbackOffError: the server has reporting switched off.
+ * throws FeedbackOffError: the server has reporting switched off. A stored
+ * sign-in of another account than this tab's throws FeedbackAccountError,
+ * and nothing is sent.
  */
 export async function submitBugReport(report: BugReport): Promise<FeedbackResult> {
   const { screenshot, ...payload } = report;
@@ -89,7 +105,8 @@ export async function submitBugReport(report: BugReport): Promise<FeedbackResult
   }
 
   const headers = new Headers();
-  const token = accessToken();
+  // Not under another account than this tab's: FeedbackAccountError.
+  const token = reportBearer(accessToken(), tabMayWrite);
   if (token) headers.set('Authorization', `Bearer ${token}`);
   // NOTE: no explicit Content-Type — fetch derives the multipart
   // boundary from the FormData body; setting it by hand would break it.

@@ -1,13 +1,14 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useAuth, type AuthContextProps } from 'react-oidc-context';
+import { useAuth } from 'react-oidc-context';
 import { AlertTriangle, Loader2, X } from 'lucide-react';
 import {
-  accountDeletionAnswer,
+  ACCOUNT_DELETION_ANOTHER_ACCOUNT,
   accountDeletionTitle,
-  deleteAccount,
+  deleteNamedAccount,
   type AccountDeletion,
 } from '../lib/account';
 import { signOutDeletedAccount } from '../auth/accountDeleted';
+import { tabMayWrite } from '../auth/tabAccount';
 
 type Failure = Exclude<AccountDeletion, { kind: 'deleted' }>;
 
@@ -27,7 +28,10 @@ const CONFIRM_WORD = 'DELETE';
  *  - refused, or not available on this server: the reason, and Close —
  *    asking again changes nothing;
  *  - any other answer: Try Again Later, with the server's message. The
- *    person stays signed in and may try again.
+ *    person stays signed in and may try again;
+ *  - nothing sent: the token would be another account's, signed in since
+ *    in another tab: Try Again Later, with "Another account is signed in
+ *    now. Open Delete Account again." The tab loads anew.
  *
  * Escape, Cancel or a click outside close it, except while the request is
  * out. A modal dialog to assistive technology: labelled by its title,
@@ -101,10 +105,22 @@ export function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
     if (!confirmed || deleting || final) return;
     setDeleting(true);
     setFailure(null);
-    const token = await freshAccessToken(auth);
-    const answer: AccountDeletion = token
-      ? await deleteAccount({ token })
-      : accountDeletionAnswer(401, null);
+    // The account the dialog names (above), and this tab's: a token that is
+    // another account's sends nothing (lib/account.ts deleteNamedAccount).
+    const user = auth.user;
+    const attempt = await deleteNamedAccount({
+      named: user ? { accessToken: user.access_token, expiresInSec: user.expires_in } : null,
+      renew: async () => (await auth.signinSilent())?.access_token,
+      mayWrite: tabMayWrite,
+    });
+    if (attempt.kind === 'another-account') {
+      // Nothing was sent, and the dialog says why; the tab loads anew as the
+      // other account's (lib/tabAccount.ts), its splash in place of this.
+      setFailure({ kind: 'failed', message: ACCOUNT_DELETION_ANOTHER_ACCOUNT });
+      setDeleting(false);
+      return;
+    }
+    const { answer, bearer: token } = attempt;
     if (answer.kind === 'deleted') {
       // The account is gone: sign out here, as where the server says so
       // (auth/accountDeleted.ts). The mark first, so the start screen says
@@ -239,20 +255,4 @@ export function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
-}
-
-/**
- * The bearer to delete with: the current access token while it has a little
- * life left, else a silently renewed one — an expired token would only earn a
- * 401. A failed renewal sends the current token; the answer says the rest.
- */
-async function freshAccessToken(auth: AuthContextProps): Promise<string | null> {
-  const user = auth.user;
-  if (user && (user.expires_in ?? Infinity) > 30) return user.access_token;
-  try {
-    const renewed = await auth.signinSilent();
-    return renewed?.access_token ?? user?.access_token ?? null;
-  } catch {
-    return user?.access_token ?? null;
-  }
 }

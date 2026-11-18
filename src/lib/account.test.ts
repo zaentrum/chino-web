@@ -6,7 +6,10 @@ import {
   accountDeletionAnswer,
   accountDeletionTitle,
   deleteAccount,
+  ACCOUNT_DELETION_ANOTHER_ACCOUNT,
+  deleteNamedAccount,
 } from './account.ts';
+import { tabAccount } from './tabAccount.ts';
 
 interface Sent {
   url: string;
@@ -142,3 +145,151 @@ test('a long server message is cut to a few sentences', async () => {
   assert.equal(answer.kind, 'refused');
   assert.equal(answer.kind === 'refused' && answer.message.length, 300);
 });
+
+/** An access token as the identity provider issues it: header.payload.signature, base64url. */
+function tokenFor(sub: string, n = 1): string {
+  const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${b64({ alg: 'RS256' })}.${b64({ sub, n })}.signature`;
+}
+
+/** A check that lets every bearer write: the tests of the dialog's own comparison. */
+const anyone = () => true;
+
+/** The bearer a request was sent with. */
+function bearerOf(sent: Sent): string | null {
+  return new Headers(sent.init.headers).get('authorization');
+}
+
+test("16.5.6 a tab never reloaded, its token almost run out: the renewal brings back the next account's sign-in, and nothing is deleted", async () => {
+  // The dialog names first; in another tab first signed out and second
+  // signed in since, so the browser's sign-in, which the renewal reads, is second's.
+  const server = fakeServer(200, { account: 'deleted' });
+  let renewals = 0;
+  for (const expiresInSec of [30, 5, 0, -10]) {
+    const attempt = await deleteNamedAccount({
+      named: { accessToken: tokenFor('first'), expiresInSec },
+      mayWrite: anyone,
+      renew: async () => {
+        renewals++;
+        return tokenFor('second');
+      },
+      fetch: server.fetch,
+    });
+    assert.deepEqual(attempt, { kind: 'another-account' }, String(expiresInSec));
+  }
+  assert.equal(renewals, 4);
+  assert.deepEqual(server.sent, []);
+  // Nor where either subject can't be read.
+  for (const [named, renewed] of [
+    [tokenFor('first'), 'opaque-token'],
+    ['opaque-token', tokenFor('first')],
+  ]) {
+    const attempt = await deleteNamedAccount({ named: { accessToken: named, expiresInSec: 10 }, renew: async () => renewed, mayWrite: anyone, fetch: server.fetch });
+    assert.deepEqual(attempt, { kind: 'another-account' });
+  }
+  assert.deepEqual(server.sent, []);
+});
+
+test('16.5.6 renewed for the same account, Delete account deletes with the renewed token; with time left, with its own', async () => {
+  const server = fakeServer(200, { account: 'deleted' });
+  const renewed = await deleteNamedAccount({
+    named: { accessToken: tokenFor('first', 1), expiresInSec: 20 },
+    mayWrite: anyone,
+    renew: async () => tokenFor('first', 2),
+    fetch: server.fetch,
+  });
+  assert.deepEqual(renewed, { kind: 'answered', bearer: tokenFor('first', 2), answer: { kind: 'deleted' } });
+  let renewals = 0;
+  const own = await deleteNamedAccount({
+    named: { accessToken: tokenFor('first', 1), expiresInSec: 31 },
+    mayWrite: anyone,
+    renew: async () => {
+      renewals++;
+      return tokenFor('second');
+    },
+    fetch: server.fetch,
+  });
+  assert.deepEqual(own, { kind: 'answered', bearer: tokenFor('first', 1), answer: { kind: 'deleted' } });
+  assert.equal(renewals, 0);
+  assert.deepEqual(server.sent.map(bearerOf), [`Bearer ${tokenFor('first', 2)}`, `Bearer ${tokenFor('first', 1)}`]);
+});
+
+test('16.5.6 a renewal that fails or brings nothing deletes with the named token, as before; without one, nothing is sent', async () => {
+  const server = fakeServer(200, { account: 'deleted' });
+  for (const renew of [async () => { throw new Error('offline'); }, async () => null, async () => undefined]) {
+    const attempt = await deleteNamedAccount({ named: { accessToken: tokenFor('first'), expiresInSec: 1 }, renew, mayWrite: anyone, fetch: server.fetch });
+    assert.deepEqual(attempt, { kind: 'answered', bearer: tokenFor('first'), answer: { kind: 'deleted' } });
+  }
+  assert.equal(server.sent.length, 3);
+  const none = await deleteNamedAccount({ named: null, renew: async () => null, mayWrite: anyone, fetch: server.fetch });
+  assert.equal(none.kind, 'answered');
+  assert.equal(none.kind === 'answered' && none.answer.kind, 'failed');
+  assert.equal(server.sent.length, 3);
+});
+
+test("16.5.6 Delete account confirmed after the tab took up the next account's sign-in: the dialog's user is that account's, minutes left, and nothing is deleted", async () => {
+  // Tab 1 was loaded as first, and the dialog opened with DELETE typed.
+  // Another tab signed in as second, tab 1's renewal brought second's
+  // sign-in, and the provider re-rendered the dialog with it before the
+  // page went: the press names second, its token with 300 s left.
+  const tab = tabAccount({ forgetTab: () => undefined, reload: () => undefined });
+  tab.loaded(tokenFor('first'));
+  tab.loaded(tokenFor('second'));
+  const server = fakeServer(200, { account: 'deleted' });
+  let renewals = 0;
+  const attempt = await deleteNamedAccount({
+    named: { accessToken: tokenFor('second'), expiresInSec: 300 },
+    renew: async () => {
+      renewals++;
+      return tokenFor('second', 2);
+    },
+    mayWrite: tab.mayWrite,
+    fetch: server.fetch,
+  });
+  assert.deepEqual(attempt, { kind: 'another-account' });
+  assert.deepEqual(server.sent, []);
+  // With 30 s or less left, not even renewed: a renewal would read the store again.
+  const late = await deleteNamedAccount({
+    named: { accessToken: tokenFor('second'), expiresInSec: 10 },
+    renew: async () => {
+      renewals++;
+      return tokenFor('second', 2);
+    },
+    mayWrite: tab.mayWrite,
+    fetch: server.fetch,
+  });
+  assert.deepEqual(late, { kind: 'another-account' });
+  assert.deepEqual(server.sent, []);
+  assert.equal(renewals, 0);
+});
+
+test("16.5.6 the token the dialog would send is checked against the tab's account, its own or the renewed one", async () => {
+  const server = fakeServer(200, { account: 'deleted' });
+  // The tab is first's; a renewal of first's, with this tab leaving meanwhile, sends nothing.
+  let leaving = false;
+  const mayWrite = (bearer: string) => !leaving && bearer.split('.')[1] === tokenFor('first').split('.')[1];
+  const firstRenewed = tokenFor('first');
+  const attempt = await deleteNamedAccount({
+    named: { accessToken: tokenFor('first'), expiresInSec: 10 },
+    renew: async () => {
+      leaving = true;
+      return firstRenewed;
+    },
+    mayWrite,
+    fetch: server.fetch,
+  });
+  assert.deepEqual(attempt, { kind: 'another-account' });
+  assert.deepEqual(server.sent, []);
+  // The tab's own account, staying: deleted as before.
+  const tab = tabAccount({ forgetTab: () => undefined, reload: () => undefined });
+  tab.loaded(tokenFor('first'));
+  const own = await deleteNamedAccount({ named: { accessToken: tokenFor('first'), expiresInSec: 300 }, renew: async () => null, mayWrite: tab.mayWrite, fetch: server.fetch });
+  assert.equal(own.kind === 'answered' && own.answer.kind, 'deleted');
+  assert.equal(server.sent.length, 1);
+});
+
+test('16.5.6 where nothing was sent as another account is signed in now, the dialog says so in the words of 16.C16', () => {
+  assert.equal(ACCOUNT_DELETION_ANOTHER_ACCOUNT, 'Another account is signed in now. Open Delete Account again.');
+  assert.equal(accountDeletionTitle({ kind: 'failed', message: ACCOUNT_DELETION_ANOTHER_ACCOUNT }), 'Try Again Later');
+});
+

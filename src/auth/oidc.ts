@@ -3,6 +3,7 @@ import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { toApp } from '../lib/basepath';
 import { returnPath } from '../lib/loadFailure';
 import { markSignedIn } from '../lib/signInAgain';
+import { tabLoaded } from './tabAccount';
 import type { RuntimeConfig } from '../lib/runtimeConfig';
 
 const env = import.meta.env;
@@ -45,6 +46,11 @@ export function buildOidcConfig(cfg: RuntimeConfig): AuthProviderProps {
     automaticSilentRenew: true,
     userStore: new WebStorageStateStore({ store: window.localStorage }),
   });
+  // The store is the browser's, for all its tabs, and a renewal reads it:
+  // each sign-in loaded is checked against the account this tab was loaded
+  // for (auth/tabAccount.ts). Added before the provider adds its own, so a
+  // renewal of another account is seen before a screen gets its token.
+  manager.events.addUserLoaded((user) => tabLoaded(user.access_token));
   return {
     userManager: manager,
     onSigninCallback: (user) => {

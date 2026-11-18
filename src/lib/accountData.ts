@@ -1,17 +1,24 @@
 // What this browser keeps of an account besides its sign-in, and forgetting
 // it once the account is deleted (docs/chino, settings 16.5.6): after Delete
 // account and after chino-api answered account_deleted alike
-// (lib/deletedAccountSignOut.ts).
+// (lib/deletedAccountSignOut.ts). Two parts, as whose it is can be told
+// apart or not:
 //
+// The tab's (forgetTabData), the deleted account's, as the tab held it:
 //  - the stream token, sessionStorage `chino:streamToken`
 //    (lib/streamTokenCache.ts): the account's stream pass;
 //  - the hero pool, sessionStorage `chino:hero-pool:v5` (lib/heroPool.ts):
 //    the titles the hero rotates, as the account may see them, kept up to an
-//    hour, with the stream pass inside their artwork's addresses;
+//    hour, with the stream pass inside their artwork's addresses.
+//
+// The browser's, for all its tabs and kept for no account by name
+// (forgetBrowserData): forgotten only where the stored sign-in was the
+// deleted account's or nobody's, never under another account signed in
+// since in another tab:
 //  - the binge sessions, localStorage `chino:bingeSession:<series>`
 //    (lib/settings.ts): which episode of a series played last, and when;
 //  - the service worker's artwork cache (public/sw.js), keyed by those
-//    addresses: the worker is asked to drop it.
+//    addresses: the worker is asked to drop it, and never waited for.
 //
 // What stays is the browser's own, no account's: the settings
 // (`chino:settings:v1`, this device's preferences, whoever signs in), the
@@ -53,27 +60,27 @@ function keysStarting(store: KeyStore, prefix: string): string[] {
   return keys;
 }
 
+/** Forgets the tab's part (above) from `session`, the tab's sessionStorage;
+ *  null where the browser gives none. At once. */
+export function forgetTabData(session: KeyStore | null): void {
+  if (!session) return;
+  remove(session, STREAM_TOKEN_KEY);
+  remove(session, HERO_POOL_KEY);
+}
+
 /**
- * Forgets what the browser keeps of the account (above): the keys go from
- * `local` (localStorage) and `session` (the tab's sessionStorage) at once,
- * null where the browser gives none; `askWorker` sends the service worker
- * {type: FORGET_ARTWORK}. Settles once the worker is asked; never fails.
+ * Forgets the browser's part (above): the binge sessions go from `local`
+ * (localStorage; null where the browser gives none) at once, and
+ * `askWorker` sends the service worker {type: FORGET_ARTWORK}. Returns
+ * without waiting for the worker, whatever its answer, or none; never fails.
  */
-export function forgetAccountData(
-  stores: { local: KeyStore | null; session: KeyStore | null },
-  askWorker: (message: { type: string }) => Promise<void>,
-): Promise<void> {
-  const { local, session } = stores;
-  if (session) {
-    remove(session, STREAM_TOKEN_KEY);
-    remove(session, HERO_POOL_KEY);
-  }
+export function forgetBrowserData(local: KeyStore | null, askWorker: (message: { type: string }) => unknown): void {
   if (local) {
     for (const key of keysStarting(local, BINGE_SESSION_PREFIX)) remove(local, key);
   }
   try {
-    return askWorker({ type: FORGET_ARTWORK }).catch(() => undefined);
+    Promise.resolve(askWorker({ type: FORGET_ARTWORK })).catch(() => undefined);
   } catch {
-    return Promise.resolve();
+    /* no worker to ask */
   }
 }

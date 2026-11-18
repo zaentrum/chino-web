@@ -52,10 +52,10 @@ export const DEFAULT_SETTINGS: ChinoSettings = {
 // account is deleted; the binge sessions are the account's viewing, and go
 // with it (lib/accountData.ts).
 const SETTINGS_KEY = 'chino:settings:v1';
-// How long an inter-episode pause still counts as a binge continuation.
-// 6 hours is the convention Netflix / Apple TV+ use — long enough to
-// cover dinner breaks, short enough that "I came back the next day"
-// resets the auto-skip behaviour so the user sees the intro again.
+// How long an inter-episode pause still counts as a binge continuation:
+// 6 hours, long enough to cover a dinner break, short enough that "I came
+// back the next day" resets the auto-skip behaviour so the user sees the
+// intro again.
 export const BINGE_CONTINUATION_WINDOW_MS = 6 * 3600 * 1000;
 
 export function loadSettings(): ChinoSettings {

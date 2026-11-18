@@ -6,7 +6,7 @@ import { DeleteAccountDialog } from './DeleteAccountDialog';
 import { FadeImage } from './FadeImage';
 import { WatchedToggle } from './TitleActions';
 import { LoadingState } from './LoadingState';
-import { forgetStreamToken } from '../hooks/useStreamToken';
+import { forgetTabAccountData } from '../auth/tabAccount';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
 import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
@@ -102,8 +102,10 @@ export function ProfilePage() {
     || 'Account';
   const email = profile?.email as string | undefined;
 
+  // What the tab keeps of the account goes with it: its stream token and
+  // its hero pool (auth/tabAccount.ts).
   const signOut = () => {
-    forgetStreamToken();
+    forgetTabAccountData();
     void auth.signoutRedirect();
   };
   const [deleteOpen, setDeleteOpen] = useState(false);

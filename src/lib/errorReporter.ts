@@ -1,4 +1,4 @@
-import { submitBugReport, type FeedbackKind, type FeedbackResult } from './feedback';
+import { mayReport, submitBugReport, type FeedbackKind, type FeedbackResult } from './feedback';
 import { feedbackAvailable } from './runtimeConfig';
 import { isNotFoundError } from './reportPolicy';
 
@@ -117,6 +117,9 @@ export async function fileAutoReport(input: AutoReportInput): Promise<FeedbackRe
     // A server that files no reports would only answer 503: don't ask it.
     if (!feedbackAvailable()) return null;
     if (shouldIgnore(input.errorName, input.message)) return null;
+    // Not under another account than this tab's (lib/feedback.ts): skipped,
+    // before it takes one of the session's slots.
+    if (!mayReport()) return null;
     if (autoReportCount >= MAX_AUTO_REPORTS_PER_SESSION) return null;
     const fingerprint = await fingerprintFor(input.errorName, input.message, input.stack);
     if (reportedFingerprints.has(fingerprint)) return null;

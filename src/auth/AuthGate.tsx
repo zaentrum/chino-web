@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useCatalogEvents } from '../hooks/useCatalogEvents';
 import { LoadingState } from '../components/LoadingState';
@@ -7,6 +7,8 @@ import { signInFailureReason } from '../lib/signInAgain';
 import { toApp } from '../lib/basepath';
 import { accountWasDeleted, forgetAccountDeleted } from './accountDeleted';
 import { oidcUserManager } from './oidc';
+import { tabLoaded, useTabLeaving } from './tabAccount';
+import { gateScreen } from '../lib/authGate';
 import chinoIcon from '../imports/chino_icon.svg';
 
 interface AuthGateProps {
@@ -17,6 +19,9 @@ export function AuthGate({ children }: AuthGateProps) {
   // Live catalog refresh: one SSE bridge for the whole app.
   useCatalogEvents();
   const auth = useAuth();
+  // Loading anew for another account (auth/tabAccount.ts): the splash, in
+  // place of every screen, until the page goes.
+  const leaving = useTabLeaving();
 
   // Auto-redirect to the IdP when we're not in flight and not signed
   // in. Same guard as before, plus we skip if there's a pending error
@@ -33,6 +38,14 @@ export function AuthGate({ children }: AuthGateProps) {
   useEffect(() => {
     if (auth.isAuthenticated) forgetAccountDeleted();
   }, [auth.isAuthenticated]);
+
+  // The user the provider holds: its first is the account this tab was
+  // loaded for, brought back by the sign-in or read from the store (a read
+  // raises no userLoaded); another one later loads the app anew
+  // (auth/tabAccount.ts). A layout effect: before the screens' effects run.
+  useLayoutEffect(() => {
+    if (auth.user) tabLoaded(auth.user.access_token);
+  }, [auth.user]);
 
   // When the tab comes back into focus after being backgrounded, the
   // access token may have expired silently. Trigger a silent renew so
@@ -58,9 +71,17 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, [auth]);
 
+  const screen = gateScreen({
+    leaving,
+    isLoading: auth.isLoading,
+    isAuthenticated: auth.isAuthenticated,
+    error: Boolean(auth.error),
+    accountDeleted: accountWasDeleted(),
+  });
+
   // The person deleted their account (ProfilePage's Delete Account): it is
   // gone, and they are signed out. Sign In starts over, as anyone.
-  if (!auth.isLoading && !auth.isAuthenticated && accountWasDeleted()) {
+  if (screen === 'account-deleted') {
     return (
       <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
         <main className="max-w-md w-full text-center">
@@ -85,7 +106,7 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  if (auth.error) {
+  if (screen === 'sign-in-failed' && auth.error) {
     return (
       <div className="min-h-dvh bg-chino-bg text-chino-text flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center">
@@ -119,7 +140,7 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  if (auth.isLoading || !auth.isAuthenticated) {
+  if (screen !== 'app') {
     return (
       <div className="min-h-dvh bg-chino-bg text-chino-muted flex flex-col items-center justify-center p-6">
         <div className="w-16 h-16 mb-4 rounded-2xl bg-chino-surface border border-chino-border flex items-center justify-center">

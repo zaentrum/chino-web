@@ -19,7 +19,8 @@ import { forgetCachedStreamToken, readStreamToken, subjectOf, writeStreamToken, 
 // A token carries its account's rights, an age cap among them, so the
 // cache holds it for that account alone (lib/streamTokenCache): the
 // next person who signs in in the same tab gets a token of their own,
-// and signing out drops it (forgetStreamToken).
+// and signing out drops it, with the tab's hero pool
+// (auth/tabAccount.ts forgetTabAccountData).
 
 /** The tab's storage, or one that holds nothing where the browser gives none. */
 function tabStore(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {

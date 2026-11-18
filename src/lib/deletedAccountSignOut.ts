@@ -31,8 +31,13 @@ export interface SignOutParts {
   mark(): void;
   /** No renewal of this tab's sign-in starts by itself from now on. */
   stopRenewal(): void;
-  /** Forgets what the browser keeps of the account (lib/accountData.ts). */
-  forget(): Promise<void>;
+  /** Forgets what the tab keeps of the account (lib/accountData.ts
+   *  forgetTabData). At once. */
+  forgetTab(): void;
+  /** Forgets what the browser keeps for all its tabs (lib/accountData.ts
+   *  forgetBrowserData). At once; the service worker is asked, never
+   *  waited for. */
+  forgetBrowser(): void;
   /** The sign-in the browser keeps; null for none. */
   stored(): Promise<StoredSignIn | null>;
   /** Removes the stored sign-in; this tab's goes from memory with it. */
@@ -74,9 +79,18 @@ export function isStoredAccount(stored: StoredSignIn | null, who: Who): boolean 
 /**
  * The sign-out, over `parts`. Each sign-out sets the mark first, before the
  * caller has the answer; then stops the tab's own renewals and forgets what
- * the browser keeps of the account; then removes the stored sign-in where it
- * is the account's, and otherwise loads the app anew. A removal that fails
- * loads the app anew too.
+ * the tab keeps of the account. Then it reads the store, and decides whose
+ * it is before it forgets anything more:
+ *
+ *  - the account's: the stored sign-in is removed, the mark set again (a
+ *    screen that held the sign-in once more in between may have taken it
+ *    away), and then what the browser keeps for all its tabs is forgotten. A
+ *    removal that fails loads the app anew after that;
+ *  - nobody's: what the browser keeps goes too, and the app loads anew;
+ *  - another account's, signed in since in another tab: what the browser
+ *    keeps is that account's as much, and stays; the app loads anew.
+ *
+ * Nothing waits for the service worker.
  *
  * One runs at a time: the 401s that come at once are one sign-out, and once
  * it ends, by whatever way, the next can run. A 401 for an account this tab
@@ -93,23 +107,28 @@ export function deletedAccountSignOut(parts: SignOutParts): DeletedAccountSignOu
   async function run(who: Who, renewal: boolean): Promise<void> {
     parts.mark();
     parts.stopRenewal();
+    parts.forgetTab();
     const before = who.sub !== null && gone.has(who.sub);
     if (who.sub !== null) gone.add(who.sub);
-    await parts.forget();
     const stored = await parts.stored();
     if (stored && isStoredAccount(stored, who)) {
       if (stored.sub !== null) gone.add(stored.sub);
+      let removed = true;
       try {
         await parts.remove();
       } catch {
-        parts.reload();
+        removed = false;
       }
+      parts.mark();
+      parts.forgetBrowser();
+      if (!removed) parts.reload();
       return;
     }
     // Signed out here before, and the store doesn't hold it again: nothing
     // of it is left in this tab. A sign-in just loaded may be in memory
     // still, with the store already empty: anew, then.
     if (before && !renewal) return;
+    if (stored === null) parts.forgetBrowser();
     parts.reload();
   }
 

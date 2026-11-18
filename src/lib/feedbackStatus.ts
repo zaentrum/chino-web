@@ -12,6 +12,31 @@ export class FeedbackOffError extends Error {
   }
 }
 
+/**
+ * The report would go under another account than this tab's: the bearer it
+ * takes is the browser's stored sign-in, which another tab signed in as
+ * another account since (lib/tabAccount.ts). Nothing is sent.
+ */
+export class FeedbackAccountError extends Error {
+  constructor() {
+    super('another account is signed in now');
+    this.name = 'FeedbackAccountError';
+  }
+}
+
+/**
+ * The bearer a report goes with: `stored`, the browser's stored sign-in's
+ * access token, where this tab may write with it (`mayWrite`,
+ * auth/tabAccount.ts tabMayWrite); null where none is stored, as before.
+ * Throws FeedbackAccountError where it is another account's: the manual
+ * form says so, an automatic report is skipped.
+ */
+export function reportBearer(stored: string | null, mayWrite: (bearer: string) => boolean): string | null {
+  if (!stored) return null;
+  if (!mayWrite(stored)) throw new FeedbackAccountError();
+  return stored;
+}
+
 /** The error to throw for a non-2xx answer from POST /api/v1/feedback: an
  *  HttpError with its status, so the form says why by its case
  *  (lib/loadFailure.ts). */
@@ -67,6 +92,7 @@ export function feedbackFiled(duplicate: boolean): string {
  *  never "please try again", which its button already offers. */
 export function feedbackFailure(error: unknown): string {
   if (error instanceof FeedbackOffError) return "Bug reporting is switched off on this server, so this report can't be filed.";
+  if (error instanceof FeedbackAccountError) return "Couldn't file the report. Another account is signed in now.";
   const kind = caseOf(error, 'list');
   return `Couldn't file the report. ${failureReason(kind === 'signed-out' ? 'sign-in-refused' : kind) || failureReason('refused')}`;
 }

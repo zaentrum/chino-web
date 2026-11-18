@@ -9,6 +9,7 @@ import { useZapPreferences } from '../../hooks/useZapPreferences';
 import { useZapTelemetry } from '../../hooks/useZapTelemetry';
 import { stampFirstCardSeek } from '../../hooks/useZapMidpoint';
 import { toApp } from '../../lib/basepath';
+import { tabMayWrite } from '../../auth/tabAccount';
 import { ZapCard } from '../zap/ZapCard';
 import { CouldntLoad } from '../CouldntLoad';
 import { couldntLoad } from '../../lib/loadFailure';
@@ -130,6 +131,8 @@ export function ZapSection() {
     if (!token) return;
     const id = next.id;
     const tid = window.setTimeout(() => {
+      // Not under another account than this tab's (lib/tabAccount.ts).
+      if (!tabMayWrite(token)) return;
       prewarmedRef.current.add(id);
       // q=medium matches ZapCard's pickQuality() default on wifi.
       // Mobile cells will mismatch (card uses q=low) and the warmed

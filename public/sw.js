@@ -17,12 +17,17 @@
  *     also pass-through — large bodies + range requests we don't
  *     want in the cache.
  *
- * Versioning: bumping CACHE_VERSION invalidates old caches on next
- * activate. Required when this file's shape changes meaningfully.
+ * Versioning: each cache has its own version in its name. On activate
+ * every cache of the origin but these two goes, so bumping one drops that
+ * cache alone; bump it when what it holds changes meaningfully.
+ *   - the shell, chino-v4-shell: the page and the hashed bundles;
+ *   - the artwork, chino-v5-artwork: a worker before ignored FORGET_ARTWORK,
+ *     so the artwork it cached for an account since deleted goes when this
+ *     one takes over, and the page stays cached.
  */
-const CACHE_VERSION = 'chino-v4';
-const SHELL_CACHE = `${CACHE_VERSION}-shell`;
-const ART_CACHE = `${CACHE_VERSION}-artwork`;
+const SHELL_CACHE = 'chino-v4-shell';
+const ART_CACHE = 'chino-v5-artwork';
+const CACHES = [SHELL_CACHE, ART_CACHE];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(SHELL_CACHE));
@@ -43,12 +48,12 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  // Drop caches from previous versions on activation.
+  // Drop every cache but this worker's two on activation.
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((k) => !k.startsWith(CACHE_VERSION))
+          .filter((k) => !CACHES.includes(k))
           .map((k) => caches.delete(k))
       ).then(() => self.clients.claim())
     )
