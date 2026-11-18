@@ -31,9 +31,14 @@ self.addEventListener('install', (event) => {
 // When the client posts {type:'SKIP_WAITING'}, leave the 'waiting'
 // state immediately and become the active SW. The UpdateAvailable
 // toast in chino-web triggers this via reg.waiting.postMessage().
+// {type:'FORGET_ARTWORK'}: an account is deleted, and the artwork cache
+// goes, whose addresses carry its stream pass (src/lib/accountData.ts).
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
+  }
+  if (event.data && event.data.type === 'FORGET_ARTWORK') {
+    event.waitUntil(caches.delete(ART_CACHE));
   }
 });
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BINGE_SESSION_PREFIX } from './accountData.ts';
 
 /**
  * User-tunable client-side settings. Persisted to localStorage so each
@@ -47,8 +48,10 @@ export const DEFAULT_SETTINGS: ChinoSettings = {
   audio: { preferredLang: 'eng' },
 };
 
+// The settings are this device's, whoever signs in, and stay when an
+// account is deleted; the binge sessions are the account's viewing, and go
+// with it (lib/accountData.ts).
 const SETTINGS_KEY = 'chino:settings:v1';
-const BINGE_SESSION_PREFIX = 'chino:bingeSession:';
 // How long an inter-episode pause still counts as a binge continuation.
 // 6 hours is the convention Netflix / Apple TV+ use — long enough to
 // cover dinner breaks, short enough that "I came back the next day"

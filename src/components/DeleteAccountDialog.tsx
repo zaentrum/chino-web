@@ -7,9 +7,7 @@ import {
   deleteAccount,
   type AccountDeletion,
 } from '../lib/account';
-import { markAccountDeleted } from '../auth/accountDeleted';
-import { forgetStreamToken } from '../hooks/useStreamToken';
-import { toApp } from '../lib/basepath';
+import { signOutDeletedAccount } from '../auth/accountDeleted';
 
 type Failure = Exclude<AccountDeletion, { kind: 'deleted' }>;
 
@@ -22,9 +20,10 @@ const CONFIRM_WORD = 'DELETE';
  * on this server, and their sign-in — asks them to type DELETE, and sends
  * DELETE /api/v1/me (lib/account.ts):
  *
- *  - deleted: the person is signed out here (the OIDC user and the cached
- *    stream token go) and the start screen says the account is deleted
- *    (AuthGate);
+ *  - deleted: the person is signed out here (signOutDeletedAccount: what
+ *    the browser keeps of the account goes, the cached stream token among
+ *    it, and the OIDC user where it is this account's) and the start screen
+ *    says the account is deleted (AuthGate);
  *  - refused, or not available on this server: the reason, and Close —
  *    asking again changes nothing;
  *  - any other answer: Try Again Later, with the server's message. The
@@ -107,15 +106,12 @@ export function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
       ? await deleteAccount({ token })
       : accountDeletionAnswer(401, null);
     if (answer.kind === 'deleted') {
-      // The account is gone: sign out here. The mark first, so the start
-      // screen says what happened instead of going on to the sign-in page.
-      markAccountDeleted();
-      forgetStreamToken();
-      try {
-        await auth.removeUser();
-      } catch {
-        window.location.replace(toApp('/'));
-      }
+      // The account is gone: sign out here, as where the server says so
+      // (auth/accountDeleted.ts). The mark first, so the start screen says
+      // what happened instead of going on to the sign-in page; then what
+      // the browser keeps of the account, and the stored sign-in where it
+      // is still the one deleted with `token`.
+      await signOutDeletedAccount(token ? `Bearer ${token}` : null);
       return;
     }
     setFailure(answer);

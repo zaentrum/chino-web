@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { buildOidcConfig } from './auth/oidc';
 import { loadRuntimeConfig, type RuntimeConfig } from './lib/runtimeConfig';
 import { installErrorReporting } from './lib/errorReporter';
+import { installDeletedAccountWatch } from './auth/accountDeleted';
 import { RotateCw } from 'lucide-react';
 import { TRY_AGAIN, startupFailure } from './lib/loadFailure';
 import { LOADING_NAME } from './lib/playerStatus';
@@ -16,6 +17,10 @@ import { FailureDetails } from './components/CouldntLoad';
 // Installed before the first render so even a crash during mount is
 // caught. Idempotent, so StrictMode / HMR re-evaluation is safe.
 installErrorReporting();
+
+// An account the server has deleted is signed out on this tab, whichever
+// request heard it (auth/accountDeleted.ts).
+installDeletedAccountWatch();
 
 const root: Root = createRoot(document.getElementById('root')!);
 

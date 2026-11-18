@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useStreamToken } from './useStreamToken';
 import type { ExtraRef, TrailerRef } from './useItem';
-import { heroPoolOrder, heroTrailer } from '../lib/heroPool';
+import { HERO_POOL_KEY, heroPoolOrder, heroTrailer } from '../lib/heroPool';
 
 export interface HeroEntry {
   id: string;
@@ -49,8 +49,9 @@ export interface HeroEntry {
 // 8-slot rotation reliably. v4 records each entry's type: Play on a
 // series plays an episode, not the series' own id. v5 lets in a title
 // whose trailer this server plays, first, and records what each entry's
-// Trailer opens.
-const CACHE_KEY = 'chino:hero-pool:v5';
+// Trailer opens. The key is lib/heroPool.ts's, so the pool is forgotten
+// with an account that is deleted (lib/accountData.ts).
+const CACHE_KEY = HERO_POOL_KEY;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h — fresh enough that newly-added items show up next session
 
 interface PoolCache { at: number; entries: HeroEntry[] }

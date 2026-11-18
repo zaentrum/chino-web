@@ -6,9 +6,11 @@ import {
   markRenewed,
   markSignedIn,
   nextSignInStep,
+  onSignedOut,
   readSignInMarks,
   renewalFailure,
   signInFailureReason,
+  type SignInMarks,
 } from './signInAgain.ts';
 
 const none = { renewedAt: null, signedInAt: null };
@@ -17,6 +19,40 @@ test('a 401 renews the sign-in silently first', () => {
   assert.equal(nextSignInStep(none, 1_000_000), 'renew');
   // A renewal long ago: renew again.
   assert.equal(nextSignInStep({ renewedAt: 0, signedInAt: null }, JUST_SIGNED_IN_MS + 1), 'renew');
+});
+
+test('16.5.6 an account the server said is deleted is neither renewed nor sent to sign-in, whatever the marks', () => {
+  const now = 5_000_000;
+  for (const marks of [none, { renewedAt: now - 2_000, signedInAt: null }, { renewedAt: null, signedInAt: now - 1_000 }]) {
+    assert.equal(nextSignInStep(marks, now, true), 'deleted');
+  }
+  // Any other 401 goes on as before.
+  assert.equal(nextSignInStep(none, now, false), 'renew');
+});
+
+/** What a screen did about its 401 (onSignedOut), with these marks and the tab's mark. */
+function screenDoes(marks: SignInMarks, now: number, accountDeleted: boolean) {
+  const did: string[] = [];
+  const step = onSignedOut(now, { marks: () => marks, accountDeleted: () => accountDeleted }, {
+    refused: () => did.push('refused'),
+    toSignIn: () => did.push('to sign-in'),
+    renew: () => did.push('renew'),
+  });
+  return { step, did };
+}
+
+test('16.5.6 a screen whose 401 is for an account the server said is deleted does nothing: no renewal, no sign-in, whatever the marks', () => {
+  const now = 5_000_000;
+  for (const marks of [none, { renewedAt: now - 2_000, signedInAt: null }, { renewedAt: null, signedInAt: now - 1_000 }]) {
+    assert.deepEqual(screenDoes(marks, now, true), { step: 'deleted', did: [] });
+  }
+});
+
+test("a screen's other 401 renews, goes to sign-in, or says the sign-in was refused, as before", () => {
+  const now = 5_000_000;
+  assert.deepEqual(screenDoes(none, now, false), { step: 'renew', did: ['renew'] });
+  assert.deepEqual(screenDoes({ renewedAt: now - 2_000, signedInAt: null }, now, false), { step: 'sign-in', did: ['to sign-in'] });
+  assert.deepEqual(screenDoes({ renewedAt: null, signedInAt: now - 1_000 }, now, false), { step: 'refused', did: ['refused'] });
 });
 
 test('renewed, and the server still says 401: to sign-in', () => {

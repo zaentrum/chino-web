@@ -22,18 +22,43 @@ export interface SignInMarks {
 }
 
 /** What to do about a 401: renew silently, go to sign-in, or stop - the
- *  server refuses even a sign-in just made. */
-export type SignInStep = 'renew' | 'sign-in' | 'refused';
+ *  server refuses even a sign-in just made; or nothing - the server said
+ *  the account is deleted. */
+export type SignInStep = 'renew' | 'sign-in' | 'refused' | 'deleted';
 
 function recent(at: number | null, now: number): boolean {
   return at !== null && now >= at && now - at < JUST_SIGNED_IN_MS;
 }
 
-/** The next step for a 401 answered at `now`. */
-export function nextSignInStep(marks: SignInMarks, now: number): SignInStep {
+/** The next step for a 401 answered at `now`. `accountDeleted`: the server
+ *  said the account is deleted (lib/deletedAccountWatch.ts), so it is never
+ *  renewed or signed in again by itself; it is signed out, and the start
+ *  screen says so. */
+export function nextSignInStep(marks: SignInMarks, now: number, accountDeleted = false): SignInStep {
+  if (accountDeleted) return 'deleted';
   if (recent(marks.signedInAt, now)) return 'refused';
   if (recent(marks.renewedAt, now)) return 'sign-in';
   return 'renew';
+}
+
+/**
+ * What a screen does about its 401 at `now` (components/CouldntLoad.tsx
+ * useSignInAgain), by nextSignInStep over what `read` gives: for an account
+ * the server said is deleted, nothing - it is signed out, and the start
+ * screen says so (AuthGate); else it says the sign-in was refused, goes to
+ * sign-in, or renews. The step taken.
+ */
+export function onSignedOut(
+  now: number,
+  read: { marks(): SignInMarks; accountDeleted(): boolean },
+  does: { refused(): void; toSignIn(): void; renew(): void },
+): SignInStep {
+  const step = nextSignInStep(read.marks(), now, read.accountDeleted());
+  if (step === 'deleted') return step;
+  if (step === 'refused') does.refused();
+  else if (step === 'sign-in') does.toSignIn();
+  else does.renew();
+  return step;
 }
 
 /**

@@ -9,6 +9,11 @@ import { trailerChoice } from './trailers.ts';
 /** How many titles the hero rotates through. */
 export const HERO_POOL_SIZE = 8;
 
+/** Where the tab keeps the pool (hooks/useHeroPool.ts), and which shape of
+ *  it: the key is bumped when the query's shape changes. Forgotten with
+ *  the account once it is deleted (lib/accountData.ts). */
+export const HERO_POOL_KEY = 'chino:hero-pool:v5';
+
 const YT_KEY = /[?&]v=([A-Za-z0-9_-]{6,})|youtu\.be\/([A-Za-z0-9_-]{6,})|youtube\.com\/embed\/([A-Za-z0-9_-]{6,})/;
 
 /** The YouTube video id in a link to one; '' when it is none. */

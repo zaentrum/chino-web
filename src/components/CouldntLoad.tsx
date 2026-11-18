@@ -13,8 +13,9 @@ import {
   type FailureCase,
   type FailureWhere,
 } from '../lib/loadFailure';
-import { markRenewed, nextSignInStep, readSignInMarks, renewalFailure } from '../lib/signInAgain';
+import { markRenewed, onSignedOut, readSignInMarks, renewalFailure } from '../lib/signInAgain';
 import { oidcUserManager } from '../auth/oidc';
+import { accountWasDeleted } from '../auth/accountDeleted';
 import { LoadingState } from './LoadingState';
 import { DETAILS_DISCLOSURE, detailsBody, type DetailsAlign } from '../lib/chromeWords';
 
@@ -76,20 +77,19 @@ export function useSignInAgain(signedOut: boolean, retry?: () => void): SignInAg
       redirecting = true;
       void auth.signinRedirect({ state: { returnTo: `${window.location.pathname}${window.location.search}${window.location.hash}` } });
     };
-    const step = nextSignInStep(readSignInMarks(), Date.now());
-    if (step === 'refused') {
-      setState('sign-in-refused');
-      return;
-    }
-    if (step === 'sign-in') {
-      toSignIn();
-      return;
-    }
-    void renewOnce(() => auth.signinSilent()).then((outcome) => {
-      if (!live) return;
-      if (outcome === 'renewed') retry?.();
-      else if (outcome === 'refused') toSignIn();
-      else setState('unreachable');
+    // An account the server said is deleted: nothing renews it or signs in;
+    // it is signed out, and the start screen says so (lib/signInAgain.ts).
+    onSignedOut(Date.now(), { marks: readSignInMarks, accountDeleted: accountWasDeleted }, {
+      refused: () => setState('sign-in-refused'),
+      toSignIn,
+      renew: () => {
+        void renewOnce(() => auth.signinSilent()).then((outcome) => {
+          if (!live) return;
+          if (outcome === 'renewed') retry?.();
+          else if (outcome === 'refused') toSignIn();
+          else setState('unreachable');
+        });
+      },
     });
     return () => {
       live = false;
