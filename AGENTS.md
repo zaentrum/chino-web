@@ -69,8 +69,5 @@ platform the image serves the app beside chino-api on one origin, as in the refe
 
 ## Before a pull request
 
-`ci.yml`'s job `neutrality` scans the tree with `rg`, hidden files and folders included
-(`.env.example`, `.gitignore`, `.github/`), and leaves out `.git`, `node_modules`, `dist`,
-`package-lock.json` and itself (`.github/workflows/ci.yml`), for the project's internal host name and the names of other media
-products, and the files a viewer sees (`index.html`, the manifest, JSON and SVG files in
-`public/`, the SVGs in `src/`) for the words of content acquisition. A match fails the job.
+The organisation's shared check, the workflow's `neutrality-shared` job, is the
+one neutrality check.
