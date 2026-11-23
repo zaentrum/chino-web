@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useAuth } from 'react-oidc-context';
 import {
   ArrowLeft,
@@ -16,15 +16,29 @@ import { MediaRow } from '../MediaRow';
 import { LoadingState } from '../LoadingState';
 import { CouldntLoad } from '../CouldntLoad';
 import { couldntLoad } from '../../lib/loadFailure';
-import { PAGE_HEADING, SEE_ALL, SEE_ALL_LOOK, WATCHLIST_WORDS } from '../../lib/chromeWords';
+import { PAGE_HEADING, PART_HEADING, SEE_ALL, SEE_ALL_LOOK, WATCHLIST_WORDS } from '../../lib/chromeWords';
 import {
   useWatchlists,
   getWatchlist,
+  getWatchlistOfKind,
   LISTS_CHANGED,
   type Watchlist,
   type WatchlistDetail,
 } from '../../hooks/useWatchlists';
 import { useItemsByIds } from '../../hooks/useItemsByIds';
+import { useWatchlistByKind } from '../../hooks/useWatchlistByKind';
+import {
+  KINDS,
+  LOADING_ROWS,
+  cardsDrawn,
+  kindRowsLoader,
+  kindTitle,
+  listEmpty,
+  partShown,
+  type Kind,
+  type KindRow,
+  type KindRowsLoader,
+} from '../../lib/watchlistKinds';
 import type { ItemDetail } from '../../hooks/useItem';
 
 /**
@@ -55,7 +69,8 @@ function useWatchlistDetail(listId: string) {
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!token) {
+    // No list asked for: an opened list split by kind asks by kind instead.
+    if (!token || !listId) {
       setDetail(null);
       return;
     }
@@ -92,6 +107,65 @@ function useWatchlistDetail(listId: string) {
   };
 
   return { detail, loading, error, retry };
+}
+
+/**
+ * One list split by kind (docs/chino, watchlist 8.8.1): its two parts asked
+ * one after the other, movies then shows, each drawn as its answer came and
+ * asked again on the lists-changed broadcast; a part that couldn't load is
+ * tried again by itself (lib/watchlistKinds.ts kindRowsLoader). Every
+ * request takes the bearer of its moment, a renewed one too.
+ */
+function useWatchlistKindRows(listId: string) {
+  const auth = useAuth();
+  const bearer = useRef<string | null>(null);
+  bearer.current = auth.user?.access_token ?? null;
+  const signedIn = !!auth.user?.access_token;
+
+  const [loader, setLoader] = useState<KindRowsLoader | null>(null);
+  useEffect(() => {
+    if (!signedIn) return;
+    const next = kindRowsLoader({
+      fetchKind: (token, kind) => getWatchlistOfKind(token, listId, kind),
+      bearer: () => bearer.current,
+    });
+    setLoader(next);
+    void next.load();
+    const onChange = () => void next.load();
+    window.addEventListener(LISTS_CHANGED, onChange);
+    return () => {
+      next.stop();
+      window.removeEventListener(LISTS_CHANGED, onChange);
+    };
+  }, [listId, signedIn]);
+
+  const rows = useSyncExternalStore(
+    (listener) => loader?.subscribe(listener) ?? (() => undefined),
+    () => loader?.rows() ?? LOADING_ROWS,
+  );
+  return { rows, retry: (kind: Kind) => void loader?.retry(kind) };
+}
+
+/** The cards a part has to draw, from its titles as asked for (useItemsByIds);
+ *  null while they are still being asked for. */
+function cardsOf(
+  row: KindRow,
+  resolved: { items: ItemDetail[]; loading: boolean; forIds: string | null },
+  limit?: number,
+): number | null {
+  return cardsDrawn(row, { loading: resolved.loading, forIds: resolved.forIds, count: resolved.items.length }, limit);
+}
+
+/** A part's name without a count, while it loads or where it couldn't: the
+ *  same heading level as with its count. */
+function PartName({ label, level }: { label: string; level: 2 | 3 }) {
+  const Heading = level === 2 ? 'h2' : 'h3';
+  return <Heading className={`${PART_HEADING} mb-3`}>{label}</Heading>;
+}
+
+/** What "see all" says to a screen reader: the list it opens, and the part. */
+function seeAllOf(list: string, part?: string): string {
+  return part ? `see all ${part} of ${list}` : `see all of ${list}`;
 }
 
 // Same ItemDetail → MediaCard mapping the grids use; shelves and the
@@ -148,6 +222,7 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
         title={title}
         onTitleClick={onOpen}
         onSeeAll={onOpen}
+        seeAllLabel={seeAllOf(list.name)}
         noLoop
         items={items.map(toCard)}
       />
@@ -168,6 +243,7 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
         </button>
         <button
           onClick={onOpen}
+          aria-label={seeAllOf(list.name)}
           className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
         >
           <span className={SEE_ALL_LOOK}>{SEE_ALL}</span>
@@ -187,8 +263,130 @@ function WatchlistShelf({ list, onOpen }: ShelfProps) {
   );
 }
 
+/**
+ * One hub shelf split by kind: the list's name and its own count as the
+ * heading, then its movies and its shows, a row each with see all; a row with
+ * nothing in it is left out, a list with nothing in it shows its empty line
+ * as without the setting.
+ */
+function WatchlistKindShelf({ list, onOpen }: ShelfProps) {
+  const { rows, retry } = useWatchlistKindRows(list.id);
+  const idsOf = (kind: Kind) => {
+    const row = rows[kind];
+    return row.state === 'loaded' ? row.ids.slice(0, SHELF_CAP) : [];
+  };
+  const movies = useItemsByIds(idsOf('movie'));
+  const shows = useItemsByIds(idsOf('series'));
+  const resolved = { movie: movies, series: shows };
+  const cards = { movie: cardsOf(rows.movie, movies, SHELF_CAP), series: cardsOf(rows.series, shows, SHELF_CAP) };
+  const empty = listEmpty(rows, cards);
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-4">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="text-2xl font-semibold text-white hover:text-chino-accent transition-colors text-left"
+        >
+          {`${list.name} · ${list.itemCount}`}
+        </button>
+        <button
+          onClick={onOpen}
+          aria-label={seeAllOf(list.name)}
+          className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
+        >
+          <span className={SEE_ALL_LOOK}>{SEE_ALL}</span>
+          <ChevronRight aria-hidden className="w-4 h-4" />
+        </button>
+      </div>
+      {empty ? (
+        <p className="text-sm text-chino-muted">Save titles with the + button on any movie or show.</p>
+      ) : (
+        KINDS.map(({ kind, label }) => {
+          const row = rows[kind];
+          if (!partShown(row, cards[kind])) return null;
+          if (row.state === 'failed') {
+            return (
+              <div key={kind} className="mb-6">
+                <PartName label={label} level={3} />
+                <CouldntLoad title={couldntLoad('this list')} error={row.error} onRetry={() => retry(kind)} level={3} />
+              </div>
+            );
+          }
+          if (row.state === 'loading' || cards[kind] === null) {
+            return (
+              <div key={kind} className="mb-6">
+                <PartName label={label} level={3} />
+                <LoadingState />
+              </div>
+            );
+          }
+          return (
+            <MediaRow
+              key={kind}
+              part
+              title={kindTitle(label, row.ids.length)}
+              onSeeAll={onOpen}
+              seeAllLabel={seeAllOf(list.name, label)}
+              noLoop
+              items={resolved[kind].items.map(toCard)}
+            />
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/**
+ * An opened list split by kind: its movies, then its shows, each under its
+ * name and its own count; a part with nothing in it is left out, and a list
+ * with nothing in it shows its empty view as without the setting.
+ */
+function KindParts({ listId, empty }: { listId: string; empty: React.ReactNode }) {
+  const { rows, retry } = useWatchlistKindRows(listId);
+  const movies = useItemsByIds(rows.movie.state === 'loaded' ? rows.movie.ids : []);
+  const shows = useItemsByIds(rows.series.state === 'loaded' ? rows.series.ids : []);
+  const resolved = { movie: movies, series: shows };
+  const cards = { movie: cardsOf(rows.movie, movies), series: cardsOf(rows.series, shows) };
+
+  // Still coming: asked, or its titles asked for.
+  const pending = (kind: Kind) => rows[kind].state === 'loading' || (rows[kind].state === 'loaded' && cards[kind] === null);
+  if (KINDS.every(({ kind }) => pending(kind))) return <LoadingState variant="full" />;
+  if (listEmpty(rows, cards)) return <>{empty}</>;
+  return (
+    <>
+      {KINDS.map(({ kind, label }) => {
+        const row = rows[kind];
+        if (!partShown(row, cards[kind])) return null;
+        return (
+          <section key={kind} className="mb-10">
+            {/* One heading, at one level, loaded or not: with its count once
+                its answer came. */}
+            <PartName label={row.state === 'loaded' ? kindTitle(label, row.ids.length) : label} level={2} />
+            {row.state === 'failed' ? (
+              <CouldntLoad title={couldntLoad('this list')} error={row.error} onRetry={() => retry(kind)} level={3} />
+            ) : pending(kind) ? (
+              <LoadingState />
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
+                {resolved[kind].items.map((it) => (
+                  <MediaCard key={it.id} {...toCard(it)} />
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
 interface MoreViewProps {
   list: Watchlist;
+  /** Split into its movies and its shows (Separate movies and shows). */
+  split: boolean;
   onBack: () => void;
   rename: (listId: string, name: string) => Promise<Watchlist>;
   remove: (listId: string) => Promise<void>;
@@ -199,9 +397,10 @@ interface MoreViewProps {
  * list-management actions (rename always; delete hidden for the default
  * list). Back returns to the hub.
  */
-function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
-  const { detail, loading, error, retry } = useWatchlistDetail(list.id);
-  const { items, loading: itemsLoading } = useItemsByIds(detail?.items ?? []);
+function WatchlistMoreView({ list, split, onBack, rename, remove }: MoreViewProps) {
+  // Split, the parts ask for the list by kind instead (KindParts).
+  const { detail, loading, error, retry } = useWatchlistDetail(split ? '' : list.id);
+  const { items, loading: itemsLoading } = useItemsByIds(split ? [] : detail?.items ?? []);
 
   const [busy, setBusy] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
@@ -249,6 +448,14 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
       setBusy(false);
     }
   };
+
+  const emptyList = (
+    <div className="text-chino-muted py-12 text-center">
+      <Bookmark className="w-10 h-10 mx-auto mb-3 opacity-40" />
+      <p>This list is empty.</p>
+      <p className="text-sm mt-1">Add titles from a movie or show page to see them here.</p>
+    </div>
+  );
 
   return (
     <div>
@@ -318,17 +525,16 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
 
       {formErr ? <p className="text-chino-red text-sm mb-4">{formErr}</p> : null}
 
-      {/* Grid — reuses the Movies/Series grid shape + MediaCard. */}
-      {loading || itemsLoading ? (
+      {/* Grid — reuses the Movies/Series grid shape + MediaCard; split, a
+          grid for each kind. */}
+      {split ? (
+        <KindParts listId={list.id} empty={emptyList} />
+      ) : loading || itemsLoading ? (
         <LoadingState variant="full" />
       ) : error ? (
         <CouldntLoad title={couldntLoad('this list')} error={error} onRetry={retry} />
       ) : items.length === 0 ? (
-        <div className="text-chino-muted py-12 text-center">
-          <Bookmark className="w-10 h-10 mx-auto mb-3 opacity-40" />
-          <p>This list is empty.</p>
-          <p className="text-sm mt-1">Add titles from a movie or show page to see them here.</p>
-        </div>
+        emptyList
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
           {items.map((it) => (
@@ -342,6 +548,9 @@ function WatchlistMoreView({ list, onBack, rename, remove }: MoreViewProps) {
 
 export function WatchlistSection() {
   const { lists, loading: listsLoading, error: listsError, reload, create, rename, remove } = useWatchlists();
+  // Separate movies and shows: drawn at once with the choice as last known,
+  // read again as the watchlist opens, and followed where it differs.
+  const { split } = useWatchlistByKind(true);
 
   // null → the hub; a list id → that list's MORE view. The id is
   // resolved against the live lists array so a deletion (here or in
@@ -410,6 +619,7 @@ export function WatchlistSection() {
     return (
       <WatchlistMoreView
         list={openList}
+        split={split}
         onBack={() => setOpenListId(null)}
         rename={rename}
         remove={remove}
@@ -424,7 +634,11 @@ export function WatchlistSection() {
       {/* One shelf per list — default first, then by createdAt (the
           server's GET /me/watchlists order). */}
       {lists.map((list) => (
-        <WatchlistShelf key={list.id} list={list} onOpen={() => setOpenListId(list.id)} />
+        split ? (
+          <WatchlistKindShelf key={list.id} list={list} onOpen={() => setOpenListId(list.id)} />
+        ) : (
+          <WatchlistShelf key={list.id} list={list} onOpen={() => setOpenListId(list.id)} />
+        )
       ))}
 
       {/* Trailing "+ new list" affordance, in the mono face. */}

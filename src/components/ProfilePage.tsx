@@ -7,6 +7,7 @@ import { FadeImage } from './FadeImage';
 import { WatchedToggle } from './TitleActions';
 import { LoadingState } from './LoadingState';
 import { forgetTabAccountData } from '../auth/tabAccount';
+import { forgetWatchlistChoice } from '../hooks/useWatchlistByKind';
 import { useWatchHistory, type WatchHistoryEntry } from '../hooks/useWatchHistory';
 import { toApp } from '../lib/basepath';
 import { episodeCode } from '../lib/episodeFiles';
@@ -103,8 +104,10 @@ export function ProfilePage() {
   const email = profile?.email as string | undefined;
 
   // What the tab keeps of the account goes with it: its stream token and
-  // its hero pool (auth/tabAccount.ts).
+  // its hero pool (auth/tabAccount.ts); and the browser's copy of its
+  // Separate movies and shows (hooks/useWatchlistByKind.ts).
   const signOut = () => {
+    forgetWatchlistChoice(auth.user?.access_token);
     forgetTabAccountData();
     void auth.signoutRedirect();
   };

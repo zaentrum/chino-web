@@ -29,6 +29,9 @@ export interface RuntimeConfig {
   features: {
     /** The server can file bug reports: its issue tracker is connected. */
     feedback: boolean;
+    /** The server keeps an account's Separate movies and shows and answers
+     *  a list by kind (docs/chino, watchlist 8.8.1, settings 16.4.7). */
+    watchlistKinds: boolean;
   };
 }
 
@@ -38,8 +41,8 @@ export interface RuntimeConfig {
  * gets the feature hidden rather than offered and then failing.
  */
 export function featuresFrom(raw: unknown): RuntimeConfig['features'] {
-  const features = (raw as { features?: { feedback?: unknown } } | null)?.features;
-  return { feedback: features?.feedback === true };
+  const features = (raw as { features?: { feedback?: unknown; watchlist_kinds?: unknown } } | null)?.features;
+  return { feedback: features?.feedback === true, watchlistKinds: features?.watchlist_kinds === true };
 }
 
 // Module-level holder so non-React code (lib/feedback.ts) can read the
@@ -54,6 +57,12 @@ export function getRuntimeConfig(): RuntimeConfig | null {
 /** Whether this server files bug reports, so the app may offer "Report a bug". */
 export function feedbackAvailable(): boolean {
   return RUNTIME?.features.feedback === true;
+}
+
+/** Whether this server keeps Separate movies and shows and fills a list by
+ *  kind, so settings may offer it and the watchlist follow it. */
+export function watchlistKindsOffered(): boolean {
+  return RUNTIME?.features.watchlistKinds === true;
 }
 
 /**

@@ -20,6 +20,10 @@ export function useItemsByIds(ids: string[]) {
   const streamToken = useStreamToken();
   const [items, setItems] = useState<ItemDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  // The ids `items` answer, joined: a caller tells an answer for other ids
+  // than its own - the ones before - from its own, which `loading` only
+  // says a render later.
+  const [forIds, setForIds] = useState<string | null>(null);
 
   const idsKey = ids.join(',');
 
@@ -29,6 +33,7 @@ export function useItemsByIds(ids: string[]) {
     if (!token) return;
     if (ids.length === 0) {
       setItems([]);
+      setForIds('');
       setLoading(false);
       return;
     }
@@ -46,6 +51,8 @@ export function useItemsByIds(ids: string[]) {
       ),
     )
       .then((results) => {
+        // Asked for other ids since: the newer answer is the one drawn.
+        if (ctrl.signal.aborted) return;
         const next = results
           .filter((j): j is ItemDetail => !!j)
           .map((j) => ({
@@ -54,13 +61,16 @@ export function useItemsByIds(ids: string[]) {
             backdrop_url: j.backdrop_url && enc ? `${j.backdrop_url}?stream=${enc}` : j.backdrop_url,
           }));
         setItems(next);
+        setForIds(idsKey);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
     // idsKey captures the exact id set + order; streamToken so artwork
     // URLs land once the token is minted.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey, auth.isAuthenticated, auth.isLoading, streamToken]);
 
-  return { items, loading };
+  return { items, loading, forIds };
 }

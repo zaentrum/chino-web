@@ -91,6 +91,21 @@ export async function getWatchlist(token: string, listId: string): Promise<Watch
   return (await r.json()) as WatchlistDetail;
 }
 
+/**
+ * GET /me/watchlists/{listId}?kind=: the list's titles of one kind, in the
+ * list's order - `movie` its movies, `series` everything else it holds: its
+ * shows, its episodes, any other kind (docs/chino, watchlist 8.8.1). Only
+ * where /api/config says `features.watchlist_kinds`.
+ */
+export async function getWatchlistOfKind(token: string, listId: string, kind: 'movie' | 'series'): Promise<string[]> {
+  const r = await fetch(`/api/v1/me/watchlists/${encodeURIComponent(listId)}?kind=${kind}`, {
+    headers: authHeaders(token),
+  });
+  if (!r.ok) throw new HttpError(r.status, 'watchlist');
+  const j = (await r.json()) as { items?: string[] };
+  return j.items ?? [];
+}
+
 export async function addItemToList(token: string, listId: string, itemId: string): Promise<void> {
   await fetch(
     `/api/v1/me/watchlists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`,

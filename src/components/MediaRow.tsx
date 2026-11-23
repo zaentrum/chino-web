@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MediaCard } from './MediaCard';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SEE_ALL, SEE_ALL_LOOK } from '../lib/chromeWords';
+import { PART_HEADING, SEE_ALL, SEE_ALL_LOOK } from '../lib/chromeWords';
 
 interface Media {
   id: string;
@@ -45,6 +45,12 @@ interface MediaRowProps {
    * enabled when the row is long enough).
    */
   noLoop?: boolean;
+  /** A part of a list split by kind, under the list's own heading: its
+   *  name smaller, in the mono face (docs/chino, watchlist 8.8.1). */
+  part?: boolean;
+  /** What "see all" says to a screen reader, at the row's name and as its
+   *  last card; "see all" and the row's name where it is left out. */
+  seeAllLabel?: string;
 }
 
 /**
@@ -56,7 +62,7 @@ interface MediaRowProps {
  * Hover-only prev/next buttons step by roughly one viewport at a time;
  * the gradient masks at each edge hint that there's more off-screen.
  */
-export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false }: MediaRowProps) {
+export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false, part = false, seeAllLabel }: MediaRowProps) {
   // Rows that expose an explicit overview link should never loop. The
   // "see all →" affordance is the escape hatch — wrapping around to
   // the first item would make the row look infinite (#150). Treat
@@ -210,9 +216,11 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
   const hasOverflow = layout !== 'none';
 
   return (
-    <div className="mb-8 group">
-      <div className="flex items-center justify-between mb-4">
-        {onTitleClick ? (
+    <div className={part ? 'mb-6 group' : 'mb-8 group'}>
+      <div className={part ? 'flex items-center justify-between mb-3' : 'flex items-center justify-between mb-4'}>
+        {part ? (
+          <h3 className={PART_HEADING}>{title}</h3>
+        ) : onTitleClick ? (
           <button
             type="button"
             onClick={onTitleClick}
@@ -226,6 +234,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
         {onSeeAll ? (
           <button
             onClick={onSeeAll}
+            aria-label={seeAllLabel}
             className="flex items-center gap-1 text-chino-accent hover:text-chino-accent/80 transition-colors"
           >
             <span className={SEE_ALL_LOOK}>{SEE_ALL}</span>
@@ -318,7 +327,7 @@ export function MediaRow({ title, items, onSeeAll, onTitleClick, noLoop = false 
               type="button"
               onClick={onSeeAll}
               className="shrink-0 w-32 sm:w-40 md:w-44 lg:w-48 xl:w-52 rounded-lg bg-chino-surface border border-chino-border hover:bg-chino-surface-2 hover:border-chino-accent transition-colors flex flex-col items-center justify-center gap-2 text-chino-accent aspect-[2/3]"
-              aria-label={`${SEE_ALL} ${title}`}
+              aria-label={seeAllLabel ?? `${SEE_ALL} ${title}`}
             >
               <ChevronRight aria-hidden className="w-8 h-8" />
               <span className={`${SEE_ALL_LOOK} font-medium`}>{SEE_ALL}</span>

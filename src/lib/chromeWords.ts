@@ -68,6 +68,10 @@ export const SEE_ALL = 'see all';
 /** Its words' look. */
 export const SEE_ALL_LOOK = 'font-mono text-sm';
 
+/** A part of a list split by kind, "movies · 4", under the list's own
+ *  heading (docs/chino, watchlist 8.8.1): mono, lowercase, quieter. */
+export const PART_HEADING = 'font-mono text-lg text-chino-text';
+
 /** The button that starts a title the browser wouldn't start by itself:
  *  "play" - never "click", which a touch screen has none of. */
 export const START_PLAYBACK = 'play';

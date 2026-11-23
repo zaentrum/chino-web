@@ -237,6 +237,8 @@ test("every sign-in a tab loads is checked; the gate gives way; the player's, th
   for (const file of [['components', 'Header.tsx'], ['components', 'ProfilePage.tsx']]) {
     const source = readFileSync(join(SRC, ...file), 'utf8');
     assert.match(source, /forgetTabAccountData\(\);\s*void auth\.signoutRedirect\(\);/, file.join('/'));
+    // The browser's copy of the account's Separate movies and shows goes too.
+    assert.match(source, /forgetWatchlistChoice\(auth\.user\?\.access_token\);\s*forgetTabAccountData\(\);/, file.join('/'));
     assert.doesNotMatch(source, /forgetStreamToken/, file.join('/'));
   }
   // The Zap's events and prewarm, and the bug reports, check too.

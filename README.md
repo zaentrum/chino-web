@@ -94,6 +94,30 @@ held sideways (the safe area's band at the sides) stays clear. Without a
   pictures (in a worker where the browser has them) and the player draws each
   one, on a canvas just round them.
 
+## Movies and shows apart
+
+Where `/api/config` says `features.watchlist_kinds`, settings have the group
+**watchlist** after binge watching, with **Separate movies and shows**: the
+account's own choice, read and saved through `GET` and `PATCH
+/api/v1/me/settings` (`watchlist_by_kind`), the same on every device it signs
+in on (`src/lib/watchlistKinds.ts`). With it on, every list on the watchlist
+shows its name and its own count, then **movies · 4** and **shows · 3**, a row
+each from `GET /api/v1/me/watchlists/{id}?kind=movie` and `?kind=series`
+asked one after the other; an opened list is split the same way. A row with
+nothing in it is left out, a list with nothing in it looks as with the setting
+off, and a row that couldn't load says so and is tried again by itself.
+
+The browser keeps a copy of each account's last answer, by the account's
+subject (`localStorage`, `chino:watchlistByKind:<subject>`), so the watchlist
+and settings are drawn with it at once while the choice is read again, and
+follow the answer where it differs; where the read fails, or takes longer
+than ten seconds, the copy stays and works. Every tab of the account follows a
+save made in another. The copy goes at a sign-out and once the account is
+deleted, and a tab still open on that account writes it no more. A tab reads
+and saves only for the account it was loaded for, so one person's choice is
+never shown, kept or sent as another's. Without the feature nothing is read, and lists are drawn
+whole.
+
 ## Playback telemetry
 
 The player batches what happens while it plays and posts it to the platform

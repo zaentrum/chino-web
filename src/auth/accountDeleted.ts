@@ -6,7 +6,8 @@
 // tab's, and goes with it.
 
 import { watchingForDeletedAccount } from '../lib/deletedAccountWatch';
-import { deletedAccountSignOut } from '../lib/deletedAccountSignOut';
+import { bearerToken, deletedAccountSignOut } from '../lib/deletedAccountSignOut';
+import { forgetWatchlistChoice } from '../hooks/useWatchlistByKind';
 import { forgetBrowserData } from '../lib/accountData';
 import { toApp } from '../lib/basepath';
 import { oidcUserManager } from './oidc';
@@ -110,6 +111,9 @@ function watchSignIns(): void {
  */
 export function signOutDeletedAccount(authorization: string | null): Promise<void> {
   watchSignIns();
+  // Its copy of Separate movies and shows, kept by its subject, goes in
+  // every tab, whoever is signed in by now.
+  forgetWatchlistChoice(bearerToken(authorization));
   return signOut.signOut(authorization);
 }
 

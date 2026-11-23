@@ -181,7 +181,9 @@ test('the app watches every request from its start; the watch, a screen and Dele
   assert.ok(main.indexOf('installDeletedAccountWatch();') < main.indexOf('void bootstrap();'), 'before the app starts');
   const auth = readFileSync(join(SRC, 'auth', 'accountDeleted.ts'), 'utf8');
   assert.match(auth, /watchingForDeletedAccount\(window\.fetch\.bind\(window\), window\.location\.origin, \(authorization\) => \{\s*void signOutDeletedAccount\(authorization\);/);
-  assert.match(auth, /signOutDeletedAccount\(authorization: string \| null\): Promise<void> \{\s*watchSignIns\(\);\s*return signOut\.signOut\(authorization\);\s*\}/);
+  // The deleted account's copy of Separate movies and shows goes, by its
+  // subject, whoever is signed in by now.
+  assert.match(auth, /signOutDeletedAccount\(authorization: string \| null\): Promise<void> \{\s*watchSignIns\(\);(\s*\/\/[^\n]*)*\s*forgetWatchlistChoice\(bearerToken\(authorization\)\);\s*return signOut\.signOut\(authorization\);\s*\}/);
   assert.match(auth, /addUserLoaded\(\(user\) => \{\s*void signOut\.loaded\(/);
   // The stored sign-in is removed by the sign-out's part alone, which lib decides on.
   assert.equal(auth.match(/removeUser\(/g)?.length, 1);

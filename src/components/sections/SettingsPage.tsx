@@ -1,13 +1,15 @@
 import { useEffect, useId, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Bug } from 'lucide-react';
+import { AlertTriangle, Bug } from 'lucide-react';
 import { useSettings, DEFAULT_SETTINGS } from '../../lib/settings';
 import { BugReportDialog } from '../BugReportDialog';
 import { CouldntLoad } from '../CouldntLoad';
 import { LoadingState } from '../LoadingState';
 import { feedbackAvailable } from '../../lib/runtimeConfig';
 import { SUBTITLE_SETTING_TEXT, settingsSubtitleLanguages } from '../../lib/subtitles';
-import { couldntLoad } from '../../lib/loadFailure';
+import { caseOf, couldntLoad, failureReason } from '../../lib/loadFailure';
+import { useWatchlistByKind } from '../../hooks/useWatchlistByKind';
+import { BY_KIND_GROUP, BY_KIND_HINT, BY_KIND_LABEL, BY_KIND_SAVE_FAILED } from '../../lib/watchlistKinds';
 import { AUDIO_SETTING_TEXT, audioOptions, sameChoice, subtitleOptions, type LanguageOptions } from '../../lib/settingsLanguages';
 import { PAGE_HEADING, QUIET_BUTTON, SECTION_HEADING, SETTINGS_HINTS, SETTINGS_WORDS } from '../../lib/chromeWords';
 
@@ -53,6 +55,8 @@ export function SettingsPage() {
   const [settings, setSettings] = useSettings();
   const [bugDialogOpen, setBugDialogOpen] = useState(false);
   const subtitleLanguages = useSubtitleLanguages();
+  // The account's Separate movies and shows, read again as settings open.
+  const byKind = useWatchlistByKind(true);
   const binge = settings.binge;
 
   const updateBinge = (patch: Partial<typeof binge>) =>
@@ -90,6 +94,29 @@ export function SettingsPage() {
           onChange={(v) => updateBinge({ countdownSec: v })}
         />
       </Section>
+
+      {/* The account's, kept by the server, where it keeps it and fills a
+          list by kind (docs/chino, settings 16.4.7); left out elsewhere. */}
+      {byKind.offered && (
+        <Section title={BY_KIND_GROUP}>
+          <Toggle
+            label={BY_KIND_LABEL}
+            help={BY_KIND_HINT}
+            value={byKind.saving ?? byKind.on}
+            busy={byKind.reading || byKind.saving !== null}
+            onChange={(v) => byKind.press(v)}
+          />
+          {byKind.saveFailed ? (
+            <div role="alert" className="flex items-start gap-2 bg-chino-red/10 border border-chino-red/30 px-3 py-2 m-4 text-sm">
+              <AlertTriangle className="w-4 h-4 text-chino-red mt-0.5 shrink-0" aria-hidden="true" />
+              <p>
+                <span className="text-white font-medium">{BY_KIND_SAVE_FAILED}</span>{' '}
+                <span className="text-chino-text">{failureReason(caseOf(byKind.saveFailed, 'list'))}</span>
+              </p>
+            </div>
+          ) : null}
+        </Section>
+      )}
 
       <Section title={SETTINGS_WORDS.audio} subtitle={AUDIO_SETTING_TEXT}>
         <LanguageSetting
@@ -181,15 +208,18 @@ function Toggle({
   label,
   help,
   value,
+  busy = false,
   onChange,
 }: {
   label: string;
   help?: string;
   value: boolean;
+  /** Being read or saved: shown, and not to be pressed until it is done. */
+  busy?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex items-start justify-between gap-4 p-4 cursor-pointer">
+    <label className={`flex items-start justify-between gap-4 p-4 ${busy ? 'cursor-wait opacity-70' : 'cursor-pointer'}`}>
       <span className="flex-1">
         <span className="block text-white font-medium">{label}</span>
         {help ? <span className="block text-xs text-chino-muted mt-1 leading-relaxed">{help}</span> : null}
@@ -200,7 +230,13 @@ function Toggle({
         <input
           type="checkbox"
           checked={value}
-          onChange={(e) => onChange(e.target.checked)}
+          // Busy, it keeps the keyboard's focus and says so; a press is not
+          // taken until it is done (as Delete Account's button does).
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          onChange={(e) => {
+            if (!busy) onChange(e.target.checked);
+          }}
           className="sr-only"
         />
         <span

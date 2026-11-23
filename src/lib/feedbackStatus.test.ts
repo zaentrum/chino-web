@@ -15,16 +15,16 @@ import {
 import { tabAccount } from './tabAccount.ts';
 
 test('feedback is offered only when the server says true', () => {
-  assert.deepEqual(featuresFrom({ features: { feedback: true } }), { feedback: true });
-  assert.deepEqual(featuresFrom({ features: { feedback: false } }), { feedback: false });
+  assert.deepEqual(featuresFrom({ features: { feedback: true } }), { feedback: true, watchlistKinds: false });
+  assert.deepEqual(featuresFrom({ features: { feedback: false } }), { feedback: false, watchlistKinds: false });
 });
 
 test('a server that predates the flag, or sends anything else, gets it hidden', () => {
-  assert.deepEqual(featuresFrom({}), { feedback: false });
-  assert.deepEqual(featuresFrom({ features: {} }), { feedback: false });
-  assert.deepEqual(featuresFrom({ features: { feedback: 'true' } }), { feedback: false });
-  assert.deepEqual(featuresFrom({ features: null }), { feedback: false });
-  assert.deepEqual(featuresFrom(null), { feedback: false });
+  assert.deepEqual(featuresFrom({}), { feedback: false, watchlistKinds: false });
+  assert.deepEqual(featuresFrom({ features: {} }), { feedback: false, watchlistKinds: false });
+  assert.deepEqual(featuresFrom({ features: { feedback: 'true' } }), { feedback: false, watchlistKinds: false });
+  assert.deepEqual(featuresFrom({ features: null }), { feedback: false, watchlistKinds: false });
+  assert.deepEqual(featuresFrom(null), { feedback: false, watchlistKinds: false });
 });
 
 test('a 503 from the feedback endpoint means reporting is off', () => {
