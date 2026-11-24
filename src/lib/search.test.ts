@@ -1,7 +1,8 @@
 // node --test (type stripping, Node >= 22.18). Excluded from the app's tsc program.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeAsBefore, SEARCH_TYPES, searchAsBeforeUrls, searchHeadline, searchIsMissing, searchUrl, type SearchState } from './search.ts';
+import { readFileSync } from 'node:fs';
+import { mergeAsBefore, SEARCH_TYPES, searchAsBeforeUrls, searchGroups, searchHeadline, searchIsMissing, searchUrl, type SearchState } from './search.ts';
 
 const state = (s: Partial<SearchState>): SearchState => ({
   query: 'hoffman',
@@ -58,4 +59,31 @@ test('a server without the search is searched as before', () => {
   assert.equal(searchAsBeforeUrls('x', { limit: 8, people: 0 }).movies, '/api/v1/items?q=x&limit=8&type=movie');
   // Each list whole: many films never push the series out.
   assert.deepEqual(mergeAsBefore(['m1', 'm2'], ['s1']), ['m1', 'm2', 's1']);
+});
+
+test('9.C16: the titles stand first and cast & crew under them', () => {
+  assert.deepEqual(searchGroups({ titles: 4, people: 3 }), ['titles', 'people']);
+  assert.deepEqual(searchGroups({ titles: 1, people: 12 }), ['titles', 'people']);
+});
+
+test('9.C16: where only people match, they stand at the top; a group with nothing found is left out', () => {
+  assert.deepEqual(searchGroups({ titles: 0, people: 3 }), ['people']);
+  assert.deepEqual(searchGroups({ titles: 4, people: 0 }), ['titles']);
+  assert.deepEqual(searchGroups({ titles: 0, people: 0 }), []);
+});
+
+test('9.C16: the search page draws its groups in that order, each as it was, under the one count line', () => {
+  const page = readFileSync(new URL('../components/SearchPage.tsx', import.meta.url), 'utf8');
+  // The order is the function's: the page draws what it returns, as it returns it.
+  assert.match(page, /const groups = searchGroups\(\{ titles: total, people: peopleList\.length \}\);/);
+  const drawn = page.indexOf('{groups.map((group, i) =>');
+  assert.ok(drawn > 0, 'the groups are drawn from searchGroups');
+  // No group is drawn anywhere else: one grid of titles, one "Cast & crew".
+  assert.equal(page.split('<MediaCard').length - 1, 1);
+  assert.equal(page.split('Cast &amp; crew').length - 1, 1);
+  assert.ok(page.indexOf('<MediaCard') > drawn && page.indexOf('Cast &amp; crew') > drawn);
+  // The count line stays over both, counting the titles and the people.
+  const headline = page.indexOf('<h1 ');
+  assert.ok(headline > 0 && headline < drawn);
+  assert.match(page, /searchHeadline\(\{\s*query,\s*titles: total,\s*people: peopleList\.length,/);
 });

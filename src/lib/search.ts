@@ -96,3 +96,18 @@ export function searchHeadline({ query, titles, people, loading, failed }: Searc
   const found = titles + people;
   return found > 0 ? `${found} result${found === 1 ? '' : 's'} for "${query}"` : `No results for "${query}"`;
 }
+
+/** A group of the results: the titles, or the people ("Cast & crew"). */
+export type SearchGroup = 'titles' | 'people';
+
+/**
+ * The groups of the search page, in the order they stand: the titles first
+ * and the people under them (9.C16). A group with nothing found is left out,
+ * so where only people match they stand at the top.
+ */
+export function searchGroups({ titles, people }: Pick<SearchState, 'titles' | 'people'>): SearchGroup[] {
+  const groups: SearchGroup[] = [];
+  if (titles > 0) groups.push('titles');
+  if (people > 0) groups.push('people');
+  return groups;
+}
