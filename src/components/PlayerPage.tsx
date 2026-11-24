@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Captions, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube, ZoomIn } from 'lucide-react';
+import { Captions, ChevronDown, Volume2, VolumeX, Maximize, Minimize, Play, Pause, ArrowLeft, House, Loader2, Info, X, Settings, SkipForward, ChevronLeft, ChevronRight, Gauge, AlertTriangle, Youtube, Rewind, FastForward, ZoomIn } from 'lucide-react';
 import Hls from 'hls.js';
 import { useSettings, loadSettings, isBingeContinuation, recordEpisodePlay } from '../lib/settings';
 import {
@@ -26,6 +26,21 @@ import { TRY_AGAIN, removedTitle, streamFailureReason } from '../lib/loadFailure
 import { START_PLAYBACK, START_PLAYBACK_BUTTON, UNMUTE, UNMUTE_LOOK } from '../lib/chromeWords';
 import { playFromPress } from '../lib/startPlayback';
 import { HELD_FRAME, frameToHold, releasesHeldFrame } from '../lib/heldFrame';
+import {
+  FURTHER_TAP_MS,
+  SECOND_TAP_MS,
+  SKIP_MARK,
+  SKIP_MARK_PLACE,
+  SKIP_SECONDS,
+  halfAt,
+  markWords,
+  skipTarget,
+  tap,
+  tapCounts,
+  tapElsewhere,
+  type Half,
+  type Taps,
+} from '../lib/doubleTap';
 import { FILL_SCREEN, pictureAreaOf } from '../lib/pictureFit';
 import { usePictureLayers } from '../hooks/usePictureLayers';
 import { renewStreamToken, useStreamToken } from '../hooks/useStreamToken';
@@ -511,6 +526,8 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // get always-current values (closures capture mount-time state).
   const apiDurationSecRef = useRef(apiDurationSec);
   useEffect(() => { apiDurationSecRef.current = apiDurationSec; }, [apiDurationSec]);
+  const effectiveDurationRef = useRef(effectiveDuration);
+  useEffect(() => { effectiveDurationRef.current = effectiveDuration; }, [effectiveDuration]);
 
   // An extra has no /play/info: it is packaged, and its master says the
   // rest once it is in (describeExtra).
@@ -2166,6 +2183,19 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
   // The pointer of the last press on the player: a click on the video
   // plays or pauses only with a mouse (below).
   const lastPointerTypeRef = useRef('');
+  // A double tap on the picture, on a touch screen (lib/doubleTap.ts): the
+  // taps so far; the wait of a first tap for a second, and whether the
+  // controls showed when it came; the place the skip started from; and the
+  // mark, with the timer that takes it away.
+  const tapsRef = useRef<Taps | null>(null);
+  const tapWaitRef = useRef<number | null>(null);
+  const tapShownRef = useRef(false);
+  const skipFromRef = useRef(0);
+  const [skipMark, setSkipMark] = useState<{ half: Half; seconds: number } | null>(null);
+  const skipMarkTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (skipMarkTimerRef.current !== null) window.clearTimeout(skipMarkTimerRef.current);
+  }, []);
   // openMenu read via ref inside the auto-hide handler so we don't
   // have to re-bind the listeners every time a menu opens. Same anti-
   // loop pattern as chromeVisibleRef.
@@ -2190,6 +2220,36 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
     };
     const el = wrapRef.current;
     if (!el) return;
+    // A single tap off a control: where the controls showed it hides them,
+    // else it shows them. Says whether they show after it.
+    const singleTap = (shown: boolean) => {
+      if (shown) {
+        setChromeVisible(false);
+        setOpenMenu(null);
+        if (hideTimer.current) window.clearTimeout(hideTimer.current);
+        return false;
+      }
+      showChrome();
+      return true;
+    };
+    // The skip of a double tap, and of each further tap: a seek like any
+    // other, from the place the first skip started at to the taps' sum,
+    // and the mark for 0.6 seconds from this tap. As the seek bar's seek,
+    // not before the title has a length.
+    const skipByTaps = (taps: Taps) => {
+      const v = videoRef.current;
+      if (!v) return;
+      if (taps.seconds === SKIP_SECONDS) skipFromRef.current = v.currentTime;
+      const length = effectiveDurationRef.current;
+      if (!length) return;
+      v.currentTime = skipTarget(skipFromRef.current, taps.half, taps.seconds, length);
+      setSkipMark({ half: taps.half, seconds: taps.seconds });
+      if (skipMarkTimerRef.current !== null) window.clearTimeout(skipMarkTimerRef.current);
+      skipMarkTimerRef.current = window.setTimeout(() => {
+        skipMarkTimerRef.current = null;
+        setSkipMark(null);
+      }, FURTHER_TAP_MS);
+    };
     const onPointer = (e: PointerEvent) => {
       lastPointerTypeRef.current = e.pointerType;
       // Mouse hover → just reveal (don't toggle).
@@ -2206,13 +2266,49 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // visibility is handled entirely by this handler.
         e.preventDefault();
       }
-      if (chromeVisibleRef.current && !onControl) {
-        setChromeVisible(false);
-        setOpenMenu(null);
-        if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      // A double tap (lib/doubleTap.ts): a tap counts on the picture itself
+      // - the video, which the bars, the buttons, a menu and a card are not -
+      // and not while a menu is open or a card shows.
+      const counts = tapCounts({
+        primary: e.isPrimary,
+        onPicture: target === videoRef.current,
+        menuOpen: openMenuRef.current !== null,
+        cardShown: el.querySelector('[data-picture-card]') !== null,
+      });
+      const picture = el.getBoundingClientRect();
+      const tapped = counts
+        ? tap(tapsRef.current, halfAt(e.clientX, picture.left, picture.width), e.timeStamp)
+        : tapElsewhere(tapsRef.current);
+      tapsRef.current = tapped.taps;
+      if (tapWaitRef.current !== null) {
+        window.clearTimeout(tapWaitRef.current);
+        tapWaitRef.current = null;
+      }
+      // The tap before waited for a second one, and this is not it: it was
+      // a single tap, done first.
+      let shown = chromeVisibleRef.current;
+      if (tapped.single) shown = singleTap(tapShownRef.current);
+      if (!tapped.taps) {
+        // A tap that doesn't count is what it was.
+        if (onControl) showChrome();
+        else singleTap(shown);
         return;
       }
-      showChrome();
+      if (tapped.skips) {
+        skipByTaps(tapped.taps);
+        // The controls stay as they were; where they show, their time to
+        // hide starts again.
+        if (shown) showChrome();
+        return;
+      }
+      // One tap: a single tap once the 0.3 seconds a second one may take
+      // have passed.
+      tapShownRef.current = shown;
+      tapWaitRef.current = window.setTimeout(() => {
+        tapWaitRef.current = null;
+        tapsRef.current = null;
+        singleTap(tapShownRef.current);
+      }, SECOND_TAP_MS);
     };
     // Mouse-hover reveal. Throttled to one fire per animation frame so
     // sliding the cursor across the player doesn't run setState 60 ×
@@ -2246,6 +2342,12 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('keydown', onKey);
       if (hideTimer.current) window.clearTimeout(hideTimer.current);
+      // A tap that still waits for a second one goes with its handlers.
+      if (tapWaitRef.current !== null) {
+        window.clearTimeout(tapWaitRef.current);
+        tapWaitRef.current = null;
+        tapsRef.current = null;
+      }
     };
   }, [playing]);
 
@@ -3789,7 +3891,9 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         // No `src` attribute — hls.js attaches and drives the source.
         // (On Safari we fall back to native HLS and DO set v.src
         // directly from the useEffect, not via React props.)
-        className={`absolute inset-0 w-full h-full ${VIDEO_CLASS}`}
+        // touch-manipulation: a double tap on the picture is the player's
+        // (lib/doubleTap.ts), never the browser's zoom.
+        className={`absolute inset-0 w-full h-full touch-manipulation ${VIDEO_CLASS}`}
         // Who draws the text subtitle: the player (SubtitleOverlay), and a
         // cue the browser shows anyway is invisible (lib/subtitleLook.ts
         // cueCss); else the browser.
@@ -4034,6 +4138,17 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
         </div>
       )}
 
+      {/* A double tap's mark (lib/doubleTap.ts): rewind or fast forward and
+          the seconds so far, in the middle of the half that was tapped,
+          from the second tap until 0.6 seconds after the last. Only the
+          picture under it is darkened; the controls are as they were. */}
+      {skipMark && (
+        <div aria-hidden className={`${SKIP_MARK} ${SKIP_MARK_PLACE[skipMark.half]}`}>
+          {skipMark.half === 'left' ? <Rewind className="w-8 h-8" /> : <FastForward className="w-8 h-8" />}
+          <span>{markWords(skipMark.half, skipMark.seconds)}</span>
+        </div>
+      )}
+
       {/* Terminal-error overlay — the player gave up (startup deadline,
           circuit breakers). Try again rebuilds the source where it was;
           Back leaves the player (the overlay covers its top bar); Report
@@ -4147,6 +4262,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inIntro && autoSkipIntroSec != null && !autoSkipIntroDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
+          data-picture-card
           className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Binge mode</div>
@@ -4184,6 +4300,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inCredits && nextEp && !autoNextDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
+          data-picture-card
           className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Up next</div>
@@ -4228,6 +4345,7 @@ export function PlayerPage({ itemId, extra }: PlayerPageProps) {
       {inPreview && nextEpisodeId && !previewNextDismissed ? (
         <div
           style={{ bottom: 'calc(7rem + env(safe-area-inset-bottom, 0px))' }}
+          data-picture-card
           className={`absolute right-4 md:right-6 z-10 max-w-sm p-4 ${PICTURE_CARD}`}
         >
           <div className="text-xs uppercase tracking-wider text-chino-muted">Next episode</div>
