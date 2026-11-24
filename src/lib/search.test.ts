@@ -37,9 +37,9 @@ test('a search under way, a failed search, no query', () => {
 });
 
 test('one search of films and series, the types the page shows', () => {
-  const url = new URL(searchUrl('widow’s bay', { limit: 60, people: 12 }), 'https://chino.example');
+  const url = new URL(searchUrl('the dweebs’ day', { limit: 60, people: 12 }), 'https://chino.example');
   assert.equal(url.pathname, '/api/v1/search');
-  assert.equal(url.searchParams.get('q'), 'widow’s bay');
+  assert.equal(url.searchParams.get('q'), 'the dweebs’ day');
   assert.equal(url.searchParams.get('types'), 'movie,series');
   assert.equal(url.searchParams.get('limit'), '60');
   assert.equal(url.searchParams.get('people'), '12');

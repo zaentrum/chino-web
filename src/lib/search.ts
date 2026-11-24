@@ -9,7 +9,7 @@
  * To show episodes, add 'episode' here. Each episode hit carries its `series`
  * (id, title, poster_url, matched) and its season_number/episode_number. The
  * agreed card shows it as its series' poster card with one line under the
- * title, e.g. "S05E14 · Ozymandias", read from the data, and opens the series
+ * title, e.g. "S01E03 · Alone in the Night", read from the data, and opens the series
  * on that episode; when the series matched by its own title too
  * (`series.matched`), the two are one card.
  */

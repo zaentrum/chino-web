@@ -539,7 +539,7 @@ function HeroSlide({ view, shown, dots, pending, onPlay, onDetail }: HeroSlidePr
               display:-webkit-box and won depending on stylesheet
               ordering, so the description rendered un-clamped and
               spilled below the hero box for long synopses
-              (e.g. Star Wars Rebels). */}
+              (a long animated show's, for one). */}
           <p className="hidden md:line-clamp-3 text-chino-text text-base lg:text-lg drop-shadow">
             {view.description}
           </p>
